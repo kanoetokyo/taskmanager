@@ -536,45 +536,6 @@ export default function Home() {
             </button>
           )}
         </div>
-        {/* Row 2: Actions */}
-        <div className="max-w-4xl mx-auto px-3 pb-2 flex items-center gap-2">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
-            <span className="text-xs text-gray-500 whitespace-nowrap">完了済みを隠す</span>
-            <button
-              role="switch"
-              aria-checked={hideDone}
-              onClick={() => setHideDone(v => !v)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                hideDone ? "bg-blue-500" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  hideDone ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
-            </button>
-          </label>
-          <div className="flex-1" />
-          {lastSaved && <span className="text-gray-400 text-[10px] whitespace-nowrap">{lastSaved}</span>}
-          <button
-            onClick={undoLast}
-            disabled={undoHistory.length === 0}
-            title="元に戻す"
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
-              undoHistory.length > 0
-                ? "border-blue-300 text-blue-600 hover:bg-blue-50"
-                : "border-gray-200 text-gray-300 cursor-not-allowed"
-            }`}
-          >
-            <Undo2 className="w-3.5 h-3.5" />
-            <span>元に戻す</span>
-          </button>
-          <button onClick={handleReset} className="text-xs px-2.5 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
-            リセット
-          </button>
-        </div>
-
         {/* Progress bar */}
         <div className="max-w-4xl mx-auto px-4 pb-2.5 flex items-center gap-3">
           <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
@@ -1059,6 +1020,53 @@ export default function Home() {
             </section>
           );
         })}
+
+        {/* フッター操作パネル */}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+          {/* 完了済みを隠すトグル */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <button
+              role="switch"
+              aria-checked={hideDone}
+              onClick={() => setHideDone(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                hideDone ? "bg-blue-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  hideDone ? "translate-x-5" : "translate-x-1"
+                }`}
+              />
+            </button>
+            <span className="text-sm text-gray-600 whitespace-nowrap">完了済みを隠す</span>
+          </label>
+
+          <div className="flex-1" />
+
+          {lastSaved && <span className="text-gray-400 text-xs whitespace-nowrap">{lastSaved}</span>}
+
+          <button
+            onClick={undoLast}
+            disabled={undoHistory.length === 0}
+            title="元に戻す"
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              undoHistory.length > 0
+                ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+                : "border-gray-200 text-gray-300 cursor-not-allowed"
+            }`}
+          >
+            <Undo2 className="w-4 h-4" />
+            <span>元に戻す</span>
+          </button>
+
+          <button
+            onClick={handleReset}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            リセット
+          </button>
+        </div>
 
         <p className="text-center text-xs text-gray-400 pb-6">
           入力内容はブラウザに自動保存されます。日付ごとにデータが保存されます。
