@@ -198,6 +198,7 @@ export default function Home() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(todayKey);
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks(todayKey()));
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [hideDone, setHideDone] = useState<boolean>(false);
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
@@ -275,8 +276,26 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Actions */}
+          {/* Hide-done toggle + Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Toggle switch */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <span className="text-xs text-gray-500 hidden sm:inline whitespace-nowrap">完了済みを隠す</span>
+              <button
+                role="switch"
+                aria-checked={hideDone}
+                onClick={() => setHideDone(v => !v)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                  hideDone ? "bg-blue-500" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                    hideDone ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </label>
             {!isToday && (
               <button onClick={goToToday} className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
                 今日へ
@@ -334,7 +353,12 @@ export default function Home() {
 
               {/* Task rows */}
               <div className="divide-y divide-gray-100">
-                {catTasks.map(task => (
+                {hideDone && catTasks.every(t => t.done) && (
+                  <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
+                    <span>✓</span><span>このカテゴリはすべて完了しています</span>
+                  </div>
+                )}
+                {catTasks.filter(task => !(hideDone && task.done)).map(task => (
                   <div
                     key={task.id}
                     className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
