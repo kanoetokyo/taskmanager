@@ -205,6 +205,7 @@ interface HandoverItem {
   author: string;   // 作成者
   text: string;
   checked: string[]; // 確認済みメンバー名
+  inherited?: boolean; // 前日から引き継ぎされたか
 }
 
 function handoverKey(dateKey: string): string { return `handover2-${dateKey}`; }
@@ -229,7 +230,7 @@ function loadHandover(dateKey: string): HandoverItem[] {
       // テキストがあり全員未確認のものだけ引き継ぎ（確認リセット）
       const inherited = prevItems
         .filter(item => item.text && item.checked.length < HANDOVER_MEMBERS.length)
-        .map(item => ({ ...item, id: crypto.randomUUID(), checked: [] }));
+        .map(item => ({ ...item, id: crypto.randomUUID(), checked: [], inherited: true }));
       if (inherited.length > 0) {
         return [...inherited, newHandoverItem()];
       }
@@ -272,6 +273,7 @@ interface CustomerRecord {
   status: CustomerStatus;
   contact: string;
   memo: string;
+  inherited?: boolean; // 前日から引き継ぎされたか
 }
 
 function customerKey(dateKey: string): string { return `customers-${dateKey}`; }
@@ -296,7 +298,7 @@ function loadCustomers(dateKey: string): CustomerRecord[] {
       // 完了以外の顧客を新しいIDで引き継ぎ
       const inherited = prevItems
         .filter(c => c.status !== "完了")
-        .map(c => ({ ...c, id: crypto.randomUUID() }));
+        .map(c => ({ ...c, id: crypto.randomUUID(), inherited: true }));
       return inherited;
     }
   } catch {}
@@ -636,7 +638,12 @@ export default function Home() {
                     <option value="">作成者を選択</option>
                     {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
-                  {item.author && (
+                  {item.inherited && (
+                    <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
+                      ↩ 前日から引き継ぎ
+                    </span>
+                  )}
+                  {item.author && !item.inherited && (
                     <span className="text-xs text-gray-400">メモ {idx + 1}</span>
                   )}
                   {handoverItems.length > 1 && (
@@ -729,6 +736,13 @@ export default function Home() {
                   c.status === "保留" ? "bg-gray-50/60" : ""
                 }`}>
                   {/* 行1: 顧客名 + ステータス + 削除 */}
+                  {c.inherited && (
+                    <div className="flex">
+                      <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
+                        ↩ 前日から引き継ぎ
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     <input
                       type="text"
