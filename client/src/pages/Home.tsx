@@ -218,6 +218,23 @@ function loadHandover(dateKey: string): HandoverItem[] {
     const saved = localStorage.getItem(handoverKey(dateKey));
     if (saved) return JSON.parse(saved) as HandoverItem[];
   } catch {}
+  // 未保存の場合、前日の未確認メモを引き継ぎ
+  try {
+    const prevDate = keyToDate(dateKey);
+    prevDate.setDate(prevDate.getDate() - 1);
+    const prevKey = dateToKey(prevDate);
+    const prevSaved = localStorage.getItem(handoverKey(prevKey));
+    if (prevSaved) {
+      const prevItems = JSON.parse(prevSaved) as HandoverItem[];
+      // テキストがあり全員未確認のものだけ引き継ぎ（確認リセット）
+      const inherited = prevItems
+        .filter(item => item.text && item.checked.length < HANDOVER_MEMBERS.length)
+        .map(item => ({ ...item, id: crypto.randomUUID(), checked: [] }));
+      if (inherited.length > 0) {
+        return [...inherited, newHandoverItem()];
+      }
+    }
+  } catch {}
   return [newHandoverItem()];
 }
 
@@ -267,6 +284,21 @@ function loadCustomers(dateKey: string): CustomerRecord[] {
   try {
     const saved = localStorage.getItem(customerKey(dateKey));
     if (saved) return JSON.parse(saved) as CustomerRecord[];
+  } catch {}
+  // 未保存の場合、前日の未完了顧客を引き継ぎ
+  try {
+    const prevDate = keyToDate(dateKey);
+    prevDate.setDate(prevDate.getDate() - 1);
+    const prevKey = dateToKey(prevDate);
+    const prevSaved = localStorage.getItem(customerKey(prevKey));
+    if (prevSaved) {
+      const prevItems = JSON.parse(prevSaved) as CustomerRecord[];
+      // 完了以外の顧客を新しいIDで引き継ぎ
+      const inherited = prevItems
+        .filter(c => c.status !== "完了")
+        .map(c => ({ ...c, id: crypto.randomUUID() }));
+      return inherited;
+    }
   } catch {}
   return [];
 }
