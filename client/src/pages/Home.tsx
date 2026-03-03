@@ -682,7 +682,7 @@ export default function Home() {
               <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
             <h1 className="text-xl font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
-              タスク管理革命
+              タスク革命
             </h1>
           </div>
 
