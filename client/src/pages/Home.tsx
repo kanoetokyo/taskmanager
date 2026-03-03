@@ -61,14 +61,13 @@ interface Task extends TaskDef {
 const iconSize = "w-4 h-4 shrink-0";
 
 const BASE_TASKS: TaskDef[] = [
-  // 各種システムのチェック
-  { id: "sys-a-1", category: "各種システムのチェック", label: "公式LINEのチェック（大井町店）",       icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-2", category: "各種システムのチェック", label: "公式LINEのチェック（大森南店）",       icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-3", category: "各種システムのチェック", label: "公式LINEのチェック（天満店）",         icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-4", category: "各種システムのチェック", label: "公式LINEのチェック（戸越銀座駅前店）", icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-5", category: "各種システムのチェック", label: "公式LINEのチェック（大田中央店）",     icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-6", category: "各種システムのチェック", label: "公式LINEのチェック（川崎新町店）",     icon: <MessageCircle className={iconSize} /> },
-  { id: "sys-a-7", category: "各種システムのチェック", label: "公式LINEのチェック（幸塚越店）",       icon: <MessageCircle className={iconSize} /> },
+  { id: "sys-a-1", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大井町店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-2", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大森南店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-3", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（天満店）",         icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-4", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（戸越銀座駅前店）", icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-5", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大田中央店）",     icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-6", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（川崎新町店）",     icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
+  { id: "sys-a-7", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（幸塚越店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
   { id: "sys-b-1", category: "各種システムのチェック", label: "POSのチェック（大井町店）",            icon: <Tablet className={iconSize} /> },
   { id: "sys-b-2", category: "各種システムのチェック", label: "POSのチェック（大森南店）",            icon: <Tablet className={iconSize} /> },
   { id: "sys-b-3", category: "各種システムのチェック", label: "POSのチェック（天満店）",              icon: <Tablet className={iconSize} /> },
