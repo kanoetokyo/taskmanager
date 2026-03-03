@@ -4,6 +4,7 @@
  * - テーブル形式でタスクを一覧表示
  * - カテゴリごとに薄いカラーコーディング
  * - 作業予定者・実施者のプルダウン
+ * - 完了チェックボックス（完了行はグレーアウト＋取り消し線）
  * - localStorageで状態保持
  */
 
@@ -18,55 +19,56 @@ interface Task {
   label: string;
   planned: string;
   actual: string;
+  done: boolean;
 }
 
 const INITIAL_TASKS: Task[] = [
   // 各種システムのチェック
-  { id: "sys-a-1", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大井町店）", planned: "", actual: "" },
-  { id: "sys-a-2", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大森南店）", planned: "", actual: "" },
-  { id: "sys-a-3", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（天満店）", planned: "", actual: "" },
-  { id: "sys-a-4", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（戸越銀座駅前店）", planned: "", actual: "" },
-  { id: "sys-a-5", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大田中央店）", planned: "", actual: "" },
-  { id: "sys-a-6", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（川崎新町店）", planned: "", actual: "" },
-  { id: "sys-a-7", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（幸塚越店）", planned: "", actual: "" },
-  { id: "sys-b-1", category: "各種システムのチェック", label: "(b) POSのチェック（大井町店）", planned: "", actual: "" },
-  { id: "sys-b-2", category: "各種システムのチェック", label: "(b) POSのチェック（大森南店）", planned: "", actual: "" },
-  { id: "sys-b-3", category: "各種システムのチェック", label: "(b) POSのチェック（天満店）", planned: "", actual: "" },
-  { id: "sys-b-4", category: "各種システムのチェック", label: "(b) POSのチェック（戸越銀座駅前店）", planned: "", actual: "" },
-  { id: "sys-b-5", category: "各種システムのチェック", label: "(b) POSのチェック（大田中央店）", planned: "", actual: "" },
-  { id: "sys-b-6", category: "各種システムのチェック", label: "(b) POSのチェック（川崎新町店）", planned: "", actual: "" },
-  { id: "sys-b-7", category: "各種システムのチェック", label: "(b) POSのチェック（幸塚越店）", planned: "", actual: "" },
-  { id: "sys-c-1", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大井町店）", planned: "", actual: "" },
-  { id: "sys-c-2", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大森南店）", planned: "", actual: "" },
-  { id: "sys-c-3", category: "各種システムのチェック", label: "(c) ラクーンのチェック（天満店）", planned: "", actual: "" },
-  { id: "sys-c-4", category: "各種システムのチェック", label: "(c) ラクーンのチェック（戸越銀座駅前店）", planned: "", actual: "" },
-  { id: "sys-c-5", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大田中央店）", planned: "", actual: "" },
-  { id: "sys-c-6", category: "各種システムのチェック", label: "(c) ラクーンのチェック（川崎新町店）", planned: "", actual: "" },
-  { id: "sys-c-7", category: "各種システムのチェック", label: "(c) ラクーンのチェック（幸塚越店）", planned: "", actual: "" },
-  { id: "sys-d-1", category: "各種システムのチェック", label: "(d) メールのチェック（osouji.oimachi@gmail.com）", planned: "", actual: "" },
-  { id: "sys-e-1", category: "各種システムのチェック", label: "(e) Storesの予約確認チェック", planned: "", actual: "" },
+  { id: "sys-a-1", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大井町店）", planned: "", actual: "", done: false },
+  { id: "sys-a-2", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大森南店）", planned: "", actual: "", done: false },
+  { id: "sys-a-3", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（天満店）", planned: "", actual: "", done: false },
+  { id: "sys-a-4", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（戸越銀座駅前店）", planned: "", actual: "", done: false },
+  { id: "sys-a-5", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（大田中央店）", planned: "", actual: "", done: false },
+  { id: "sys-a-6", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（川崎新町店）", planned: "", actual: "", done: false },
+  { id: "sys-a-7", category: "各種システムのチェック", label: "(a) 公式LINEのチェック（幸塚越店）", planned: "", actual: "", done: false },
+  { id: "sys-b-1", category: "各種システムのチェック", label: "(b) POSのチェック（大井町店）", planned: "", actual: "", done: false },
+  { id: "sys-b-2", category: "各種システムのチェック", label: "(b) POSのチェック（大森南店）", planned: "", actual: "", done: false },
+  { id: "sys-b-3", category: "各種システムのチェック", label: "(b) POSのチェック（天満店）", planned: "", actual: "", done: false },
+  { id: "sys-b-4", category: "各種システムのチェック", label: "(b) POSのチェック（戸越銀座駅前店）", planned: "", actual: "", done: false },
+  { id: "sys-b-5", category: "各種システムのチェック", label: "(b) POSのチェック（大田中央店）", planned: "", actual: "", done: false },
+  { id: "sys-b-6", category: "各種システムのチェック", label: "(b) POSのチェック（川崎新町店）", planned: "", actual: "", done: false },
+  { id: "sys-b-7", category: "各種システムのチェック", label: "(b) POSのチェック（幸塚越店）", planned: "", actual: "", done: false },
+  { id: "sys-c-1", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大井町店）", planned: "", actual: "", done: false },
+  { id: "sys-c-2", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大森南店）", planned: "", actual: "", done: false },
+  { id: "sys-c-3", category: "各種システムのチェック", label: "(c) ラクーンのチェック（天満店）", planned: "", actual: "", done: false },
+  { id: "sys-c-4", category: "各種システムのチェック", label: "(c) ラクーンのチェック（戸越銀座駅前店）", planned: "", actual: "", done: false },
+  { id: "sys-c-5", category: "各種システムのチェック", label: "(c) ラクーンのチェック（大田中央店）", planned: "", actual: "", done: false },
+  { id: "sys-c-6", category: "各種システムのチェック", label: "(c) ラクーンのチェック（川崎新町店）", planned: "", actual: "", done: false },
+  { id: "sys-c-7", category: "各種システムのチェック", label: "(c) ラクーンのチェック（幸塚越店）", planned: "", actual: "", done: false },
+  { id: "sys-d-1", category: "各種システムのチェック", label: "(d) メールのチェック（osouji.oimachi@gmail.com）", planned: "", actual: "", done: false },
+  { id: "sys-e-1", category: "各種システムのチェック", label: "(e) Storesの予約確認チェック", planned: "", actual: "", done: false },
 
   // 顧客対応と事務作業
-  { id: "cust-a", category: "顧客対応と事務作業", label: "(a) 電話対応（フリーダイヤル）および顧客対応（LINE・来店・メールなど）", planned: "", actual: "" },
-  { id: "cust-b", category: "顧客対応と事務作業", label: "(b) 案件完了ごとの売上表更新・POSおよびラクーンの完了処理", planned: "", actual: "" },
-  { id: "cust-c", category: "顧客対応と事務作業", label: "(c) 公式LINEからの前日リマインド送信", planned: "", actual: "" },
-  { id: "cust-d", category: "顧客対応と事務作業", label: "(d) 公式LINEからのアフターフォローの実施", planned: "", actual: "" },
+  { id: "cust-a", category: "顧客対応と事務作業", label: "(a) 電話対応（フリーダイヤル）および顧客対応（LINE・来店・メールなど）", planned: "", actual: "", done: false },
+  { id: "cust-b", category: "顧客対応と事務作業", label: "(b) 案件完了ごとの売上表更新・POSおよびラクーンの完了処理", planned: "", actual: "", done: false },
+  { id: "cust-c", category: "顧客対応と事務作業", label: "(c) 公式LINEからの前日リマインド送信", planned: "", actual: "", done: false },
+  { id: "cust-d", category: "顧客対応と事務作業", label: "(d) 公式LINEからのアフターフォローの実施", planned: "", actual: "", done: false },
 
   // 決済確認
-  { id: "pay-a", category: "決済確認", label: "(a) SquareとPayPayの決済額とカレンダー内容が一致しているかの照合", planned: "", actual: "" },
+  { id: "pay-a", category: "決済確認", label: "(a) SquareとPayPayの決済額とカレンダー内容が一致しているかの照合", planned: "", actual: "", done: false },
 
   // LINEグループ管理
-  { id: "line-a", category: "LINEグループ管理", label: "(a) 事務グループ（4グループのいずれか）への日付メッセージ投稿", planned: "", actual: "" },
-  { id: "line-b", category: "LINEグループ管理", label: "(b) 翌日の稼働グループの作成", planned: "", actual: "" },
-  { id: "line-c", category: "LINEグループ管理", label: "(c) 翌日のスケジュールと配車を確定させて配信する", planned: "", actual: "" },
+  { id: "line-a", category: "LINEグループ管理", label: "(a) 事務グループ（4グループのいずれか）への日付メッセージ投稿", planned: "", actual: "", done: false },
+  { id: "line-b", category: "LINEグループ管理", label: "(b) 翌日の稼働グループの作成", planned: "", actual: "", done: false },
+  { id: "line-c", category: "LINEグループ管理", label: "(c) 翌日のスケジュールと配車を確定させて配信する", planned: "", actual: "", done: false },
 
   // 清掃管理
-  { id: "clean-a", category: "清掃管理（前田君または担当者）", label: "(a) 清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", planned: "", actual: "" },
-  { id: "clean-b", category: "清掃管理（前田君または担当者）", label: "(b) 赤くなっている清掃カードの消し込み作業", planned: "", actual: "" },
+  { id: "clean-a", category: "清掃管理（前田君または担当者）", label: "(a) 清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", planned: "", actual: "", done: false },
+  { id: "clean-b", category: "清掃管理（前田君または担当者）", label: "(b) 赤くなっている清掃カードの消し込み作業", planned: "", actual: "", done: false },
 
   // 調整および書類作成
-  { id: "doc-a", category: "調整および書類作成", label: "(a) Storesの空き枠のシフト調整", planned: "", actual: "" },
-  { id: "doc-b", category: "調整および書類作成", label: "(b) 翌日の見積もりの作成および印刷", planned: "", actual: "" },
+  { id: "doc-a", category: "調整および書類作成", label: "(a) Storesの空き枠のシフト調整", planned: "", actual: "", done: false },
+  { id: "doc-b", category: "調整および書類作成", label: "(b) 翌日の見積もりの作成および印刷", planned: "", actual: "", done: false },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -100,10 +102,9 @@ export default function Home() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as Task[];
-        // Merge saved values into initial tasks
         return INITIAL_TASKS.map(t => {
           const found = parsed.find(p => p.id === t.id);
-          return found ? { ...t, planned: found.planned, actual: found.actual } : t;
+          return found ? { ...t, planned: found.planned, actual: found.actual, done: found.done ?? false } : t;
         });
       }
     } catch {}
@@ -116,6 +117,10 @@ export default function Home() {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
+  const toggleDone = (id: string) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  };
+
   const handleSave = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     const now = new Date();
@@ -124,8 +129,8 @@ export default function Home() {
   };
 
   const handleReset = () => {
-    if (!confirm("全ての担当者設定をリセットしますか？")) return;
-    const reset = INITIAL_TASKS.map(t => ({ ...t, planned: "", actual: "" }));
+    if (!confirm("全ての担当者設定と完了状態をリセットしますか？")) return;
+    const reset = INITIAL_TASKS.map(t => ({ ...t, planned: "", actual: "", done: false }));
     setTasks(reset);
     localStorage.removeItem(STORAGE_KEY);
     setLastSaved(null);
@@ -140,7 +145,11 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [tasks]);
 
-  // Group tasks by category
+  // Progress stats
+  const totalTasks = tasks.length;
+  const doneTasks = tasks.filter(t => t.done).length;
+  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
   const categories = Array.from(new Set(INITIAL_TASKS.map(t => t.category)));
 
   return (
@@ -170,20 +179,42 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* Progress bar */}
+        <div className="max-w-5xl mx-auto px-4 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-slate-600 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-2 rounded-full transition-all duration-500"
+                style={{
+                  width: `${progressPct}%`,
+                  background: progressPct === 100 ? "#22c55e" : "#38bdf8",
+                }}
+              />
+            </div>
+            <span className="text-xs text-slate-300 whitespace-nowrap">
+              {doneTasks} / {totalTasks} 完了 ({progressPct}%)
+            </span>
+          </div>
+        </div>
       </header>
 
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {categories.map(cat => {
           const catTasks = tasks.filter(t => t.category === cat);
+          const catDone = catTasks.filter(t => t.done).length;
           const headerColor = CATEGORY_HEADER_COLORS[cat] || "bg-gray-100 border-gray-300 text-gray-800";
           const rowColor = CATEGORY_COLORS[cat] || "bg-white";
 
           return (
             <section key={cat} className="rounded-lg overflow-hidden border border-gray-200 shadow-sm">
               {/* Category header */}
-              <div className={`px-4 py-2.5 border-b font-semibold text-sm ${headerColor}`}>
-                {cat}
+              <div className={`px-4 py-2.5 border-b flex items-center justify-between font-semibold text-sm ${headerColor}`}>
+                <span>{cat}</span>
+                <span className="text-xs font-normal opacity-70">
+                  {catDone}/{catTasks.length}
+                </span>
               </div>
 
               {/* Table */}
@@ -191,34 +222,71 @@ export default function Home() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-200">
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-14 whitespace-nowrap">完了</th>
                       <th className="text-left px-4 py-2 font-medium text-gray-600 w-auto">タスク</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-36 whitespace-nowrap">作業予定者</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600 w-36 whitespace-nowrap">実施者</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {catTasks.map((task, idx) => (
+                    {catTasks.map((task) => (
                       <tr
                         key={task.id}
-                        className={`border-b border-gray-100 last:border-0 hover:brightness-95 transition-all ${rowColor} ${idx % 2 === 1 ? "opacity-90" : ""}`}
+                        className={`border-b border-gray-100 last:border-0 transition-all duration-200 ${
+                          task.done
+                            ? "bg-gray-100 opacity-60"
+                            : `${rowColor} hover:brightness-95`
+                        }`}
                       >
-                        <td className="px-4 py-2.5 text-gray-700 leading-snug">{task.label}</td>
+                        {/* Checkbox */}
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={task.done}
+                            onChange={() => toggleDone(task.id)}
+                            className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
+                          />
+                        </td>
+
+                        {/* Task label */}
+                        <td className={`px-4 py-2.5 leading-snug transition-all duration-200 ${
+                          task.done ? "text-gray-400 line-through" : "text-gray-700"
+                        }`}>
+                          {task.done && (
+                            <span className="inline-block mr-2 text-green-500 font-bold text-xs">✓</span>
+                          )}
+                          {task.label}
+                        </td>
+
+                        {/* Planned */}
                         <td className="px-3 py-2 text-center">
                           <select
                             value={task.planned}
                             onChange={e => updateTask(task.id, "planned", e.target.value)}
-                            className="w-full rounded border border-gray-300 bg-white text-gray-700 text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                            disabled={task.done}
+                            className={`w-full rounded border text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 transition-colors ${
+                              task.done
+                                ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "border-gray-300 bg-white text-gray-700"
+                            }`}
                           >
                             {MEMBERS.map(m => (
                               <option key={m} value={m}>{m === "" ? "-- 未設定 --" : m}</option>
                             ))}
                           </select>
                         </td>
+
+                        {/* Actual */}
                         <td className="px-3 py-2 text-center">
                           <select
                             value={task.actual}
                             onChange={e => updateTask(task.id, "actual", e.target.value)}
-                            className="w-full rounded border border-gray-300 bg-white text-gray-700 text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                            disabled={task.done}
+                            className={`w-full rounded border text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 transition-colors ${
+                              task.done
+                                ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "border-gray-300 bg-white text-gray-700"
+                            }`}
                           >
                             {MEMBERS.map(m => (
                               <option key={m} value={m}>{m === "" ? "-- 未設定 --" : m}</option>
