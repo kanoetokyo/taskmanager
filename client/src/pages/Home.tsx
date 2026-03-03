@@ -349,6 +349,7 @@ export default function Home() {
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
   const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
+  const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
   const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
   const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
 
@@ -458,10 +459,24 @@ export default function Home() {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
 
   const toggleDone = (id: string) => {
-    setTasks(prev => {
-      setUndoHistory(h => [...h.slice(-9), prev]);
-      return prev.map(t => t.id === id ? { ...t, done: !t.done } : t);
-    });
+    const task = tasks.find(t => t.id === id);
+    if (task && !task.done) {
+      // 完了にする場合はアニメーションを先に起動
+      setCompletingTasks(prev => new Set(prev).add(id));
+      setTimeout(() => {
+        setTasks(prev => {
+          setUndoHistory(h => [...h.slice(-9), prev]);
+          return prev.map(t => t.id === id ? { ...t, done: true } : t);
+        });
+        setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
+      }, 400);
+    } else {
+      // 完了解除は即座に戻す
+      setTasks(prev => {
+        setUndoHistory(h => [...h.slice(-9), prev]);
+        return prev.map(t => t.id === id ? { ...t, done: false } : t);
+      });
+    }
   };
 
   const undoLast = () => {
@@ -939,15 +954,18 @@ export default function Home() {
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => (
                   <div
                     key={task.id}
-                    className={`px-4 py-3 transition-all ${
-                      task.done
-                        ? "bg-gray-50/60"
-                        : task.help
-                          ? "bg-red-50"
-                          : task.deadline
-                            ? "bg-amber-50/50"
-                            : "hover:bg-gray-50/80"
+                    className={`px-4 py-3 transition-all duration-300 ${
+                      completingTasks.has(task.id)
+                        ? "opacity-0 scale-95 pointer-events-none"
+                        : task.done
+                          ? "opacity-60 bg-gray-50/60"
+                          : task.help
+                            ? "bg-red-50"
+                            : task.deadline
+                              ? "bg-amber-50/50"
+                              : "hover:bg-gray-50/80"
                     }`}
+                    style={{ transform: completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
                   >
                     {/* Row 1: checkbox + HELP + icon + label */}
                     <div className="flex items-center gap-2.5">
