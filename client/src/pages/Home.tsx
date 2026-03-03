@@ -43,6 +43,7 @@ interface IndividualHandoverTask {
   id: string;
   text: string;
   done: boolean;
+  deadline?: string; // 期限（YYYY-MM-DDThh:mm形式）
 }
 
 interface IndividualHandoverRecord {
@@ -56,7 +57,7 @@ interface IndividualHandoverRecord {
 function individualHandoverKey(dateKey: string): string { return `individual-handover-${dateKey}`; }
 
 function newIndividualTask(): IndividualHandoverTask {
-  return { id: crypto.randomUUID(), text: "", done: false };
+  return { id: crypto.randomUUID(), text: "", done: false, deadline: "" };
 }
 
 function newIndividualHandoverRecord(): IndividualHandoverRecord {
@@ -530,7 +531,12 @@ export default function Home() {
   };
 
   const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string) => {
-    setHandoverItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setHandoverItems(prev => {
+      const updated = prev.map(item => item.id === id ? { ...item, [field]: value } : item);
+      // 即時保存（useEffectのデバウンスに加えて確実に保存）
+      saveHandover(currentDateKey, updated);
+      return updated;
+    });
   };
 
   const deleteHandoverItem = (id: string) => {
@@ -538,7 +544,8 @@ export default function Home() {
   };
 
   const toggleHandoverCheck = (itemId: string, member: string) => {
-    setHandoverItems(prev => prev.map(item => {
+    setHandoverItems(prev => {
+      const updated = prev.map(item => {
       if (item.id !== itemId) return item;
       const alreadyChecked = item.checked.includes(member);
       const newChecked = alreadyChecked
@@ -556,8 +563,12 @@ export default function Home() {
         }, 600);
       }
       return { ...item, checked: newChecked };
-    }));
+      });
+      saveHandover(currentDateKey, updated);
+      return updated;
+    });
   };
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -984,26 +995,51 @@ export default function Home() {
                         >
                           {task.done && <span className="text-xs font-bold">✓</span>}
                         </button>
-                        <textarea
-                          value={task.text}
-                          onChange={e => {
-                            updateIndividualTask(record.id, task.id, "text", e.target.value);
-                            e.target.style.height = "auto";
-                            e.target.style.height = e.target.scrollHeight + "px";
-                          }}
-                          onFocus={e => {
-                            e.target.style.height = "auto";
-                            e.target.style.height = e.target.scrollHeight + "px";
-                          }}
-                          placeholder={`引き継ぎ内容 ${tIdx + 1}を入力…`}
-                          rows={1}
-                          className={`flex-1 text-sm border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none overflow-hidden placeholder-gray-300 ${
-                            task.done
-                              ? "line-through text-gray-400 bg-gray-50 border-gray-200"
-                              : "text-gray-800 bg-white border-gray-200"
-                          }`}
-                          style={{ minHeight: "34px" }}
-                        />
+                        <div className="flex-1 space-y-1">
+                          <textarea
+                            value={task.text}
+                            onChange={e => {
+                              updateIndividualTask(record.id, task.id, "text", e.target.value);
+                              e.target.style.height = "auto";
+                              e.target.style.height = e.target.scrollHeight + "px";
+                            }}
+                            onFocus={e => {
+                              e.target.style.height = "auto";
+                              e.target.style.height = e.target.scrollHeight + "px";
+                            }}
+                            placeholder={`引き継ぎ内容 ${tIdx + 1}を入力…`}
+                            rows={1}
+                            className={`w-full text-sm border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none overflow-hidden placeholder-gray-300 ${
+                              task.done
+                                ? "line-through text-gray-400 bg-gray-50 border-gray-200"
+                                : "text-gray-800 bg-white border-gray-200"
+                            }`}
+                            style={{ minHeight: "34px" }}
+                          />
+                          {/* 期限入力 */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-400">期限:</span>
+                            <input
+                              type="datetime-local"
+                              value={task.deadline || ""}
+                              onChange={e => updateIndividualTask(record.id, task.id, "deadline", e.target.value)}
+                              className={`text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400 ${
+                                task.deadline && !task.done
+                                  ? new Date(task.deadline) < new Date()
+                                    ? "border-red-300 text-red-600 bg-red-50"
+                                    : "border-purple-200 text-purple-700 bg-purple-50"
+                                  : "border-gray-200 text-gray-500 bg-gray-50"
+                              }`}
+                            />
+                            {task.deadline && (
+                              <button
+                                onClick={() => updateIndividualTask(record.id, task.id, "deadline", "")}
+                                className="text-xs text-gray-300 hover:text-red-400 transition-colors"
+                                title="期限をクリア"
+                              >×</button>
+                            )}
+                          </div>
+                        </div>
                         {record.tasks.length > 1 && (
                           <button
                             onClick={() => deleteIndividualTask(record.id, task.id)}
