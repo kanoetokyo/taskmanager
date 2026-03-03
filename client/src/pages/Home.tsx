@@ -310,6 +310,16 @@ export default function Home() {
   const toggleHelp = (id: string) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
 
+  const markAllPrevDone = () => {
+    const prevKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
+    const prevTasks = loadTasks(prevKey);
+    const updated = prevTasks.map(t => ({ ...t, done: true }));
+    saveTasks(prevKey, updated);
+    toast.success("前日の未完了タスクをすべて完了にしました");
+    // 画面を再レンダリングさせるために現在日のデータを再読み込み
+    setTasks(prev => [...prev]);
+  };
+
   const handleReset = () => {
     if (!confirm("この日の全設定をリセットしますか？")) return;
     setTasks(makeInitialTasks());
@@ -410,23 +420,32 @@ export default function Home() {
         {prevDayUndoneTasks.length > 0 && (
           <section className="bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-xl shadow-sm overflow-hidden">
             {/* ヘッダー（常に表示） */}
-            <button
-              onClick={() => setShowPrevUndone(v => !v)}
-              className="w-full px-4 py-2.5 flex items-center justify-between border-b border-red-100 hover:bg-red-100/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
+            <div className="w-full px-4 py-2.5 flex items-center justify-between border-b border-red-100">
+              <button
+                onClick={() => setShowPrevUndone(v => !v)}
+                className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition-opacity"
+              >
                 <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                   <AlertCircle className="w-4 h-4" />
                   前日（{prevDateMain}）の未完了タスク
                 </span>
-              </div>
+              </button>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => markAllPrevDone()}
+                  className="text-xs px-2.5 py-1 rounded-md bg-red-500 hover:bg-red-600 text-white font-medium transition-colors shadow-sm"
+                >
+                  一括完了
+                </button>
                 <span className="text-xs font-semibold text-red-500">{prevDayUndoneTasks.length}件未完了</span>
-                <span className={`text-red-400 transition-transform duration-200 ${showPrevUndone ? "rotate-180" : ""}`}>
-                  <ChevronDown className="w-4 h-4" />
-                </span>
+                <button
+                  onClick={() => setShowPrevUndone(v => !v)}
+                  className="text-red-400 hover:opacity-70 transition-opacity"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showPrevUndone ? "rotate-180" : ""}`} />
+                </button>
               </div>
-            </button>
+            </div>
             {/* 展開時のタスク一覧 */}
             {showPrevUndone && (
               <div className="divide-y divide-red-100">
