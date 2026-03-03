@@ -516,7 +516,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 pt-3 pb-2">
 
           {/* Row 1: アイコン + タイトル（常に1行で表示） */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2563eb" }}>
               <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
