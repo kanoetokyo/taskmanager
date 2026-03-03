@@ -513,70 +513,66 @@ export default function Home() {
 
       {/* ── Header ── */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-
-          {/* Title */}
-          <span className="text-base font-bold text-gray-800 shrink-0">タスク管理革命</span>
-
-          {/* Date nav */}
-          <div className="flex items-center gap-1 flex-1 justify-center">
+        {/* Row 1: Title + Date nav */}
+        <div className="max-w-4xl mx-auto px-3 pt-2 pb-1 flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-800 shrink-0">タスク管理革命</span>
+          <div className="flex items-center gap-0.5 flex-1 justify-center">
             <button onClick={goToPrevDay} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition-colors" title="前日">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <div className="text-center px-1">
-              <span className="text-sm font-semibold text-gray-800">{dateMain}</span>
+              <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{dateMain}</span>
               {dateSub && (
-                <span className="ml-2 text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">{dateSub}</span>
+                <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">{dateSub}</span>
               )}
             </div>
-            <button onClick={goToNextDay} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition-colors" title="翌日">
+            <button onClick={goToNextDay} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 transition-colors" title="習日">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Hide-done toggle + Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Toggle switch */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <span className="text-xs text-gray-500 hidden sm:inline whitespace-nowrap">完了済みを隠す</span>
-              <button
-                role="switch"
-                aria-checked={hideDone}
-                onClick={() => setHideDone(v => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                  hideDone ? "bg-blue-500" : "bg-gray-300"
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                    hideDone ? "translate-x-4" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            </label>
-            {!isToday && (
-              <button onClick={goToToday} className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
-                今日へ
-              </button>
-            )}
-            {lastSaved && <span className="text-gray-400 text-xs hidden sm:inline">{lastSaved}</span>}
+          {!isToday && (
+            <button onClick={goToToday} className="text-xs px-2 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors shrink-0">
+              今日
+            </button>
+          )}
+        </div>
+        {/* Row 2: Actions */}
+        <div className="max-w-4xl mx-auto px-3 pb-2 flex items-center gap-2">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+            <span className="text-xs text-gray-500 whitespace-nowrap">完了済みを隠す</span>
             <button
-              onClick={undoLast}
-              disabled={undoHistory.length === 0}
-              title="元に戻す"
-              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-                undoHistory.length > 0
-                  ? "border-blue-300 text-blue-600 hover:bg-blue-50"
-                  : "border-gray-200 text-gray-300 cursor-not-allowed"
+              role="switch"
+              aria-checked={hideDone}
+              onClick={() => setHideDone(v => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                hideDone ? "bg-blue-500" : "bg-gray-300"
               }`}
             >
-              <Undo2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">元に戻す</span>
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  hideDone ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
             </button>
-            <button onClick={handleReset} className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
-              リセット
-            </button>
-          </div>
+          </label>
+          <div className="flex-1" />
+          {lastSaved && <span className="text-gray-400 text-[10px] whitespace-nowrap">{lastSaved}</span>}
+          <button
+            onClick={undoLast}
+            disabled={undoHistory.length === 0}
+            title="元に戻す"
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+              undoHistory.length > 0
+                ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+                : "border-gray-200 text-gray-300 cursor-not-allowed"
+            }`}
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>元に戻す</span>
+          </button>
+          <button onClick={handleReset} className="text-xs px-2.5 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
+            リセット
+          </button>
         </div>
 
         {/* Progress bar */}
@@ -696,10 +692,19 @@ export default function Home() {
                 {/* テキスト入力 */}
                 <textarea
                   value={item.text}
-                  onChange={e => updateHandoverItem(item.id, "text", e.target.value)}
+                  onChange={e => {
+                    updateHandoverItem(item.id, "text", e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  onFocus={e => {
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
                   placeholder="引き継ぎ事項を入力してください…"
                   rows={2}
-                  className="w-full text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-yellow-400 placeholder-gray-300"
+                  className="w-full text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-yellow-400 placeholder-gray-300"
+                  style={{ minHeight: "60px" }}
                 />
 
                 {/* 全員確認チェック（テキストがあるときのみ） */}
@@ -959,7 +964,7 @@ export default function Home() {
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => (
                   <div
                     key={task.id}
-                    className={`flex items-center gap-3 px-4 py-2.5 transition-all ${
+                    className={`px-3 py-2.5 transition-all ${
                       task.done
                         ? "bg-gray-50"
                         : task.help
@@ -969,70 +974,73 @@ export default function Home() {
                             : "hover:bg-gray-50/60"
                     }`}
                   >
-                    {/* Done checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={task.done}
-                      onChange={() => toggleDone(task.id)}
-                      className="w-4 h-4 rounded accent-blue-500 cursor-pointer shrink-0"
-                      title="完了"
-                    />
-
-                    {/* HELP checkbox */}
-                    <label
-                      className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
-                        task.done ? "opacity-30 pointer-events-none" : ""
-                      }`}
-                      title="ヘルプが必要"
-                    >
+                    {/* Row 1: checkbox + HELP + icon + label */}
+                    <div className="flex items-center gap-2">
+                      {/* Done checkbox */}
                       <input
                         type="checkbox"
-                        checked={task.help}
-                        onChange={() => toggleHelp(task.id)}
-                        className="sr-only"
+                        checked={task.done}
+                        onChange={() => toggleDone(task.id)}
+                        className="w-5 h-5 rounded accent-blue-500 cursor-pointer shrink-0"
+                        title="完了"
                       />
-                      <span
-                        className={`inline-flex items-center justify-center w-12 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
-                          task.help
-                            ? "bg-red-500 border-red-500 text-white shadow-sm"
-                            : "bg-white border-gray-300 text-gray-400 hover:border-red-300 hover:text-red-400"
+
+                      {/* HELP checkbox */}
+                      <label
+                        className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
+                          task.done ? "opacity-30 pointer-events-none" : ""
                         }`}
+                        title="ヘルプが必要"
                       >
-                        HELP
-                      </span>
-                    </label>
-
-                    {/* Icon */}
-                    <span className={`shrink-0 ${task.done ? "text-gray-300" : getIconColor(task.id)}`}>
-                      {task.icon}
-                    </span>
-
-                    {/* Label */}
-                    <span className={`flex-1 text-sm leading-snug min-w-0 font-medium ${
-                      task.done
-                        ? "text-gray-400 line-through font-normal"
-                        : task.help
-                          ? "text-red-700"
-                          : task.deadline
-                            ? "text-amber-900"
-                            : "text-gray-700 font-normal"
-                    }`}>
-                      {task.label}
-                      {task.deadline && !task.done && (
-                        <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
-                          ⏰ {task.deadline}
+                        <input
+                          type="checkbox"
+                          checked={task.help}
+                          onChange={() => toggleHelp(task.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={`inline-flex items-center justify-center w-11 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
+                            task.help
+                              ? "bg-red-500 border-red-500 text-white shadow-sm"
+                              : "bg-white border-gray-300 text-gray-400 hover:border-red-300 hover:text-red-400"
+                          }`}
+                        >
+                          HELP
                         </span>
-                      )}
-                    </span>
+                      </label>
 
-                    {/* Planned */}
-                    <div className="shrink-0 flex flex-col items-start gap-0.5">
-                      <span className="text-[10px] text-gray-400 font-medium leading-none">作業予定者</span>
+                      {/* Icon */}
+                      <span className={`shrink-0 ${task.done ? "text-gray-300" : getIconColor(task.id)}`}>
+                        {task.icon}
+                      </span>
+
+                      {/* Label */}
+                      <span className={`flex-1 text-sm leading-snug min-w-0 ${
+                        task.done
+                          ? "text-gray-400 line-through"
+                          : task.help
+                            ? "text-red-700 font-medium"
+                            : task.deadline
+                              ? "text-amber-900"
+                              : "text-gray-700"
+                      }`}>
+                        {task.label}
+                        {task.deadline && !task.done && (
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                            ⏰ {task.deadline}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Row 2: Planned selector (right-aligned) */}
+                    <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
                       <select
                         value={task.planned}
                         onChange={e => updateTask(task.id, "planned", e.target.value)}
                         disabled={task.done}
-                        className={`w-32 rounded-md border text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
+                        className={`rounded-md border text-xs px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
                           task.done
                             ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
                             : task.planned === "当日事務担当"
