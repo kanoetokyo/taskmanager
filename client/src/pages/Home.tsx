@@ -33,6 +33,7 @@ import {
   Eraser,
   SlidersHorizontal,
   FileText,
+  Undo2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -233,11 +234,13 @@ export default function Home() {
   const [hideDone, setHideDone] = useState<boolean>(false);
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
   const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
+  const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
     setHandoverItems(loadHandover(currentDateKey));
     setLastSaved(null);
+    setUndoHistory([]);
   }, [currentDateKey]);
 
   // 引き継ぎメモ自動保存
@@ -304,8 +307,22 @@ export default function Home() {
   const updateTask = (id: string, field: "planned" | "actual", value: string) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
 
-  const toggleDone = (id: string) =>
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const toggleDone = (id: string) => {
+    setTasks(prev => {
+      setUndoHistory(h => [...h.slice(-9), prev]);
+      return prev.map(t => t.id === id ? { ...t, done: !t.done } : t);
+    });
+  };
+
+  const undoLast = () => {
+    setUndoHistory(h => {
+      if (h.length === 0) return h;
+      const prev = h[h.length - 1];
+      setTasks(prev);
+      toast.success("元に戻しました");
+      return h.slice(0, -1);
+    });
+  };
 
   const toggleHelp = (id: string) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
@@ -393,6 +410,19 @@ export default function Home() {
               </button>
             )}
             {lastSaved && <span className="text-gray-400 text-xs hidden sm:inline">{lastSaved}</span>}
+            <button
+              onClick={undoLast}
+              disabled={undoHistory.length === 0}
+              title="元に戻す"
+              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                undoHistory.length > 0
+                  ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+                  : "border-gray-200 text-gray-300 cursor-not-allowed"
+              }`}
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">元に戻す</span>
+            </button>
             <button onClick={handleReset} className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
               リセット
             </button>
