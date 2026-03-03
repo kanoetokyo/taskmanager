@@ -1017,40 +1017,25 @@ export default function Home() {
                     </span>
 
                     {/* Planned */}
-                    <select
-                      value={task.planned}
-                      onChange={e => updateTask(task.id, "planned", e.target.value)}
-                      disabled={task.done}
-                      className={`w-32 shrink-0 rounded-md border text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
-                        task.done
-                          ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : task.planned === "当日事務担当"
-                            ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
-                            : task.planned === "当日現場責任者"
-                              ? "border-amber-300 bg-amber-50 text-amber-800 font-medium"
-                              : "border-gray-200 bg-white text-gray-700"
-                      }`}
-                    >
-                      {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-
-                    {/* Actual */}
-                    <select
-                      value={task.actual}
-                      onChange={e => updateTask(task.id, "actual", e.target.value)}
-                      disabled={task.done}
-                      className={`w-28 shrink-0 rounded-md border text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
-                        task.done
-                          ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : task.actual
-                            ? "border-gray-300 bg-white text-gray-700"
-                            : "border-gray-200 bg-white text-gray-400"
-                      }`}
-                    >
-                      {ACTUAL_MEMBERS.map(m => (
-                        <option key={m} value={m}>{m === "" ? "実施者" : m}</option>
-                      ))}
-                    </select>
+                    <div className="shrink-0 flex flex-col items-start gap-0.5">
+                      <span className="text-[10px] text-gray-400 font-medium leading-none">作業予定者</span>
+                      <select
+                        value={task.planned}
+                        onChange={e => updateTask(task.id, "planned", e.target.value)}
+                        disabled={task.done}
+                        className={`w-32 rounded-md border text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
+                          task.done
+                            ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : task.planned === "当日事務担当"
+                              ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
+                              : task.planned === "当日現場責任者"
+                                ? "border-amber-300 bg-amber-50 text-amber-800 font-medium"
+                                : "border-gray-200 bg-white text-gray-700"
+                        }`}
+                      >
+                        {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
                   </div>
                 ))}
               </div>
