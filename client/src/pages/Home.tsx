@@ -225,6 +225,56 @@ function saveHandover(dateKey: string, items: HandoverItem[]) {
   localStorage.setItem(handoverKey(dateKey), JSON.stringify(items));
 }
 
+// ─── Customer Handover ─────────────────────────────────────────────────────
+
+const CUSTOMER_STATUSES = ["不通・未対応", "調整中・仮予約中", "保留"] as const;
+const CUSTOMER_STATUSES_ALL = [...CUSTOMER_STATUSES, "完了"] as const;
+type CustomerStatus = typeof CUSTOMER_STATUSES_ALL[number];
+
+const STORES = ["大井町店", "大森南店", "天満店", "戸越銀座駅前店", "大田中央店", "川崎新町店", "幸塚越店"];
+const CONTACT_OPTIONS = [
+  "作業時追加",
+  ...STORES.map(s => `POS(${s})`),
+  ...STORES.map(s => `ラクーン(${s})`),
+  ...STORES.map(s => `LINE(${s})`),
+  "フリーダイヤル",
+  "来店",
+  "SMS",
+];
+
+const STATUS_STYLE: Record<CustomerStatus, string> = {
+  "不通・未対応": "bg-red-100 text-red-700 border-red-300",
+  "調整中・仮予約中": "bg-yellow-100 text-yellow-700 border-yellow-300",
+  "保留": "bg-gray-100 text-gray-600 border-gray-300",
+  "完了": "bg-green-100 text-green-700 border-green-300",
+};
+
+interface CustomerRecord {
+  id: string;
+  name: string;
+  status: CustomerStatus;
+  contact: string;
+  memo: string;
+}
+
+function customerKey(dateKey: string): string { return `customers-${dateKey}`; }
+
+function newCustomerRecord(): CustomerRecord {
+  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "" };
+}
+
+function loadCustomers(dateKey: string): CustomerRecord[] {
+  try {
+    const saved = localStorage.getItem(customerKey(dateKey));
+    if (saved) return JSON.parse(saved) as CustomerRecord[];
+  } catch {}
+  return [];
+}
+
+function saveCustomers(dateKey: string, items: CustomerRecord[]) {
+  localStorage.setItem(customerKey(dateKey), JSON.stringify(items));
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -235,13 +285,43 @@ export default function Home() {
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
   const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
     setHandoverItems(loadHandover(currentDateKey));
+    setCustomers(loadCustomers(currentDateKey));
     setLastSaved(null);
     setUndoHistory([]);
   }, [currentDateKey]);
+
+  // 顧客引き継ぎ自動保存
+  useEffect(() => {
+    const timer = setTimeout(() => saveCustomers(currentDateKey, customers), 800);
+    return () => clearTimeout(timer);
+  }, [customers, currentDateKey]);
+
+  const addCustomer = () => setCustomers(prev => [...prev, newCustomerRecord()]);
+
+  const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
+    setCustomers(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const updated = { ...c, [field]: value };
+      // 完了に変更した場合は1秒後に自動削除
+      if (field === "status" && value === "完了") {
+        setTimeout(() => {
+          setCustomers(p => p.filter(r => r.id !== id));
+          toast.success("顧客引き継ぎを完了として削除しました");
+        }, 800);
+      }
+      return updated;
+    }));
+  };
+
+  const deleteCustomer = (id: string) => {
+    if (!confirm("この顧客引き継ぎを削除しますか？")) return;
+    setCustomers(prev => prev.filter(c => c.id !== id));
+  };
 
   // 引き継ぎメモ自動保存
   useEffect(() => {
@@ -549,7 +629,11 @@ export default function Home() {
 
                 {/* 全員確認チェック（テキストがあるときのみ） */}
                 {item.text && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="space-y-1.5">
+                  <p className="text-xs text-yellow-700 font-medium flex items-center gap-1">
+                    <span>⚠️</span>内容を確認した方はお名前をタップしてください
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
                     {HANDOVER_MEMBERS.map(member => {
                       const isChecked = item.checked.includes(member);
                       return (
@@ -573,10 +657,93 @@ export default function Home() {
                       }
                     </span>
                   </div>
+                  </div>
                 )}
               </div>
             ))}
           </div>
+        </section>
+
+        {/* 顧客引き継ぎダッシュボード */}
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-blue-400">
+          <div className="px-4 py-2.5 flex items-center justify-between border-b border-gray-100">
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              <Users className="w-4 h-4" />
+              顧客引き継ぎ
+            </span>
+            <div className="flex items-center gap-2">
+              {customers.length > 0 && (
+                <span className="text-xs text-gray-400 tabular-nums">{customers.length}件</span>
+              )}
+              <button
+                onClick={addCustomer}
+                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-sm"
+              >
+                <span className="text-base leading-none">+</span> 顧客を追加
+              </button>
+            </div>
+          </div>
+
+          {customers.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-400">
+              引き継ぎが必要な顧客を追加してください
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {customers.map(c => (
+                <div key={c.id} className={`px-4 py-3 space-y-2 ${
+                  c.status === "不通・未対応" ? "bg-red-50/40" :
+                  c.status === "調整中・仮予約中" ? "bg-yellow-50/40" :
+                  c.status === "保留" ? "bg-gray-50/60" : ""
+                }`}>
+                  {/* 行1: 顧客名 + ステータス + 削除 */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="text"
+                      value={c.name}
+                      onChange={e => updateCustomer(c.id, "name", e.target.value)}
+                      placeholder="顧客名を入力"
+                      className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
+                    />
+                    <select
+                      value={c.status}
+                      onChange={e => updateCustomer(c.id, "status", e.target.value)}
+                      className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 ${STATUS_STYLE[c.status]}`}
+                    >
+                      {CUSTOMER_STATUSES_ALL.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => deleteCustomer(c.id)}
+                      className="text-xs text-gray-300 hover:text-red-400 transition-colors px-1 ml-auto"
+                      title="削除"
+                    >✕</button>
+                  </div>
+                  {/* 行2: やりとり + メモ */}
+                  <div className="flex items-start gap-2 flex-wrap">
+                    <select
+                      value={c.contact}
+                      onChange={e => updateCustomer(c.id, "contact", e.target.value)}
+                      className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 shrink-0"
+                    >
+                      <option value="">ヤリトリを選択</option>
+                      {CONTACT_OPTIONS.map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={c.memo}
+                      onChange={e => updateCustomer(c.id, "memo", e.target.value)}
+                      placeholder="メモを入力…"
+                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {categories.map(cat => {
