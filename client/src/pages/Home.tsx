@@ -59,32 +59,35 @@ interface Task extends TaskDef {
   help: boolean;
 }
 
+// ─── Store Check (LINE / POS / Raccoon) ─────────────────────────────────────
+
+const STORE_NAMES = ["大井町", "大森南", "天満", "戸越銀座駅前", "大田中央", "川崎新町", "幸塚越"];
+
+interface StoreCheckState {
+  line: string[];   // チェック済み店舗名
+  pos: string[];
+  raccoon: string[];
+}
+
+function storeCheckKey(dateKey: string): string { return `store-check-${dateKey}`; }
+
+function loadStoreCheck(dateKey: string): StoreCheckState {
+  try {
+    const saved = localStorage.getItem(storeCheckKey(dateKey));
+    if (saved) return JSON.parse(saved) as StoreCheckState;
+  } catch {}
+  return { line: [], pos: [], raccoon: [] };
+}
+
+function saveStoreCheck(dateKey: string, state: StoreCheckState) {
+  localStorage.setItem(storeCheckKey(dateKey), JSON.stringify(state));
+}
+
 // ─── Task Definitions ────────────────────────────────────────────────────────
 
 const iconSize = "w-4 h-4 shrink-0";
 
 const BASE_TASKS: TaskDef[] = [
-  { id: "sys-a-1", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大井町店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-2", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大森南店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-3", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（天満店）",         icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-4", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（戸越銀座駅前店）", icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-5", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（大田中央店）",     icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-6", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（川崎新町店）",     icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-a-7", category: "各種システムのチェック", label: "公式LINEの要対応なものチェック（前日１８：００以降に発生）（幸塚越店）",       icon: <MessageCircle className={iconSize} />, deadline: "12:00まで" },
-  { id: "sys-b-1", category: "各種システムのチェック", label: "POSのチェック（大井町店）",            icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-2", category: "各種システムのチェック", label: "POSのチェック（大森南店）",            icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-3", category: "各種システムのチェック", label: "POSのチェック（天満店）",              icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-4", category: "各種システムのチェック", label: "POSのチェック（戸越銀座駅前店）",      icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-5", category: "各種システムのチェック", label: "POSのチェック（大田中央店）",          icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-6", category: "各種システムのチェック", label: "POSのチェック（川崎新町店）",          icon: <Tablet className={iconSize} /> },
-  { id: "sys-b-7", category: "各種システムのチェック", label: "POSのチェック（幸塚越店）",            icon: <Tablet className={iconSize} /> },
-  { id: "sys-c-1", category: "各種システムのチェック", label: "ラクーンのチェック（大井町店）",       icon: <Package className={iconSize} /> },
-  { id: "sys-c-2", category: "各種システムのチェック", label: "ラクーンのチェック（大森南店）",       icon: <Package className={iconSize} /> },
-  { id: "sys-c-3", category: "各種システムのチェック", label: "ラクーンのチェック（天満店）",         icon: <Package className={iconSize} /> },
-  { id: "sys-c-4", category: "各種システムのチェック", label: "ラクーンのチェック（戸越銀座駅前店）", icon: <Package className={iconSize} /> },
-  { id: "sys-c-5", category: "各種システムのチェック", label: "ラクーンのチェック（大田中央店）",     icon: <Package className={iconSize} /> },
-  { id: "sys-c-6", category: "各種システムのチェック", label: "ラクーンのチェック（川崎新町店）",     icon: <Package className={iconSize} /> },
-  { id: "sys-c-7", category: "各種システムのチェック", label: "ラクーンのチェック（幸塚越店）",       icon: <Package className={iconSize} /> },
   { id: "sys-d-1", category: "各種システムのチェック", label: "メールのチェック（osouji.oimachi@gmail.com）", icon: <Mail className={iconSize} /> },
   { id: "sys-e-1", category: "各種システムのチェック", label: "Storesの予約確認チェック",             icon: <ShoppingBag className={iconSize} /> },
 
@@ -259,12 +262,12 @@ const CUSTOMER_STATUSES = ["不通・未対応", "調整中・仮予約中", "�
 const CUSTOMER_STATUSES_ALL = [...CUSTOMER_STATUSES, "完了"] as const;
 type CustomerStatus = typeof CUSTOMER_STATUSES_ALL[number];
 
-const STORES = ["大井町店", "大森南店", "天満店", "戸越銀座駅前店", "大田中央店", "川崎新町店", "幸塚越店"];
+const STORE_NAMES_FULL = ["大井町店", "大森南店", "天満店", "戸越銀座駅前店", "大田中央店", "川崎新町店", "幸塚越店"];
 const CONTACT_OPTIONS = [
   "作業時追加",
-  ...STORES.map(s => `POS(${s})`),
-  ...STORES.map(s => `ラクーン(${s})`),
-  ...STORES.map(s => `LINE(${s})`),
+  ...STORE_NAMES_FULL.map(s => `POS(${s})`),
+  ...STORE_NAMES_FULL.map(s => `ラクーン(${s})`),
+  ...STORE_NAMES_FULL.map(s => `LINE(${s})`),
   "フリーダイヤル",
   "来店",
   "SMS",
@@ -354,14 +357,23 @@ export default function Home() {
   const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
   const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
   const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
+  const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
+  const [customerOpen, setCustomerOpen] = useState<boolean>(false);
+  const [storeCheck, setStoreCheck] = useState<StoreCheckState>(() => loadStoreCheck(todayKey()));
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
     setHandoverItems(loadHandover(currentDateKey));
     setCustomers(loadCustomers(currentDateKey));
+    setStoreCheck(loadStoreCheck(currentDateKey));
     setLastSaved(null);
     setUndoHistory([]);
   }, [currentDateKey]);
+
+  // 店舗チェック自動保存
+  useEffect(() => {
+    saveStoreCheck(currentDateKey, storeCheck);
+  }, [storeCheck, currentDateKey]);
 
   // MISOCA自動保存
   useEffect(() => {
@@ -974,6 +986,121 @@ export default function Home() {
                   </span>
                 </div>
               </div>
+
+              {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式を先頭に表示 */}
+              {cat === "各種システムのチェック" && (
+                <div className="divide-y divide-gray-50">
+                  {/* 公式LINE */}
+                  <div className="px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
+                      <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
+                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium shrink-0">12:00まで</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.line.includes(store);
+                        return (
+                          <button
+                            key={store}
+                            onClick={() => setStoreCheck(prev => ({
+                              ...prev,
+                              line: checked
+                                ? prev.line.filter(s => s !== store)
+                                : [...prev.line, store]
+                            }))}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
+                              checked
+                                ? "bg-green-500 border-green-500 text-white shadow-sm"
+                                : "bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"
+                            }`}
+                          >
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <span className="self-center text-xs text-gray-400 ml-1">
+                        {storeCheck.line.length === STORE_NAMES.length
+                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
+                          : `${storeCheck.line.length}/${STORE_NAMES.length}店舗`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  {/* POS */}
+                  <div className="px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
+                      <span className="text-sm text-gray-700 font-medium flex-1">POSのチェック</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.pos.includes(store);
+                        return (
+                          <button
+                            key={store}
+                            onClick={() => setStoreCheck(prev => ({
+                              ...prev,
+                              pos: checked
+                                ? prev.pos.filter(s => s !== store)
+                                : [...prev.pos, store]
+                            }))}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
+                              checked
+                                ? "bg-green-500 border-green-500 text-white shadow-sm"
+                                : "bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-700"
+                            }`}
+                          >
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <span className="self-center text-xs text-gray-400 ml-1">
+                        {storeCheck.pos.length === STORE_NAMES.length
+                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
+                          : `${storeCheck.pos.length}/${STORE_NAMES.length}店舗`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  {/* ラクーン */}
+                  <div className="px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
+                      <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.raccoon.includes(store);
+                        return (
+                          <button
+                            key={store}
+                            onClick={() => setStoreCheck(prev => ({
+                              ...prev,
+                              raccoon: checked
+                                ? prev.raccoon.filter(s => s !== store)
+                                : [...prev.raccoon, store]
+                            }))}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
+                              checked
+                                ? "bg-green-500 border-green-500 text-white shadow-sm"
+                                : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-700"
+                            }`}
+                          >
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <span className="self-center text-xs text-gray-400 ml-1">
+                        {storeCheck.raccoon.length === STORE_NAMES.length
+                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
+                          : `${storeCheck.raccoon.length}/${STORE_NAMES.length}店舗`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Task rows */}
               <div className="divide-y divide-gray-50">
