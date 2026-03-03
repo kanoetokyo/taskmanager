@@ -40,8 +40,8 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
-const ACTUAL_MEMBERS  = ["", "当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
+const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "その他"];
+const ACTUAL_MEMBERS  = ["", "当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "その他"];
 
 interface TaskDef {
   id: string;
@@ -208,7 +208,7 @@ function saveTasks(dateKey: string, tasks: Task[]) {
 
 // ─── Handover Memo ──────────────────────────────────────────────────────────
 
-const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい"];
+const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山"];
 
 interface HandoverItem {
   id: string;
@@ -919,12 +919,25 @@ export default function Home() {
                     {cat}
                   </span>
                 </div>
-                <span className="text-xs text-gray-400 tabular-nums">
-                  {catDone === catTasks.length
-                    ? <span className="text-green-500 font-semibold">✓ 完了</span>
-                    : <>{catDone} / {catTasks.length}</>
-                  }
-                </span>
+                <div className="flex items-center gap-2">
+                  {catDone < catTasks.length && (
+                    <button
+                      onClick={() => {
+                        setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
+                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
+                      }}
+                      className="text-xs px-2 py-0.5 rounded bg-gray-100 hover:bg-green-100 text-gray-500 hover:text-green-700 transition-colors"
+                    >
+                      一括完了
+                    </button>
+                  )}
+                  <span className="text-xs text-gray-400 tabular-nums">
+                    {catDone === catTasks.length
+                      ? <span className="text-green-500 font-semibold">✓ 完了</span>
+                      : <>{catDone} / {catTasks.length}</>
+                    }
+                  </span>
+                </div>
               </div>
 
               {/* Task rows */}
