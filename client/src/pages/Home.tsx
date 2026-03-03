@@ -36,14 +36,16 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-const PLANNED_MEMBERS = ["当日事務担当", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
-const ACTUAL_MEMBERS  = ["", "当日事務担当", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
+const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
+const ACTUAL_MEMBERS  = ["", "当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "その他"];
 
 interface TaskDef {
   id: string;
   category: string;
   label: string;
   icon: React.ReactNode;
+  defaultPlanned?: string;  // デフォルト担当者（未指定時は「当日事務担当」）
+  deadline?: string;        // 期限表示（例: "17:00まで"）
 }
 
 interface Task extends TaskDef {
@@ -95,7 +97,7 @@ const BASE_TASKS: TaskDef[] = [
   // LINEグループ管理
   { id: "line-a", category: "LINEグループ管理", label: "事務グループ（4グループのいずれか）への日付メッセージ投稿", icon: <Users className={iconSize} /> },
   { id: "line-b", category: "LINEグループ管理", label: "翌日の稼働グループの作成",                                 icon: <CalendarPlus className={iconSize} /> },
-  { id: "line-c", category: "LINEグループ管理", label: "翌日のスケジュールと配車を確定させて配信する",             icon: <Send className={iconSize} /> },
+  { id: "line-c", category: "LINEグループ管理", label: "翌日のスケジュールと配車を確定させて配信する", icon: <Send className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "17:00まで" },
 
   // 清掃管理
   { id: "clean-a", category: "清掃管理（前田君または担当者）", label: "清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", icon: <AlertCircle className={iconSize} /> },
@@ -148,7 +150,7 @@ function getIconColor(id: string): string {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeInitialTasks(): Task[] {
-  return BASE_TASKS.map(t => ({ ...t, planned: "当日事務担当", actual: "", done: false, help: false }));
+  return BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false }));
 }
 
 function dateToKey(date: Date): string {
@@ -181,8 +183,8 @@ function loadTasks(dateKey: string): Task[] {
       return BASE_TASKS.map(t => {
         const found = parsed.find(p => p.id === t.id);
         return found
-          ? { ...t, planned: found.planned ?? "当日事務担当", actual: found.actual ?? "", done: found.done ?? false, help: found.help ?? false }
-          : { ...t, planned: "当日事務担当", actual: "", done: false, help: false };
+          ? { ...t, planned: found.planned ?? (t.defaultPlanned ?? "当日事務担当"), actual: found.actual ?? "", done: found.done ?? false, help: found.help ?? false }
+          : { ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false };
       });
     }
   } catch {}
@@ -370,7 +372,9 @@ export default function Home() {
                         ? "bg-gray-50"
                         : task.help
                           ? "bg-red-50 border-l-4 border-red-400"
-                          : "hover:bg-gray-50/60"
+                          : task.deadline
+                            ? "bg-amber-50 border-l-4 border-amber-400"
+                            : "hover:bg-gray-50/60"
                     }`}
                   >
                     {/* Done checkbox */}
@@ -417,9 +421,16 @@ export default function Home() {
                         ? "text-gray-400 line-through font-normal"
                         : task.help
                           ? "text-red-700"
-                          : "text-gray-700 font-normal"
+                          : task.deadline
+                            ? "text-amber-900"
+                            : "text-gray-700 font-normal"
                     }`}>
                       {task.label}
+                      {task.deadline && !task.done && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                          ⏰ {task.deadline}
+                        </span>
+                      )}
                     </span>
 
                     {/* Planned */}
@@ -432,7 +443,9 @@ export default function Home() {
                           ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
                           : task.planned === "当日事務担当"
                             ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
-                            : "border-gray-200 bg-white text-gray-700"
+                            : task.planned === "当日現場責任者"
+                              ? "border-amber-300 bg-amber-50 text-amber-800 font-medium"
+                              : "border-gray-200 bg-white text-gray-700"
                       }`}
                     >
                       {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
