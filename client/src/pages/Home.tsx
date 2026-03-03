@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   MessageCircle,
   Tablet,
   Package,
@@ -202,6 +203,7 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>(() => loadTasks(todayKey()));
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [hideDone, setHideDone] = useState<boolean>(false);
+  const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
@@ -343,26 +345,38 @@ export default function Home() {
         {/* 前日未完了タスクアラート */}
         {prevDayUndoneTasks.length > 0 && (
           <section className="bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-xl shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 flex items-center justify-between border-b border-red-100">
+            {/* ヘッダー（常に表示） */}
+            <button
+              onClick={() => setShowPrevUndone(v => !v)}
+              className="w-full px-4 py-2.5 flex items-center justify-between border-b border-red-100 hover:bg-red-100/50 transition-colors"
+            >
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                   <AlertCircle className="w-4 h-4" />
                   前日（{prevDateMain}）の未完了タスク
                 </span>
               </div>
-              <span className="text-xs font-semibold text-red-500">{prevDayUndoneTasks.length}件未完了</span>
-            </div>
-            <div className="divide-y divide-red-100">
-              {prevDayUndoneTasks.map(task => (
-                <div key={task.id} className="flex items-center gap-2 px-4 py-2">
-                  <span className="text-red-400 shrink-0">{task.icon}</span>
-                  <span className="flex-1 text-sm text-red-800">{task.label}</span>
-                  {task.planned && (
-                    <span className="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-red-500">{prevDayUndoneTasks.length}件未完了</span>
+                <span className={`text-red-400 transition-transform duration-200 ${showPrevUndone ? "rotate-180" : ""}`}>
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+            </button>
+            {/* 展開時のタスク一覧 */}
+            {showPrevUndone && (
+              <div className="divide-y divide-red-100">
+                {prevDayUndoneTasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-2 px-4 py-2">
+                    <span className="text-red-400 shrink-0">{task.icon}</span>
+                    <span className="flex-1 text-sm text-red-800">{task.label}</span>
+                    {task.planned && (
+                      <span className="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
         {categories.map(cat => {
