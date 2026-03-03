@@ -826,12 +826,21 @@ export default function Home() {
                         <option key={o} value={o}>{o}</option>
                       ))}
                     </select>
-                    <input
-                      type="text"
+                    <textarea
                       value={c.memo}
-                      onChange={e => updateCustomer(c.id, "memo", e.target.value)}
+                      onChange={e => {
+                        updateCustomer(c.id, "memo", e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
+                      onFocus={e => {
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
                       placeholder="メモを入力…"
-                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
+                      rows={1}
+                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300 resize-none overflow-hidden"
+                      style={{ minHeight: "34px" }}
                     />
                   </div>
                 </div>
