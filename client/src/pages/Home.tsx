@@ -34,6 +34,8 @@ import {
   SlidersHorizontal,
   FileText,
   Undo2,
+  CalendarCheck,
+  CheckCircle2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -317,6 +319,26 @@ function saveCustomers(dateKey: string, items: CustomerRecord[]) {
   localStorage.setItem(customerKey(dateKey), JSON.stringify(items));
 }
 
+// ─── MISOCA Status ───────────────────────────────────────────────────────────
+
+const MISOCA_STORAGE_KEY = "misoca-status";
+
+interface MisocaStatus {
+  completedUntil: string; // YYYY-MM-DD 形式。この日付まで見積書作成済み
+}
+
+function loadMisoca(): MisocaStatus {
+  try {
+    const saved = localStorage.getItem(MISOCA_STORAGE_KEY);
+    if (saved) return JSON.parse(saved) as MisocaStatus;
+  } catch {}
+  return { completedUntil: "" };
+}
+
+function saveMisoca(status: MisocaStatus) {
+  localStorage.setItem(MISOCA_STORAGE_KEY, JSON.stringify(status));
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -328,6 +350,7 @@ export default function Home() {
   const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
+  const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
@@ -336,6 +359,11 @@ export default function Home() {
     setLastSaved(null);
     setUndoHistory([]);
   }, [currentDateKey]);
+
+  // MISOCA自動保存
+  useEffect(() => {
+    saveMisoca(misoca);
+  }, [misoca]);
 
   // 顧客引き継ぎ自動保存
   useEffect(() => {
@@ -811,6 +839,69 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* MISOCA作成完了ステータス */}
+        {(() => {
+          const today = todayKey();
+          const until = misoca.completedUntil;
+          const isSet = !!until;
+          const isUpToDate = isSet && until >= today;
+          const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+          return (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-emerald-400">
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-semibold text-gray-700">MISOCA見積書作成完了ステータス</span>
+                </div>
+                {isSet && (
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                    isUpToDate ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+                  }`}>
+                    {isUpToDate
+                      ? daysLeft === 0 ? "本日分まで作成済み" : `あと${daysLeft}日分まで作成済み`
+                      : `${Math.abs(daysLeft)}日前で止まっています`
+                    }
+                  </span>
+                )}
+              </div>
+              <div className="px-4 pb-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500 whitespace-nowrap">見積書作成済み日まで：</label>
+                    <input
+                      type="date"
+                      value={misoca.completedUntil}
+                      onChange={e => setMisoca({ completedUntil: e.target.value })}
+                      className="text-sm px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                  </div>
+                  {isSet && (
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                      isUpToDate ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+                    }`}>
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>
+                        {isUpToDate
+                          ? `${keyToDate(until).getFullYear()}年${keyToDate(until).getMonth()+1}月${keyToDate(until).getDate()}日までMISOCAで見積書作成済み`
+                          : `${keyToDate(until).getFullYear()}年${keyToDate(until).getMonth()+1}月${keyToDate(until).getDate()}日以降の見積書が未作成です`
+                        }
+                      </span>
+                    </div>
+                  )}
+                  {isSet && (
+                    <button
+                      onClick={() => setMisoca({ completedUntil: "" })}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      リセット
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {categories.map(cat => {
           const catTasks  = tasks.filter(t => t.category === cat);
