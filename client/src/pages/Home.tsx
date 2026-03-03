@@ -50,6 +50,7 @@ interface Task extends TaskDef {
   planned: string;
   actual: string;
   done: boolean;
+  help: boolean;
 }
 
 // ─── Task Definitions ────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ function getIconColor(id: string): string {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeInitialTasks(): Task[] {
-  return BASE_TASKS.map(t => ({ ...t, planned: "当日事務担当", actual: "", done: false }));
+  return BASE_TASKS.map(t => ({ ...t, planned: "当日事務担当", actual: "", done: false, help: false }));
 }
 
 function dateToKey(date: Date): string {
@@ -180,8 +181,8 @@ function loadTasks(dateKey: string): Task[] {
       return BASE_TASKS.map(t => {
         const found = parsed.find(p => p.id === t.id);
         return found
-          ? { ...t, planned: found.planned ?? "当日事務担当", actual: found.actual ?? "", done: found.done ?? false }
-          : { ...t, planned: "当日事務担当", actual: "", done: false };
+          ? { ...t, planned: found.planned ?? "当日事務担当", actual: found.actual ?? "", done: found.done ?? false, help: found.help ?? false }
+          : { ...t, planned: "当日事務担当", actual: "", done: false, help: false };
       });
     }
   } catch {}
@@ -227,6 +228,9 @@ export default function Home() {
 
   const toggleDone = (id: string) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+
+  const toggleHelp = (id: string) =>
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
 
   const handleSave = () => {
     saveTasks(currentDateKey, tasks);
@@ -361,17 +365,46 @@ export default function Home() {
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => (
                   <div
                     key={task.id}
-                    className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
-                      task.done ? "bg-gray-50" : "hover:bg-gray-50/60"
+                    className={`flex items-center gap-3 px-4 py-2.5 transition-all ${
+                      task.done
+                        ? "bg-gray-50"
+                        : task.help
+                          ? "bg-red-50 border-l-4 border-red-400"
+                          : "hover:bg-gray-50/60"
                     }`}
                   >
-                    {/* Checkbox */}
+                    {/* Done checkbox */}
                     <input
                       type="checkbox"
                       checked={task.done}
                       onChange={() => toggleDone(task.id)}
                       className="w-4 h-4 rounded accent-blue-500 cursor-pointer shrink-0"
+                      title="完了"
                     />
+
+                    {/* HELP checkbox */}
+                    <label
+                      className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
+                        task.done ? "opacity-30 pointer-events-none" : ""
+                      }`}
+                      title="ヘルプが必要"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={task.help}
+                        onChange={() => toggleHelp(task.id)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`inline-flex items-center justify-center w-12 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
+                          task.help
+                            ? "bg-red-500 border-red-500 text-white shadow-sm"
+                            : "bg-white border-gray-300 text-gray-400 hover:border-red-300 hover:text-red-400"
+                        }`}
+                      >
+                        HELP
+                      </span>
+                    </label>
 
                     {/* Icon */}
                     <span className={`shrink-0 ${task.done ? "text-gray-300" : getIconColor(task.id)}`}>
@@ -379,8 +412,12 @@ export default function Home() {
                     </span>
 
                     {/* Label */}
-                    <span className={`flex-1 text-sm leading-snug min-w-0 ${
-                      task.done ? "text-gray-400 line-through" : "text-gray-700"
+                    <span className={`flex-1 text-sm leading-snug min-w-0 font-medium ${
+                      task.done
+                        ? "text-gray-400 line-through font-normal"
+                        : task.help
+                          ? "text-red-700"
+                          : "text-gray-700 font-normal"
                     }`}>
                       {task.label}
                     </span>
