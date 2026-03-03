@@ -606,7 +606,7 @@ export default function Home() {
           </section>
         )}
         {/* 引き継ぎメモパネル */}
-        <section className="bg-white border border-gray-200 border-l-4 border-l-yellow-400 rounded-xl shadow-sm overflow-hidden">
+        <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
           {/* ヘッダー */}
           <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
             <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
@@ -712,7 +712,7 @@ export default function Home() {
         </section>
 
         {/* 顧客引き継ぎダッシュボード */}
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-blue-400">
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
           <div className="px-4 py-2.5 border-b border-gray-100 space-y-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
@@ -829,7 +829,7 @@ export default function Home() {
           const isUpToDate = isSet && until >= today;
           const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
           return (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-emerald-400">
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
               <div className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CalendarCheck className="w-4 h-4 text-emerald-500" />
