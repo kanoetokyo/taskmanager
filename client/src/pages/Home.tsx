@@ -100,8 +100,8 @@ const BASE_TASKS: TaskDef[] = [
   { id: "line-c", category: "LINEグループ管理", label: "翌日のスケジュールと配車を確定させて配信する", icon: <Send className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "17:00まで" },
 
   // 清掃管理
-  { id: "clean-a", category: "清掃管理（前田君または担当者）", label: "清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", icon: <AlertCircle className={iconSize} /> },
-  { id: "clean-b", category: "清掃管理（前田君または担当者）", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
+  { id: "clean-a", category: "アットイン清掃管理システム確認", label: "清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", icon: <AlertCircle className={iconSize} /> },
+  { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
 
   // 調整および書類作成
   { id: "doc-a", category: "調整および書類作成", label: "Storesの空き枠のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
@@ -121,7 +121,7 @@ const CAT_CONFIG: Record<string, CatConfig> = {
   "顧客対応と事務作業":             { border: "border-green-400",  badge: "bg-green-100 text-green-700", icon: <Phone className="w-4 h-4" /> },
   "決済確認":                       { border: "border-amber-400",  badge: "bg-amber-100 text-amber-700", icon: <CreditCard className="w-4 h-4" /> },
   "LINEグループ管理":               { border: "border-cyan-400",   badge: "bg-cyan-100 text-cyan-700",   icon: <MessageCircle className="w-4 h-4" /> },
-  "清掃管理（前田君または担当者）": { border: "border-orange-400", badge: "bg-orange-100 text-orange-700", icon: <ClipboardList className="w-4 h-4" /> },
+  "アットイン清掃管理システム確認": { border: "border-orange-400", badge: "bg-orange-100 text-orange-700", icon: <ClipboardList className="w-4 h-4" /> },
   "調整および書類作成":             { border: "border-violet-400", badge: "bg-violet-100 text-violet-700", icon: <FileText className="w-4 h-4" /> },
 };
 
