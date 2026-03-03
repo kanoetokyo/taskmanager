@@ -516,7 +516,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
 
           {/* Title */}
-          <span className="text-base font-bold text-gray-800 shrink-0">タスク管理</span>
+          <span className="text-base font-bold text-gray-800 shrink-0">タスク管理革命</span>
 
           {/* Date nav */}
           <div className="flex items-center gap-1 flex-1 justify-center">
