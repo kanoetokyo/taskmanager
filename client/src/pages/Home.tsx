@@ -666,24 +666,38 @@ export default function Home() {
         )}
         {/* 引き継ぎメモパネル */}
         <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
-          {/* ヘッダー */}
-          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
+          {/* ヘッダー（アコーディオン） */}
+          <div
+            className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+            onClick={() => setHandoverOpen(v => !v)}
+          >
             <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
               <ClipboardList className="w-4 h-4" />
-              引き継ぎメモ
+              全体引き継ぎ
             </span>
-            <button
-              onClick={addHandoverItem}
-              className="ml-auto flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors font-medium"
-            >
-              <span className="text-base leading-none">+</span> メモを追加
-            </button>
+            {!handoverOpen && handoverItems.some(i => i.text) && (
+              <span className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full font-medium">
+                {handoverItems.filter(i => i.text).length}件
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {handoverOpen && (
+                <button
+                  onClick={e => { e.stopPropagation(); addHandoverItem(); }}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors font-medium"
+                >
+                  <span className="text-base leading-none">+</span> メモを追加
+                </button>
+              )}
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${handoverOpen ? "rotate-180" : ""}`} />
+            </div>
           </div>
 
-          {/* 各メモ */}
-          <div className="divide-y divide-gray-100">
-            {handoverItems.map((item, idx) => (
-              <div key={item.id} className="px-4 py-3 space-y-2">
+          {/* 各メモ（アコーディオン本体） */}
+          {handoverOpen && (
+          <div className="divide-y divide-gray-100 border-t border-gray-100">
+            {handoverItems.map((item, idx) => {
+              return (<div key={item.id} className="px-4 py-3 space-y-2">
                 {/* 作成者選択 + 削除ボタン */}
                 <div className="flex items-center gap-2">
                   <select
@@ -765,48 +779,49 @@ export default function Home() {
                   </div>
                   </div>
                 )}
-              </div>
-            ))}
+              </div>);
+            })}
           </div>
+          )}
         </section>
 
         {/* 顧客引き継ぎダッシュボード */}
         <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
-          <div className="px-4 py-2.5 border-b border-gray-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                <Users className="w-4 h-4" />
-                顧客引き継ぎ
+          {/* ヘッダー（アコーディオン） */}
+          <div
+            className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+            onClick={() => setCustomerOpen(v => !v)}
+          >
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              <Users className="w-4 h-4" />
+              顧客引き継ぎ
+            </span>
+            {!customerOpen && customers.length > 0 && (
+              <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                {customers.length}件
               </span>
-              <button
-                onClick={addCustomer}
-                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-sm"
-              >
-                <span className="text-base leading-none">+</span> 顧客を追加
-              </button>
-            </div>
-            {customers.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {(["不通・未対応", "調整中・仮予約中", "保留"] as const).map(status => {
-                  const count = customers.filter(c => c.status === status).length;
-                  if (count === 0) return null;
-                  const style = STATUS_STYLE[status];
-                  return (
-                    <span key={status} className={`text-xs font-medium px-2 py-0.5 rounded-full border tabular-nums ${style}`}>
-                      {status}：{count}件
-                    </span>
-                  );
-                })}
-                <span className="text-xs text-gray-400 tabular-nums ml-1">合計 {customers.length}件</span>
-              </div>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              {customerOpen && (
+                <button
+                  onClick={e => { e.stopPropagation(); addCustomer(); }}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-sm"
+                >
+                  <span className="text-base leading-none">+</span> 顧客を追加
+                </button>
+              )}
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${customerOpen ? "rotate-180" : ""}`} />
+            </div>
           </div>
 
-          {customers.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-gray-400">
-              引き継ぎが必要な顧客を追加してください
-            </div>
-          ) : (
+          {/* 顧客一覧（アコーディオン本体） */}
+          {customerOpen && (
+          <div className="border-t border-gray-100">
+            {customers.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">
+                引き継ぎが必要な顧客を追加してください
+              </div>
+            ) : (
             <div className="divide-y divide-gray-100">
               {customers.map(c => (
                 <div key={c.id} className={`px-4 py-3 space-y-2 ${
@@ -877,6 +892,8 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            )}
+          </div>
           )}
         </section>
 
