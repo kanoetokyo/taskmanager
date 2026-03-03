@@ -105,8 +105,14 @@ const BASE_TASKS: TaskDef[] = [
   { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
 
   // 調整および書類作成
-  { id: "doc-a", category: "調整および書類作成", label: "Storesの空き枠のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
-  { id: "doc-b", category: "調整および書類作成", label: "翌日の見積もりの作成および印刷",     icon: <FileText className={iconSize} /> },
+  { id: "doc-a", category: "調整および書類作成", label: "Storesの空き枚のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
+  { id: "doc-b", category: "調整および書類作成", label: "翔日の見積もりの作成および印刷",     icon: <FileText className={iconSize} /> },
+
+  // 大森事務でのTODO
+  { id: "omori-a", category: "大森事務でのTODO", label: "前日の売上日報の確認",                 icon: <BarChart2 className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-b", category: "大森事務でのTODO", label: "前日のインセンティブ報告の内容確認",         icon: <ClipboardList className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-c", category: "大森事務でのTODO", label: "1週間先までのグレーセルの確認", icon: <SlidersHorizontal className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-d", category: "大森事務でのTODO", label: "現金確認",                         icon: <CreditCard className={iconSize} />, defaultPlanned: "当日現場責任者" },
 ];
 
 // ─── Category Config ──────────────────────────────────────────────────────────
@@ -124,6 +130,7 @@ const CAT_CONFIG: Record<string, CatConfig> = {
   "LINEグループ管理":               { border: "border-cyan-400",   badge: "bg-cyan-100 text-cyan-700",   icon: <MessageCircle className="w-4 h-4" /> },
   "アットイン清掃管理システム確認": { border: "border-orange-400", badge: "bg-orange-100 text-orange-700", icon: <ClipboardList className="w-4 h-4" /> },
   "調整および書類作成":             { border: "border-violet-400", badge: "bg-violet-100 text-violet-700", icon: <FileText className="w-4 h-4" /> },
+  "大森事務でのTODO":             { border: "border-rose-400",   badge: "bg-rose-100 text-rose-700",   icon: <ClipboardList className="w-4 h-4" /> },
 };
 
 // ─── Icon color per task type ─────────────────────────────────────────────────
@@ -139,6 +146,7 @@ const ICON_COLOR: Record<string, string> = {
   "line":  "text-cyan-500",
   "clean": "text-orange-500",
   "doc":   "text-violet-500",
+  "omori": "text-rose-500",
 };
 
 function getIconColor(id: string): string {
