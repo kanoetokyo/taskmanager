@@ -211,7 +211,11 @@ export default function Home() {
   }, [currentDateKey]);
 
   useEffect(() => {
-    const timer = setTimeout(() => saveTasks(currentDateKey, tasks), 500);
+    const timer = setTimeout(() => {
+      saveTasks(currentDateKey, tasks);
+      const now = new Date();
+      setLastSaved(`自動保存済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+    }, 800);
     return () => clearTimeout(timer);
   }, [tasks, currentDateKey]);
 
@@ -235,13 +239,6 @@ export default function Home() {
 
   const toggleHelp = (id: string) =>
     setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
-
-  const handleSave = () => {
-    saveTasks(currentDateKey, tasks);
-    const now = new Date();
-    setLastSaved(`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")} 保存済み`);
-    toast.success("保存しました");
-  };
 
   const handleReset = () => {
     if (!confirm("この日の全設定をリセットしますか？")) return;
@@ -315,12 +312,9 @@ export default function Home() {
                 今日へ
               </button>
             )}
-            {lastSaved && <span className="text-gray-400 text-xs hidden lg:inline">{lastSaved}</span>}
+            {lastSaved && <span className="text-gray-400 text-xs hidden sm:inline">{lastSaved}</span>}
             <button onClick={handleReset} className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
               リセット
-            </button>
-            <button onClick={handleSave} className="text-xs px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-colors shadow-sm">
-              保存
             </button>
           </div>
         </div>
