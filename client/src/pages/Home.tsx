@@ -37,8 +37,64 @@ import {
   CalendarCheck,
   CheckCircle2,
 } from "lucide-react";
+// ─── Individual Handover ────────────────────────────────────────────────────
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+interface IndividualHandoverTask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+interface IndividualHandoverRecord {
+  id: string;
+  author: string;       // 作成者
+  target: string;       // 対象者
+  tasks: IndividualHandoverTask[]; // 引き継ぎ項目（1つ以上）
+  inherited?: boolean;
+}
+
+function individualHandoverKey(dateKey: string): string { return `individual-handover-${dateKey}`; }
+
+function newIndividualTask(): IndividualHandoverTask {
+  return { id: crypto.randomUUID(), text: "", done: false };
+}
+
+function newIndividualHandoverRecord(): IndividualHandoverRecord {
+  return { id: crypto.randomUUID(), author: "", target: "", tasks: [newIndividualTask()] };
+}
+
+function loadIndividualHandover(dateKey: string): IndividualHandoverRecord[] {
+  try {
+    const saved = localStorage.getItem(individualHandoverKey(dateKey));
+    if (saved) return JSON.parse(saved) as IndividualHandoverRecord[];
+  } catch {}
+  // 前日の未完了を引き継ぎ
+  try {
+    const prevDate = keyToDate(dateKey);
+    prevDate.setDate(prevDate.getDate() - 1);
+    const prevKey = dateToKey(prevDate);
+    const prevSaved = localStorage.getItem(individualHandoverKey(prevKey));
+    if (prevSaved) {
+      const prevItems = JSON.parse(prevSaved) as IndividualHandoverRecord[];
+      const inherited = prevItems
+        .filter(r => r.tasks.some(t => !t.done))
+        .map(r => ({
+          ...r,
+          id: crypto.randomUUID(),
+          tasks: r.tasks.filter(t => !t.done).map(t => ({ ...t, id: crypto.randomUUID(), done: false })),
+          inherited: true,
+        }));
+      if (inherited.length > 0) return inherited;
+    }
+  } catch {}
+  return [];
+}
+
+function saveIndividualHandover(dateKey: string, records: IndividualHandoverRecord[]) {
+  localStorage.setItem(individualHandoverKey(dateKey), JSON.stringify(records));
+}
+
+// ─── MISOCA ───────────────────────────────────────────────────────────────────
 
 const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
 const ACTUAL_MEMBERS  = ["", "当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
@@ -359,13 +415,16 @@ export default function Home() {
   const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
   const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
+  const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
   const [storeCheck, setStoreCheck] = useState<StoreCheckState>(() => loadStoreCheck(todayKey()));
+  const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>(() => loadIndividualHandover(todayKey()));
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
     setHandoverItems(loadHandover(currentDateKey));
     setCustomers(loadCustomers(currentDateKey));
     setStoreCheck(loadStoreCheck(currentDateKey));
+    setIndividualHandovers(loadIndividualHandover(currentDateKey));
     setLastSaved(null);
     setUndoHistory([]);
   }, [currentDateKey]);
@@ -413,6 +472,45 @@ export default function Home() {
     const timer = setTimeout(() => saveHandover(currentDateKey, handoverItems), 800);
     return () => clearTimeout(timer);
   }, [handoverItems, currentDateKey]);
+
+  // 個別引き継ぎ自動保存
+  useEffect(() => {
+    const timer = setTimeout(() => saveIndividualHandover(currentDateKey, individualHandovers), 800);
+    return () => clearTimeout(timer);
+  }, [individualHandovers, currentDateKey]);
+
+  const addIndividualHandover = () => {
+    setIndividualHandovers(prev => [...prev, newIndividualHandoverRecord()]);
+  };
+
+  const deleteIndividualHandover = (id: string) => {
+    if (!confirm("この個別引き継ぎを削除しますか？")) return;
+    setIndividualHandovers(prev => prev.filter(r => r.id !== id));
+  };
+
+  const updateIndividualHandover = (id: string, field: keyof IndividualHandoverRecord, value: string) => {
+    setIndividualHandovers(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const addIndividualTask = (recordId: string) => {
+    setIndividualHandovers(prev => prev.map(r =>
+      r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
+    ));
+  };
+
+  const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
+    setIndividualHandovers(prev => prev.map(r =>
+      r.id === recordId
+        ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
+        : r
+    ));
+  };
+
+  const deleteIndividualTask = (recordId: string, taskId: string) => {
+    setIndividualHandovers(prev => prev.map(r =>
+      r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
+    ));
+  };
 
   const addHandoverItem = () => {
     setHandoverItems(prev => [...prev, newHandoverItem()]);
@@ -781,6 +879,138 @@ export default function Home() {
                 )}
               </div>);
             })}
+          </div>
+          )}
+        </section>
+
+        {/* 個別引き継ぎパネル */}
+        <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
+          {/* ヘッダー（アコーディオン） */}
+          <div
+            className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+            onClick={() => setIndividualHandoverOpen(v => !v)}
+          >
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+              <Send className="w-4 h-4" />
+              個別引き継ぎ
+            </span>
+            {!individualHandoverOpen && individualHandovers.length > 0 && (
+              <span className="text-xs text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+                {individualHandovers.length}件
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {individualHandoverOpen && (
+                <button
+                  onClick={e => { e.stopPropagation(); addIndividualHandover(); }}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors font-medium"
+                >
+                  <span className="text-base leading-none">+</span> 引き継ぎを追加
+                </button>
+              )}
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${individualHandoverOpen ? "rotate-180" : ""}`} />
+            </div>
+          </div>
+
+          {/* 個別引き継ぎ一覧（アコーディオン本体） */}
+          {individualHandoverOpen && (
+          <div className="border-t border-gray-100 divide-y divide-gray-100">
+            {individualHandovers.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">
+                「引き継ぎを追加」ボタンで個別引き継ぎを作成できます
+              </div>
+            ) : (
+              individualHandovers.map(record => (
+                <div key={record.id} className="px-4 py-3 space-y-3">
+                  {/* 前日引き継ぎバッジ */}
+                  {record.inherited && (
+                    <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
+                      ↩ 前日から引き継ぎ
+                    </span>
+                  )}
+                  {/* 作成者・対象者行 */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={record.author}
+                      onChange={e => updateIndividualHandover(record.id, "author", e.target.value)}
+                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
+                        record.author ? "border-purple-300 text-purple-800 bg-purple-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                      }`}
+                    >
+                      <option value="">作成者を選択</option>
+                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <span className="text-xs text-gray-400">→</span>
+                    <select
+                      value={record.target}
+                      onChange={e => updateIndividualHandover(record.id, "target", e.target.value)}
+                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
+                        record.target ? "border-purple-300 text-purple-800 bg-purple-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                      }`}
+                    >
+                      <option value="">対象者を選択</option>
+                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <button
+                      onClick={() => deleteIndividualHandover(record.id)}
+                      className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
+                      title="この引き継ぎを削除"
+                    >✕</button>
+                  </div>
+                  {/* 引き継ぎ項目一覧 */}
+                  <div className="space-y-2">
+                    {record.tasks.map((task, tIdx) => (
+                      <div key={task.id} className="flex items-start gap-2">
+                        <button
+                          onClick={() => updateIndividualTask(record.id, task.id, "done", !task.done)}
+                          className={`mt-0.5 shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                            task.done
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-gray-300 hover:border-purple-400"
+                          }`}
+                        >
+                          {task.done && <span className="text-xs font-bold">✓</span>}
+                        </button>
+                        <textarea
+                          value={task.text}
+                          onChange={e => {
+                            updateIndividualTask(record.id, task.id, "text", e.target.value);
+                            e.target.style.height = "auto";
+                            e.target.style.height = e.target.scrollHeight + "px";
+                          }}
+                          onFocus={e => {
+                            e.target.style.height = "auto";
+                            e.target.style.height = e.target.scrollHeight + "px";
+                          }}
+                          placeholder={`引き継ぎ内容 ${tIdx + 1}を入力…`}
+                          rows={1}
+                          className={`flex-1 text-sm border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none overflow-hidden placeholder-gray-300 ${
+                            task.done
+                              ? "line-through text-gray-400 bg-gray-50 border-gray-200"
+                              : "text-gray-800 bg-white border-gray-200"
+                          }`}
+                          style={{ minHeight: "34px" }}
+                        />
+                        {record.tasks.length > 1 && (
+                          <button
+                            onClick={() => deleteIndividualTask(record.id, task.id)}
+                            className="mt-1 text-xs text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                            title="この項目を削除"
+                          >✕</button>
+                        )}
+                      </div>
+                    ))}
+                    {/* 項目追加ボタン */}
+                    <button
+                      onClick={() => addIndividualTask(record.id)}
+                      className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 transition-colors font-medium mt-1"
+                    >
+                      <span className="text-base leading-none">+</span> 項目を追加
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
           )}
         </section>
