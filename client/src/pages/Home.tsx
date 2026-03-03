@@ -350,6 +350,8 @@ export default function Home() {
   const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
   const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
+  const [completedCategories, setCompletedCategories] = useState<Set<string>>(new Set());
+  const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
   const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
   const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
 
@@ -510,11 +512,32 @@ export default function Home() {
     toast.info("リセットしました");
   };
 
+  // カテゴリ全完了検知：新たに全完了になったカテゴリを検知してフラッシュ演出
+  const categories  = Array.from(new Set(BASE_TASKS.map(t => t.category)));
+  useEffect(() => {
+    categories.forEach(cat => {
+      const catTasks = tasks.filter(t => t.category === cat);
+      const allDone = catTasks.length > 0 && catTasks.every(t => t.done);
+      const wasComplete = completedCategories.has(cat);
+      if (allDone && !wasComplete) {
+        // 新たに全完了になった
+        setCompletedCategories(prev => new Set(prev).add(cat));
+        toast.success(`✨ ${cat}—全タスク完了！`, { duration: 2500 });
+        setFlashCategories(prev => new Set(prev).add(cat));
+        setTimeout(() => {
+          setFlashCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
+        }, 800);
+      } else if (!allDone && wasComplete) {
+        // 完了解除された
+        setCompletedCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
+      }
+    });
+  }, [tasks]);
+
   const isToday = currentDateKey === todayKey();
   const totalTasks = tasks.length;
   const doneTasks  = tasks.filter(t => t.done).length;
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-  const categories  = Array.from(new Set(BASE_TASKS.map(t => t.category)));
   const { main: dateMain, sub: dateSub } = formatDateLabel(currentDateKey);
 
   // 前日の未完了タスクを取得
@@ -914,7 +937,15 @@ export default function Home() {
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
 
           return (
-            <section key={cat} className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <section
+              key={cat}
+              className={`rounded-xl border overflow-hidden transition-all duration-300 ${
+                flashCategories.has(cat)
+                  ? "bg-green-50 border-green-300"
+                  : "bg-white border-gray-200"
+              }`}
+              style={{ boxShadow: flashCategories.has(cat) ? "0 0 0 2px #86efac" : "0 1px 3px rgba(0,0,0,0.06)" }}
+            >
 
               {/* Category header */}
               <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: "1px solid #f3f4f6" }}>
