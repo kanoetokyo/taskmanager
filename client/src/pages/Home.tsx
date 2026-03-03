@@ -6,10 +6,11 @@
  * - カテゴリカードにカラーアクセント左ボーダー
  * - 作業予定者（デフォルト：当日事務担当）・実施者プルダウン
  * - 完了チェックボックス・進捗バー
- * - 前日・翌日ナビゲーション（日付ごとにlocalStorage保存）
+ * - 前日・翌日ナビゲーション（日付ごとにDB保存）
+ * - マルチデバイスリアルタイム同期（tRPC + DB）
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -37,7 +38,10 @@ import {
   CalendarCheck,
   CheckCircle2,
   Zap,
+  RefreshCw,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+
 // ─── Individual Handover ────────────────────────────────────────────────────
 
 interface IndividualHandoverTask {
@@ -55,8 +59,6 @@ interface IndividualHandoverRecord {
   inherited?: boolean;
 }
 
-function individualHandoverKey(dateKey: string): string { return `individual-handover-${dateKey}`; }
-
 function newIndividualTask(): IndividualHandoverTask {
   return { id: crypto.randomUUID(), text: "", done: false, deadline: "" };
 }
@@ -65,41 +67,9 @@ function newIndividualHandoverRecord(): IndividualHandoverRecord {
   return { id: crypto.randomUUID(), author: "", target: "", tasks: [newIndividualTask()] };
 }
 
-function loadIndividualHandover(dateKey: string): IndividualHandoverRecord[] {
-  try {
-    const saved = localStorage.getItem(individualHandoverKey(dateKey));
-    if (saved) return JSON.parse(saved) as IndividualHandoverRecord[];
-  } catch {}
-  // 前日の未完了を引き継ぎ
-  try {
-    const prevDate = keyToDate(dateKey);
-    prevDate.setDate(prevDate.getDate() - 1);
-    const prevKey = dateToKey(prevDate);
-    const prevSaved = localStorage.getItem(individualHandoverKey(prevKey));
-    if (prevSaved) {
-      const prevItems = JSON.parse(prevSaved) as IndividualHandoverRecord[];
-      const inherited = prevItems
-        .filter(r => r.tasks.some(t => !t.done))
-        .map(r => ({
-          ...r,
-          id: crypto.randomUUID(),
-          tasks: r.tasks.filter(t => !t.done).map(t => ({ ...t, id: crypto.randomUUID(), done: false })),
-          inherited: true,
-        }));
-      if (inherited.length > 0) return inherited;
-    }
-  } catch {}
-  return [];
-}
-
-function saveIndividualHandover(dateKey: string, records: IndividualHandoverRecord[]) {
-  localStorage.setItem(individualHandoverKey(dateKey), JSON.stringify(records));
-}
-
 // ─── MISOCA ───────────────────────────────────────────────────────────────────
 
 const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
-const ACTUAL_MEMBERS  = ["", "当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
 
 interface TaskDef {
   id: string;
@@ -125,20 +95,6 @@ interface StoreCheckState {
   line: string[];   // チェック済み店舗名
   pos: string[];
   raccoon: string[];
-}
-
-function storeCheckKey(dateKey: string): string { return `store-check-${dateKey}`; }
-
-function loadStoreCheck(dateKey: string): StoreCheckState {
-  try {
-    const saved = localStorage.getItem(storeCheckKey(dateKey));
-    if (saved) return JSON.parse(saved) as StoreCheckState;
-  } catch {}
-  return { line: [], pos: [], raccoon: [] };
-}
-
-function saveStoreCheck(dateKey: string, state: StoreCheckState) {
-  localStorage.setItem(storeCheckKey(dateKey), JSON.stringify(state));
 }
 
 // ─── Task Definitions ────────────────────────────────────────────────────────
@@ -245,28 +201,6 @@ function formatDateLabel(key: string): { main: string; sub: string } {
   return { main, sub };
 }
 
-function storageKey(dateKey: string): string { return `task-manager-${dateKey}`; }
-
-function loadTasks(dateKey: string): Task[] {
-  try {
-    const saved = localStorage.getItem(storageKey(dateKey));
-    if (saved) {
-      const parsed = JSON.parse(saved) as Task[];
-      return BASE_TASKS.map(t => {
-        const found = parsed.find(p => p.id === t.id);
-        return found
-          ? { ...t, planned: found.planned ?? (t.defaultPlanned ?? "当日事務担当"), actual: found.actual ?? "", done: found.done ?? false, help: found.help ?? false }
-          : { ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false };
-      });
-    }
-  } catch {}
-  return makeInitialTasks();
-}
-
-function saveTasks(dateKey: string, tasks: Task[]) {
-  localStorage.setItem(storageKey(dateKey), JSON.stringify(tasks));
-}
-
 // ─── Handover Memo ──────────────────────────────────────────────────────────
 
 const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原"];
@@ -279,39 +213,8 @@ interface HandoverItem {
   inherited?: boolean; // 前日から引き継ぎされたか
 }
 
-function handoverKey(dateKey: string): string { return `handover2-${dateKey}`; }
-
 function newHandoverItem(): HandoverItem {
   return { id: crypto.randomUUID(), author: "", text: "", checked: [] };
-}
-
-function loadHandover(dateKey: string): HandoverItem[] {
-  try {
-    const saved = localStorage.getItem(handoverKey(dateKey));
-    if (saved) return JSON.parse(saved) as HandoverItem[];
-  } catch {}
-  // 未保存の場合、前日の未確認メモを引き継ぎ
-  try {
-    const prevDate = keyToDate(dateKey);
-    prevDate.setDate(prevDate.getDate() - 1);
-    const prevKey = dateToKey(prevDate);
-    const prevSaved = localStorage.getItem(handoverKey(prevKey));
-    if (prevSaved) {
-      const prevItems = JSON.parse(prevSaved) as HandoverItem[];
-      // テキストがあり全員未確認のものだけ引き継ぎ（確認リセット）
-      const inherited = prevItems
-        .filter(item => item.text && item.checked.length < HANDOVER_MEMBERS.length)
-        .map(item => ({ ...item, id: crypto.randomUUID(), checked: [], inherited: true }));
-      if (inherited.length > 0) {
-        return [...inherited, newHandoverItem()];
-      }
-    }
-  } catch {}
-  return [newHandoverItem()];
-}
-
-function saveHandover(dateKey: string, items: HandoverItem[]) {
-  localStorage.setItem(handoverKey(dateKey), JSON.stringify(items));
 }
 
 // ─── Customer Handover ─────────────────────────────────────────────────────
@@ -347,157 +250,479 @@ interface CustomerRecord {
   inherited?: boolean; // 前日から引き継ぎされたか
 }
 
-function customerKey(dateKey: string): string { return `customers-${dateKey}`; }
-
 function newCustomerRecord(): CustomerRecord {
   return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "" };
 }
 
-function loadCustomers(dateKey: string): CustomerRecord[] {
-  try {
-    const saved = localStorage.getItem(customerKey(dateKey));
-    if (saved) return JSON.parse(saved) as CustomerRecord[];
-  } catch {}
-  // 未保存の場合、前日の未完了顧客を引き継ぎ
-  try {
-    const prevDate = keyToDate(dateKey);
-    prevDate.setDate(prevDate.getDate() - 1);
-    const prevKey = dateToKey(prevDate);
-    const prevSaved = localStorage.getItem(customerKey(prevKey));
-    if (prevSaved) {
-      const prevItems = JSON.parse(prevSaved) as CustomerRecord[];
-      // 完了以外の顧客を新しいIDで引き継ぎ
-      const inherited = prevItems
-        .filter(c => c.status !== "完了")
-        .map(c => ({ ...c, id: crypto.randomUUID(), inherited: true }));
-      return inherited;
-    }
-  } catch {}
-  return [];
-}
-
-function saveCustomers(dateKey: string, items: CustomerRecord[]) {
-  localStorage.setItem(customerKey(dateKey), JSON.stringify(items));
-}
-
 // ─── MISOCA Status ───────────────────────────────────────────────────────────
-
-const MISOCA_STORAGE_KEY = "misoca-status";
 
 interface MisocaStatus {
   completedUntil: string; // YYYY-MM-DD 形式。この日付まで見積書作成済み
 }
 
-function loadMisoca(): MisocaStatus {
-  try {
-    const saved = localStorage.getItem(MISOCA_STORAGE_KEY);
-    if (saved) return JSON.parse(saved) as MisocaStatus;
-  } catch {}
-  return { completedUntil: "" };
-}
-
-function saveMisoca(status: MisocaStatus) {
-  localStorage.setItem(MISOCA_STORAGE_KEY, JSON.stringify(status));
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [currentDateKey, setCurrentDateKey] = useState<string>(todayKey);
-  const [tasks, setTasks] = useState<Task[]>(() => loadTasks(todayKey()));
+  const utils = trpc.useUtils();
+
+  const [currentDateKey, setCurrentDateKey] = useState<string>(() => todayKey());
+  const [tasks, setTasks] = useState<Task[]>(() => makeInitialTasks());
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [hideDone, setHideDone] = useState<boolean>(false);
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
-  const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
+  const [handoverItems, setHandoverItems] = useState<HandoverItem[]>([newHandoverItem()]);
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
   const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
   const [completedCategories, setCompletedCategories] = useState<Set<string>>(new Set());
   const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
-  const [customers, setCustomers] = useState<CustomerRecord[]>(() => loadCustomers(todayKey()));
-  const [misoca, setMisoca] = useState<MisocaStatus>(() => loadMisoca());
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
   const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
-  const [storeCheck, setStoreCheck] = useState<StoreCheckState>(() => loadStoreCheck(todayKey()));
-  const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>(() => loadIndividualHandover(todayKey()));
+  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ line: [], pos: [], raccoon: [] });
+  const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [prevDayTasks, setPrevDayTasks] = useState<Task[]>([]);
 
+  // ─── tRPC Queries ─────────────────────────────────────────────────────────
+
+  // Task states for current date
+  const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDate.useQuery(
+    { dateKey: currentDateKey },
+    { refetchInterval: 30000 } // 30秒ごとにポーリング
+  );
+
+  // Store check for current date
+  const { data: storeCheckData, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
+    { dateKey: currentDateKey },
+    { refetchInterval: 30000 }
+  );
+
+  // Handover items for current date
+  const { data: handoverData, refetch: refetchHandover } = trpc.task.handover.getByDate.useQuery(
+    { dateKey: currentDateKey },
+    { refetchInterval: 30000 }
+  );
+
+  // Individual handovers (active = not completed)
+  const { data: individualHandoverData, refetch: refetchIndividualHandover } = trpc.task.individualHandover.getActive.useQuery(
+    { dateKey: currentDateKey },
+    { refetchInterval: 30000 }
+  );
+
+  // Customer handovers (active)
+  const { data: customerData, refetch: refetchCustomer } = trpc.task.customerHandover.getActive.useQuery(
+    undefined,
+    { refetchInterval: 30000 }
+  );
+
+  // MISOCA status
+  const { data: misocaData, refetch: refetchMisoca } = trpc.task.misoca.get.useQuery(
+    undefined,
+    { refetchInterval: 60000 }
+  );
+
+  // Task states for previous day (for undone alert)
+  const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
+  const { data: prevDayTaskStatesData } = trpc.task.taskStates.getByDate.useQuery(
+    { dateKey: prevDayKey },
+    { refetchInterval: 60000 }
+  );
+
+  // ─── tRPC Mutations ───────────────────────────────────────────────────────
+
+  const upsertTaskState = trpc.task.taskStates.upsert.useMutation();
+  const bulkUpsertTaskStates = trpc.task.taskStates.bulkUpsert.useMutation();
+  const upsertStoreCheck = trpc.task.storeCheck.upsert.useMutation();
+  const upsertHandover = trpc.task.handover.upsert.useMutation();
+  const deleteHandover = trpc.task.handover.delete.useMutation();
+  const upsertIndividualHandover = trpc.task.individualHandover.upsert.useMutation();
+  const deleteIndividualHandover = trpc.task.individualHandover.delete.useMutation();
+  const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
+  const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
+  const upsertMisoca = trpc.task.misoca.upsert.useMutation();
+
+  // ─── Data Loading from DB ─────────────────────────────────────────────────
+
+  // Load task states from DB
   useEffect(() => {
-    setTasks(loadTasks(currentDateKey));
-    setHandoverItems(loadHandover(currentDateKey));
-    setCustomers(loadCustomers(currentDateKey));
-    setStoreCheck(loadStoreCheck(currentDateKey));
-    setIndividualHandovers(loadIndividualHandover(currentDateKey));
+    if (taskStatesData) {
+      setTasks(prev => {
+        return BASE_TASKS.map(t => {
+          const dbState = taskStatesData.find(s => s.taskId === t.id);
+          const existing = prev.find(p => p.id === t.id);
+          return {
+            ...t,
+            planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
+            actual: existing?.actual ?? "",
+            done: dbState?.done ?? false,
+            help: existing?.help ?? false,
+          };
+        });
+      });
+    }
+  }, [taskStatesData]);
+
+  // Load store check from DB
+  useEffect(() => {
+    if (storeCheckData) {
+      const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
+      for (const row of storeCheckData) {
+        if (row.checkType === "line") newState.line = row.checkedStores as string[];
+        else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
+        else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+      }
+      setStoreCheck(newState);
+    }
+  }, [storeCheckData]);
+
+  // Load handover items from DB
+  useEffect(() => {
+    if (handoverData !== undefined) {
+      if (handoverData.length > 0) {
+        setHandoverItems(handoverData.map(h => ({
+          id: h.id,
+          author: h.author,
+          text: h.content,
+          checked: h.checkedMembers as string[],
+        })));
+      } else {
+        // No data for this date - initialize with empty item
+        setHandoverItems([newHandoverItem()]);
+      }
+    }
+  }, [handoverData]);
+
+  // Load individual handovers from DB
+  useEffect(() => {
+    if (individualHandoverData !== undefined) {
+      const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
+        id: r.id,
+        author: r.author,
+        target: r.target,
+        tasks: (r.tasks as Array<{ id: string; content: string; done: boolean; deadline?: string }>).map(t => ({
+          id: t.id,
+          text: t.content,
+          done: t.done,
+          deadline: t.deadline ?? "",
+        })),
+        inherited: r.dateKey !== currentDateKey,
+      }));
+      setIndividualHandovers(records);
+    }
+  }, [individualHandoverData, currentDateKey]);
+
+  // Load customer handovers from DB
+  useEffect(() => {
+    if (customerData !== undefined) {
+      const records: CustomerRecord[] = customerData.map(c => ({
+        id: c.id,
+        name: c.customerName,
+        status: c.status as CustomerStatus,
+        contact: c.store,
+        memo: c.content,
+        inherited: c.dateKey !== currentDateKey,
+      }));
+      setCustomers(records);
+    }
+  }, [customerData, currentDateKey]);
+
+  // Load MISOCA status from DB
+  useEffect(() => {
+    if (misocaData) {
+      setMisoca({ completedUntil: misocaData.completedUntil });
+    }
+  }, [misocaData]);
+
+  // Load prev day tasks for undone alert
+  useEffect(() => {
+    if (prevDayTaskStatesData !== undefined) {
+      const tasks = BASE_TASKS.map(t => {
+        const dbState = prevDayTaskStatesData.find(s => s.taskId === t.id);
+        return {
+          ...t,
+          planned: t.defaultPlanned ?? "当日事務担当",
+          actual: "",
+          done: dbState?.done ?? false,
+          help: false,
+        };
+      });
+      setPrevDayTasks(tasks);
+    }
+  }, [prevDayTaskStatesData]);
+
+  // Reset state when date changes
+  useEffect(() => {
+    setTasks(makeInitialTasks());
+    setHandoverItems([newHandoverItem()]);
+    setStoreCheck({ line: [], pos: [], raccoon: [] });
     setLastSaved(null);
     setUndoHistory([]);
+    setCompletedCategories(new Set());
   }, [currentDateKey]);
 
-  // 店舗チェック自動保存
-  useEffect(() => {
-    saveStoreCheck(currentDateKey, storeCheck);
-  }, [storeCheck, currentDateKey]);
+  // ─── Auto-save Debounce Refs ───────────────────────────────────────────────
+  const storeCheckSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoverSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const individualHandoverSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const customerSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // MISOCA自動保存
-  useEffect(() => {
-    saveMisoca(misoca);
-  }, [misoca]);
+  // ─── Store Check Auto-save ─────────────────────────────────────────────────
+  const storeCheckRef = useRef(storeCheck);
+  storeCheckRef.current = storeCheck;
+  const currentDateKeyRef = useRef(currentDateKey);
+  currentDateKeyRef.current = currentDateKey;
 
-  // 顧客引き継ぎ自動保存
-  useEffect(() => {
-    const timer = setTimeout(() => saveCustomers(currentDateKey, customers), 800);
-    return () => clearTimeout(timer);
-  }, [customers, currentDateKey]);
+  const saveStoreCheckToDb = useCallback((state: StoreCheckState, dateKey: string) => {
+    if (storeCheckSaveTimer.current) clearTimeout(storeCheckSaveTimer.current);
+    storeCheckSaveTimer.current = setTimeout(async () => {
+      try {
+        await Promise.all([
+          upsertStoreCheck.mutateAsync({ dateKey, checkType: "line", checkedStores: state.line }),
+          upsertStoreCheck.mutateAsync({ dateKey, checkType: "pos", checkedStores: state.pos }),
+          upsertStoreCheck.mutateAsync({ dateKey, checkType: "raccoon", checkedStores: state.raccoon }),
+        ]);
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Store check save failed:", e);
+      }
+    }, 500);
+  }, []);
 
-  const addCustomer = () => setCustomers(prev => [...prev, newCustomerRecord()]);
+  // ─── Handover Auto-save ────────────────────────────────────────────────────
+
+  const saveHandoverToDb = useCallback((items: HandoverItem[], dateKey: string) => {
+    if (handoverSaveTimer.current) clearTimeout(handoverSaveTimer.current);
+    handoverSaveTimer.current = setTimeout(async () => {
+      try {
+        for (const item of items) {
+          await upsertHandover.mutateAsync({
+            id: item.id,
+            dateKey,
+            author: item.author,
+            content: item.text,
+            checkedMembers: item.checked,
+          });
+        }
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Handover save failed:", e);
+      }
+    }, 800);
+  }, []);
+
+  // ─── Individual Handover Auto-save ────────────────────────────────────────
+
+  const saveIndividualHandoverToDb = useCallback((records: IndividualHandoverRecord[], dateKey: string) => {
+    if (individualHandoverSaveTimer.current) clearTimeout(individualHandoverSaveTimer.current);
+    individualHandoverSaveTimer.current = setTimeout(async () => {
+      try {
+        for (const record of records) {
+          const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
+          await upsertIndividualHandover.mutateAsync({
+            id: record.id,
+            dateKey: record.inherited ? dateKey : dateKey,
+            author: record.author,
+            target: record.target,
+            tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
+            completed: allDone,
+          });
+        }
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Individual handover save failed:", e);
+      }
+    }, 800);
+  }, []);
+
+  // ─── Customer Auto-save ────────────────────────────────────────────────────
+
+  const saveCustomerToDb = useCallback((records: CustomerRecord[], dateKey: string) => {
+    if (customerSaveTimer.current) clearTimeout(customerSaveTimer.current);
+    customerSaveTimer.current = setTimeout(async () => {
+      try {
+        for (const c of records) {
+          await upsertCustomer.mutateAsync({
+            id: c.id,
+            dateKey,
+            customerName: c.name,
+            store: c.contact,
+            content: c.memo,
+            status: c.status,
+            assignee: "",
+          });
+        }
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Customer save failed:", e);
+      }
+    }, 800);
+  }, []);
+
+  // ─── Task State Auto-save ──────────────────────────────────────────────────
+  const taskSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveTasksToDb = useCallback((taskList: Task[], dateKey: string) => {
+    if (taskSaveTimer.current) clearTimeout(taskSaveTimer.current);
+    taskSaveTimer.current = setTimeout(async () => {
+      try {
+        await bulkUpsertTaskStates.mutateAsync(
+          taskList.map(t => ({ dateKey, taskId: t.id, done: t.done }))
+        );
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Task save failed:", e);
+      }
+    }, 800);
+  }, []);
+
+  // ─── Customer Handlers ─────────────────────────────────────────────────────
+
+  const addCustomer = () => {
+    const newRecord = newCustomerRecord();
+    setCustomers(prev => {
+      const updated = [...prev, newRecord];
+      saveCustomerToDb(updated, currentDateKey);
+      return updated;
+    });
+  };
 
   const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
-    setCustomers(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      const updated = { ...c, [field]: value };
-      // 完了に変更した場合は1秒後に自動削除
-      if (field === "status" && value === "完了") {
-        setTimeout(() => {
-          setCustomers(p => p.filter(r => r.id !== id));
-          toast.success("顧客引き継ぎを完了として削除しました");
-        }, 800);
-      }
+    setCustomers(prev => {
+      const updated = prev.map(c => {
+        if (c.id !== id) return c;
+        const updatedRecord = { ...c, [field]: value };
+        // 完了に変更した場合は1秒後に自動削除
+        if (field === "status" && value === "完了") {
+          setTimeout(async () => {
+            setCustomers(p => p.filter(r => r.id !== id));
+            try {
+              await deleteCustomer.mutateAsync({ id });
+            } catch (e) {
+              console.error("Customer delete failed:", e);
+            }
+            toast.success("顧客引き継ぎを完了として削除しました");
+          }, 800);
+        }
+        return updatedRecord;
+      });
+      saveCustomerToDb(updated, currentDateKey);
       return updated;
-    }));
+    });
   };
 
-  const deleteCustomer = (id: string) => {
+  const handleDeleteCustomer = async (id: string) => {
     if (!confirm("この顧客引き継ぎを削除しますか？")) return;
     setCustomers(prev => prev.filter(c => c.id !== id));
+    try {
+      await deleteCustomer.mutateAsync({ id });
+    } catch (e) {
+      console.error("Customer delete failed:", e);
+    }
   };
 
-  // 引き継ぎメモ自動保存
-  useEffect(() => {
-    const timer = setTimeout(() => saveHandover(currentDateKey, handoverItems), 800);
-    return () => clearTimeout(timer);
-  }, [handoverItems, currentDateKey]);
+  // ─── Handover Handlers ─────────────────────────────────────────────────────
 
-  // 個別引き継ぎ自動保存
-  useEffect(() => {
-    const timer = setTimeout(() => saveIndividualHandover(currentDateKey, individualHandovers), 800);
-    return () => clearTimeout(timer);
-  }, [individualHandovers, currentDateKey]);
+  const addHandoverItem = () => {
+    const newItem = newHandoverItem();
+    setHandoverItems(prev => {
+      const updated = [...prev, newItem];
+      saveHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
+  };
+
+  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string) => {
+    setHandoverItems(prev => {
+      const updated = prev.map(item => item.id === id ? { ...item, [field]: value } : item);
+      saveHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
+  };
+
+  const handleDeleteHandoverItem = async (id: string) => {
+    setHandoverItems(prev => prev.filter(item => item.id !== id));
+    try {
+      await deleteHandover.mutateAsync({ id });
+    } catch (e) {
+      console.error("Handover delete failed:", e);
+    }
+  };
+
+  const toggleHandoverCheck = (itemId: string, member: string) => {
+    setHandoverItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== itemId) return item;
+        const alreadyChecked = item.checked.includes(member);
+        const newChecked = alreadyChecked
+          ? item.checked.filter((m: string) => m !== member)
+          : [...item.checked, member];
+        // 全員チェック完了時はそのアイテムを削除
+        if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
+          setTimeout(async () => {
+            setHandoverItems(p => {
+              const remaining = p.filter(i => i.id !== itemId);
+              if (remaining.length === 0) return [newHandoverItem()];
+              return remaining;
+            });
+            try {
+              await deleteHandover.mutateAsync({ id: itemId });
+            } catch (e) {
+              console.error("Handover delete failed:", e);
+            }
+            toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
+          }, 600);
+        }
+        return { ...item, checked: newChecked };
+      });
+      saveHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
+  };
+
+  // ─── Individual Handover Handlers ─────────────────────────────────────────
 
   const addIndividualHandover = () => {
-    setIndividualHandovers(prev => [...prev, newIndividualHandoverRecord()]);
+    const newRecord = newIndividualHandoverRecord();
+    setIndividualHandovers(prev => {
+      const updated = [...prev, newRecord];
+      saveIndividualHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
   };
 
-  const deleteIndividualHandover = (id: string) => {
+  const handleDeleteIndividualHandover = async (id: string) => {
     if (!confirm("この個別引き継ぎを削除しますか？")) return;
     setIndividualHandovers(prev => prev.filter(r => r.id !== id));
+    try {
+      await deleteIndividualHandover.mutateAsync({ id });
+    } catch (e) {
+      console.error("Individual handover delete failed:", e);
+    }
   };
 
   const updateIndividualHandover = (id: string, field: keyof IndividualHandoverRecord, value: string) => {
-    setIndividualHandovers(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    setIndividualHandovers(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, [field]: value } : r);
+      saveIndividualHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
   };
 
   const addIndividualTask = (recordId: string) => {
-    setIndividualHandovers(prev => prev.map(r =>
-      r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
-    ));
+    setIndividualHandovers(prev => {
+      const updated = prev.map(r =>
+        r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
+      );
+      saveIndividualHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
   };
 
   const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
@@ -511,74 +736,181 @@ export default function Home() {
       if (field === "done" && value === true) {
         const record = updated.find(r => r.id === recordId);
         if (record && record.tasks.every(t => t.done)) {
-          setTimeout(() => {
+          setTimeout(async () => {
             setIndividualHandovers(p => p.filter(r => r.id !== recordId));
+            try {
+              await deleteIndividualHandover.mutateAsync({ id: recordId });
+            } catch (e) {
+              console.error("Individual handover delete failed:", e);
+            }
             toast.success("✅ 個別引き継ぎを全項目完了しました");
           }, 800);
         }
       }
+      saveIndividualHandoverToDb(updated, currentDateKey);
       return updated;
     });
   };
 
   const deleteIndividualTask = (recordId: string, taskId: string) => {
-    setIndividualHandovers(prev => prev.map(r =>
-      r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
-    ));
-  };
-
-  const addHandoverItem = () => {
-    setHandoverItems(prev => [...prev, newHandoverItem()]);
-  };
-
-  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string) => {
-    setHandoverItems(prev => {
-      const updated = prev.map(item => item.id === id ? { ...item, [field]: value } : item);
-      // 即時保存（useEffectのデバウンスに加えて確実に保存）
-      saveHandover(currentDateKey, updated);
+    setIndividualHandovers(prev => {
+      const updated = prev.map(r =>
+        r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
+      );
+      saveIndividualHandoverToDb(updated, currentDateKey);
       return updated;
     });
   };
 
-  const deleteHandoverItem = (id: string) => {
-    setHandoverItems(prev => prev.filter(item => item.id !== id));
+  // ─── Task Handlers ─────────────────────────────────────────────────────────
+
+  const updateTask = (id: string, field: "planned" | "actual", value: string) => {
+    setTasks(prev => {
+      const updated = prev.map(t => t.id === id ? { ...t, [field]: value } : t);
+      saveTasksToDb(updated, currentDateKey);
+      return updated;
+    });
   };
 
-  const toggleHandoverCheck = (itemId: string, member: string) => {
-    setHandoverItems(prev => {
-      const updated = prev.map(item => {
-      if (item.id !== itemId) return item;
-      const alreadyChecked = item.checked.includes(member);
-      const newChecked = alreadyChecked
-        ? item.checked.filter((m: string) => m !== member)
-        : [...item.checked, member];
-      // 全員チェック完了時はそのアイテムを削除
-      if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
-        setTimeout(() => {
-          setHandoverItems(p => {
-            const remaining = p.filter(i => i.id !== itemId);
-            if (remaining.length === 0) return [newHandoverItem()];
-            return remaining;
-          });
-          toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
-        }, 600);
-      }
-      return { ...item, checked: newChecked };
+  const toggleDone = (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task && !task.done) {
+      // 完了にする場合はアニメーションを先に起動
+      setCompletingTasks(prev => new Set(prev).add(id));
+      setTimeout(() => {
+        setTasks(prev => {
+          setUndoHistory(h => [...h.slice(-9), prev]);
+          const updated = prev.map(t => t.id === id ? { ...t, done: true } : t);
+          saveTasksToDb(updated, currentDateKey);
+          return updated;
+        });
+        setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
+      }, 400);
+    } else {
+      // 完了解除は即座に戻す
+      setTasks(prev => {
+        setUndoHistory(h => [...h.slice(-9), prev]);
+        const updated = prev.map(t => t.id === id ? { ...t, done: false } : t);
+        saveTasksToDb(updated, currentDateKey);
+        return updated;
       });
-      saveHandover(currentDateKey, updated);
+    }
+  };
+
+  const undoLast = () => {
+    setUndoHistory(h => {
+      if (h.length === 0) return h;
+      const prev = h[h.length - 1];
+      setTasks(prev);
+      saveTasksToDb(prev, currentDateKey);
+      toast.success("元に戻しました");
+      return h.slice(0, -1);
+    });
+  };
+
+  const toggleHelp = (id: string) => {
+    setTasks(prev => {
+      const updated = prev.map(t => t.id === id ? { ...t, help: !t.help } : t);
+      saveTasksToDb(updated, currentDateKey);
       return updated;
     });
   };
 
+  const markAllPrevDone = async () => {
+    try {
+      await bulkUpsertTaskStates.mutateAsync(
+        BASE_TASKS.map(t => ({ dateKey: prevDayKey, taskId: t.id, done: true }))
+      );
+      setPrevDayTasks(BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false })));
+      toast.success("前日の未完了タスクをすべて完了にしました");
+    } catch (e) {
+      toast.error("保存に失敗しました");
+    }
+  };
 
+  const handleReset = async () => {
+    if (!confirm("この日の全設定をリセットしますか？")) return;
+    const initial = makeInitialTasks();
+    setTasks(initial);
+    try {
+      await bulkUpsertTaskStates.mutateAsync(
+        initial.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: false }))
+      );
+    } catch (e) {
+      console.error("Reset failed:", e);
+    }
+    setLastSaved(null);
+    toast.info("リセットしました");
+  };
+
+  // ─── Store Check Handlers ──────────────────────────────────────────────────
+
+  const toggleStoreCheck = (type: keyof StoreCheckState, store: string) => {
+    setStoreCheck(prev => {
+      const checked = prev[type].includes(store);
+      const updated = {
+        ...prev,
+        [type]: checked ? prev[type].filter(s => s !== store) : [...prev[type], store],
+      };
+      saveStoreCheckToDb(updated, currentDateKey);
+      return updated;
+    });
+  };
+
+  // ─── MISOCA Handler ────────────────────────────────────────────────────────
+
+  const updateMisoca = async (completedUntil: string) => {
+    setMisoca({ completedUntil });
+    try {
+      await upsertMisoca.mutateAsync({ completedUntil });
+    } catch (e) {
+      console.error("MISOCA save failed:", e);
+    }
+  };
+
+  // ─── Manual Sync ──────────────────────────────────────────────────────────
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await Promise.all([
+        refetchTaskStates(),
+        refetchStoreCheck(),
+        refetchHandover(),
+        refetchIndividualHandover(),
+        refetchCustomer(),
+        refetchMisoca(),
+      ]);
+      toast.success("最新データに同期しました");
+    } catch (e) {
+      toast.error("同期に失敗しました");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // ─── Category completion detection ────────────────────────────────────────
+
+  const categories = Array.from(new Set(BASE_TASKS.map(t => t.category)));
   useEffect(() => {
-    const timer = setTimeout(() => {
-      saveTasks(currentDateKey, tasks);
-      const now = new Date();
-      setLastSaved(`自動保存済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [tasks, currentDateKey]);
+    categories.forEach(cat => {
+      const catTasks = tasks.filter(t => t.category === cat);
+      const allDone = catTasks.length > 0 && catTasks.every(t => t.done);
+      const wasComplete = completedCategories.has(cat);
+      if (allDone && !wasComplete) {
+        setCompletedCategories(prev => new Set(prev).add(cat));
+        toast.success(`✨ ${cat}—全タスク完了！`, { duration: 2500 });
+        setFlashCategories(prev => new Set(prev).add(cat));
+        setTimeout(() => {
+          setFlashCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
+        }, 800);
+      } else if (!allDone && wasComplete) {
+        setCompletedCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
+      }
+    });
+  }, [tasks]);
+
+  // ─── Navigation ───────────────────────────────────────────────────────────
 
   const goToPrevDay = useCallback(() => {
     const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1);
@@ -592,82 +924,7 @@ export default function Home() {
 
   const goToToday = useCallback(() => setCurrentDateKey(todayKey()), []);
 
-  const updateTask = (id: string, field: "planned" | "actual", value: string) =>
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
-
-  const toggleDone = (id: string) => {
-    const task = tasks.find(t => t.id === id);
-    if (task && !task.done) {
-      // 完了にする場合はアニメーションを先に起動
-      setCompletingTasks(prev => new Set(prev).add(id));
-      setTimeout(() => {
-        setTasks(prev => {
-          setUndoHistory(h => [...h.slice(-9), prev]);
-          return prev.map(t => t.id === id ? { ...t, done: true } : t);
-        });
-        setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
-      }, 400);
-    } else {
-      // 完了解除は即座に戻す
-      setTasks(prev => {
-        setUndoHistory(h => [...h.slice(-9), prev]);
-        return prev.map(t => t.id === id ? { ...t, done: false } : t);
-      });
-    }
-  };
-
-  const undoLast = () => {
-    setUndoHistory(h => {
-      if (h.length === 0) return h;
-      const prev = h[h.length - 1];
-      setTasks(prev);
-      toast.success("元に戻しました");
-      return h.slice(0, -1);
-    });
-  };
-
-  const toggleHelp = (id: string) =>
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
-
-  const markAllPrevDone = () => {
-    const prevKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
-    const prevTasks = loadTasks(prevKey);
-    const updated = prevTasks.map(t => ({ ...t, done: true }));
-    saveTasks(prevKey, updated);
-    toast.success("前日の未完了タスクをすべて完了にしました");
-    // 画面を再レンダリングさせるために現在日のデータを再読み込み
-    setTasks(prev => [...prev]);
-  };
-
-  const handleReset = () => {
-    if (!confirm("この日の全設定をリセットしますか？")) return;
-    setTasks(makeInitialTasks());
-    localStorage.removeItem(storageKey(currentDateKey));
-    setLastSaved(null);
-    toast.info("リセットしました");
-  };
-
-  // カテゴリ全完了検知：新たに全完了になったカテゴリを検知してフラッシュ演出
-  const categories  = Array.from(new Set(BASE_TASKS.map(t => t.category)));
-  useEffect(() => {
-    categories.forEach(cat => {
-      const catTasks = tasks.filter(t => t.category === cat);
-      const allDone = catTasks.length > 0 && catTasks.every(t => t.done);
-      const wasComplete = completedCategories.has(cat);
-      if (allDone && !wasComplete) {
-        // 新たに全完了になった
-        setCompletedCategories(prev => new Set(prev).add(cat));
-        toast.success(`✨ ${cat}—全タスク完了！`, { duration: 2500 });
-        setFlashCategories(prev => new Set(prev).add(cat));
-        setTimeout(() => {
-          setFlashCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
-        }, 800);
-      } else if (!allDone && wasComplete) {
-        // 完了解除された
-        setCompletedCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
-      }
-    });
-  }, [tasks]);
+  // ─── Derived State ────────────────────────────────────────────────────────
 
   const isToday = currentDateKey === todayKey();
   const totalTasks = tasks.length;
@@ -675,9 +932,6 @@ export default function Home() {
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const { main: dateMain, sub: dateSub } = formatDateLabel(currentDateKey);
 
-  // 前日の未完了タスクを取得
-  const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
-  const prevDayTasks = loadTasks(prevDayKey);
   const prevDayUndoneTasks = prevDayTasks.filter(t => !t.done);
   const { main: prevDateMain } = formatDateLabel(prevDayKey);
 
@@ -696,6 +950,14 @@ export default function Home() {
             <h1 className="text-xl font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
               タスク革命
             </h1>
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="ml-2 p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              title="最新データに同期"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-500" : ""}`} />
+            </button>
           </div>
 
           {/* Row 2: 日付ナビ */}
@@ -709,7 +971,7 @@ export default function Home() {
                 <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{dateSub}</span>
               )}
             </div>
-            <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="習日">
+            <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="翌日">
               <ChevronRight className="w-4 h-4" />
             </button>
             {!isToday && (
@@ -731,7 +993,7 @@ export default function Home() {
               {progressPct}%
             </span>
             <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums">
-              {doneTasks} / {totalTasks}
+              {doneTasks} / {totalTasks}
             </span>
           </div>
 
@@ -843,7 +1105,7 @@ export default function Home() {
                   )}
                   {handoverItems.length > 1 && (
                     <button
-                      onClick={() => deleteHandoverItem(item.id)}
+                      onClick={() => handleDeleteHandoverItem(item.id)}
                       className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
                       title="このメモを削除"
                     >
@@ -977,7 +1239,7 @@ export default function Home() {
                       {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <button
-                      onClick={() => deleteIndividualHandover(record.id)}
+                      onClick={() => handleDeleteIndividualHandover(record.id)}
                       className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
                       title="この引き継ぎを削除"
                     >✕</button>
@@ -1135,7 +1397,7 @@ export default function Home() {
                       ))}
                     </select>
                     <button
-                      onClick={() => deleteCustomer(c.id)}
+                      onClick={() => handleDeleteCustomer(c.id)}
                       className="text-xs text-gray-300 hover:text-red-400 transition-colors px-1 ml-auto"
                       title="削除"
                     >✕</button>
@@ -1209,7 +1471,7 @@ export default function Home() {
                     <input
                       type="date"
                       value={misoca.completedUntil}
-                      onChange={e => setMisoca({ completedUntil: e.target.value })}
+                      onChange={e => updateMisoca(e.target.value)}
                       className="text-sm px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </div>
@@ -1228,7 +1490,7 @@ export default function Home() {
                   )}
                   {isSet && (
                     <button
-                      onClick={() => setMisoca({ completedUntil: "" })}
+                      onClick={() => updateMisoca("")}
                       className="text-xs text-gray-400 hover:text-red-500 transition-colors"
                     >
                       リセット
@@ -1268,7 +1530,9 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
-                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
+                        const updated = tasks.map(t => t.category === cat ? { ...t, done: true } : t);
+                        setTasks(updated);
+                        saveTasksToDb(updated, currentDateKey);
                       }}
                       className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
                     >
@@ -1300,12 +1564,7 @@ export default function Home() {
                         return (
                           <button
                             key={store}
-                            onClick={() => setStoreCheck(prev => ({
-                              ...prev,
-                              line: checked
-                                ? prev.line.filter(s => s !== store)
-                                : [...prev.line, store]
-                            }))}
+                            onClick={() => toggleStoreCheck("line", store)}
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
@@ -1336,12 +1595,7 @@ export default function Home() {
                         return (
                           <button
                             key={store}
-                            onClick={() => setStoreCheck(prev => ({
-                              ...prev,
-                              pos: checked
-                                ? prev.pos.filter(s => s !== store)
-                                : [...prev.pos, store]
-                            }))}
+                            onClick={() => toggleStoreCheck("pos", store)}
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
@@ -1372,12 +1626,7 @@ export default function Home() {
                         return (
                           <button
                             key={store}
-                            onClick={() => setStoreCheck(prev => ({
-                              ...prev,
-                              raccoon: checked
-                                ? prev.raccoon.filter(s => s !== store)
-                                : [...prev.raccoon, store]
-                            }))}
+                            onClick={() => toggleStoreCheck("raccoon", store)}
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
@@ -1556,7 +1805,7 @@ export default function Home() {
         </div>
 
         <p className="text-center text-xs text-gray-400 pb-6">
-          入力内容はブラウザに自動保存されます。日付ごとにデータが保存されます。
+          データはクラウドに自動保存されます。複数デバイスでリアルタイム同期されます。
         </p>
       </main>
     </div>

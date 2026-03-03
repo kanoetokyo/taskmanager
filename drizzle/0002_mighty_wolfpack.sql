@@ -1,0 +1,2 @@
+ALTER TABLE `customer_handovers` MODIFY COLUMN `content` varchar(2048) NOT NULL DEFAULT '';--> statement-breakpoint
+ALTER TABLE `handover_items` MODIFY COLUMN `content` varchar(2048) NOT NULL DEFAULT '';
