@@ -100,7 +100,7 @@ const BASE_TASKS: TaskDef[] = [
   { id: "line-c", category: "LINEグループ管理", label: "翌日のスケジュールと配車を確定させて配信する", icon: <Send className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "17:00まで" },
 
   // 清掃管理
-  { id: "clean-a", category: "アットイン清掃管理システム確認", label: "清掃管理システム「アットイン」の緊急案件の確認（4月10日までの赤カードがないか）", icon: <AlertCircle className={iconSize} /> },
+  { id: "clean-a", category: "アットイン清掃管理システム確認", label: "翌日入居で清掃が漏れていないかの確認", icon: <AlertCircle className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "12:00まで" },
   { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
 
   // 調整および書類作成
@@ -256,6 +256,12 @@ export default function Home() {
   const categories  = Array.from(new Set(BASE_TASKS.map(t => t.category)));
   const { main: dateMain, sub: dateSub } = formatDateLabel(currentDateKey);
 
+  // 前日の未完了タスクを取得
+  const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
+  const prevDayTasks = loadTasks(prevDayKey);
+  const prevDayUndoneTasks = prevDayTasks.filter(t => !t.done);
+  const { main: prevDateMain } = formatDateLabel(prevDayKey);
+
   return (
     <div className="min-h-screen" style={{ background: "#f4f6f9" }}>
 
@@ -333,6 +339,32 @@ export default function Home() {
 
       {/* ── Main ── */}
       <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+
+        {/* 前日未完了タスクアラート */}
+        {prevDayUndoneTasks.length > 0 && (
+          <section className="bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-xl shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 flex items-center justify-between border-b border-red-100">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  前日（{prevDateMain}）の未完了タスク
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-red-500">{prevDayUndoneTasks.length}件未完了</span>
+            </div>
+            <div className="divide-y divide-red-100">
+              {prevDayUndoneTasks.map(task => (
+                <div key={task.id} className="flex items-center gap-2 px-4 py-2">
+                  <span className="text-red-400 shrink-0">{task.icon}</span>
+                  <span className="flex-1 text-sm text-red-800">{task.label}</span>
+                  {task.planned && (
+                    <span className="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         {categories.map(cat => {
           const catTasks  = tasks.filter(t => t.category === cat);
           const catDone   = catTasks.filter(t => t.done).length;
