@@ -727,7 +727,7 @@ export default function Home() {
                       onChange={e => updateCustomer(c.id, "contact", e.target.value)}
                       className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 shrink-0"
                     >
-                      <option value="">ヤリトリを選択</option>
+                      <option value="">やり取りを選択</option>
                       {CONTACT_OPTIONS.map(o => (
                         <option key={o} value={o}>{o}</option>
                       ))}
