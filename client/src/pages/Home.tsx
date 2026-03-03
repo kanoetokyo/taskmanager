@@ -705,15 +705,12 @@ export default function Home() {
 
         {/* 顧客引き継ぎダッシュボード */}
         <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-blue-400">
-          <div className="px-4 py-2.5 flex items-center justify-between border-b border-gray-100">
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-              <Users className="w-4 h-4" />
-              顧客引き継ぎ
-            </span>
-            <div className="flex items-center gap-2">
-              {customers.length > 0 && (
-                <span className="text-xs text-gray-400 tabular-nums">{customers.length}件</span>
-              )}
+          <div className="px-4 py-2.5 border-b border-gray-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                <Users className="w-4 h-4" />
+                顧客引き継ぎ
+              </span>
               <button
                 onClick={addCustomer}
                 className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-sm"
@@ -721,6 +718,21 @@ export default function Home() {
                 <span className="text-base leading-none">+</span> 顧客を追加
               </button>
             </div>
+            {customers.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(["不通・未対応", "調整中・仮予約中", "保留"] as const).map(status => {
+                  const count = customers.filter(c => c.status === status).length;
+                  if (count === 0) return null;
+                  const style = STATUS_STYLE[status];
+                  return (
+                    <span key={status} className={`text-xs font-medium px-2 py-0.5 rounded-full border tabular-nums ${style}`}>
+                      {status}：{count}件
+                    </span>
+                  );
+                })}
+                <span className="text-xs text-gray-400 tabular-nums ml-1">合計 {customers.length}件</span>
+              </div>
+            )}
           </div>
 
           {customers.length === 0 ? (
