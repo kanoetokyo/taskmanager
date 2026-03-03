@@ -509,55 +509,49 @@ export default function Home() {
   const { main: prevDateMain } = formatDateLabel(prevDayKey);
 
   return (
-    <div className="min-h-screen" style={{ background: "#f0f2f5" }}>
+    <div className="min-h-screen" style={{ background: "#f4f6f9" }}>
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10" style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-        {/* Banner: Title + Date row */}
-        <div className="max-w-4xl mx-auto px-4 pt-3 pb-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900" style={{ letterSpacing: "0.05em" }}>
-                タスク管理革命
-              </h1>
-              <p className="text-[11px] text-gray-400 mt-0.5">清掃業務・事務管理ツール</p>
-            </div>
-            {/* Date nav */}
-            <div className="flex items-center gap-1">
-              <button onClick={goToPrevDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="前日">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="text-center px-1">
-                <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{dateMain}</span>
-                {dateSub && (
-                  <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{dateSub}</span>
-                )}
-              </div>
-              <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="習日">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              {!isToday && (
-                <button onClick={goToToday} className="ml-1 text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium">
-                  今日
-                </button>
-              )}
-            </div>
+      <header className="sticky top-0 z-10" style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
+        {/* Banner: Title */}
+        <div className="max-w-4xl mx-auto px-4 pt-3 pb-1 text-center">
+          <h1 className="text-2xl font-black text-slate-800" style={{ letterSpacing: "0.15em" }}>
+            タスク管理革命
+          </h1>
+          <p className="text-[11px] text-slate-400 tracking-widest mt-0.5">清掃業務・事務管理ツール</p>
+        </div>
+
+        {/* Date nav */}
+        <div className="max-w-4xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1">
+          <button onClick={goToPrevDay} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-200 transition-colors" title="前日">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="text-center px-2">
+            <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">{dateMain}</span>
+            {dateSub && (
+              <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600">{dateSub}</span>
+            )}
           </div>
+          <button onClick={goToNextDay} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-200 transition-colors" title="習日">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {!isToday && (
+            <button onClick={goToToday} className="ml-1 text-xs px-2 py-0.5 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-200 transition-colors">
+              今日
+            </button>
+          )}
         </div>
 
         {/* Progress bar */}
-        <div className="max-w-4xl mx-auto px-4 pb-3 pt-2 flex items-center gap-3">
-          <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+        <div className="max-w-4xl mx-auto px-4 pb-2.5 flex items-center gap-3">
+          <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
             <div
-              className="h-2 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#16a34a" : "#2563eb" }}
+              className="h-1.5 rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#22c55e" : "#64748b" }}
             />
           </div>
-          <span className="text-xs font-semibold text-blue-600 whitespace-nowrap tabular-nums">
-            {progressPct}% 進捗
-          </span>
-          <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums">
-            {doneTasks} / {totalTasks}
+          <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
+            {doneTasks} / {totalTasks}　{progressPct}%
           </span>
         </div>
       </header>
@@ -896,14 +890,15 @@ export default function Home() {
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
 
           return (
-            <section key={cat} className="bg-white rounded-xl border border-gray-200 overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <section key={cat} className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 ${cfg.border}`}>
 
               {/* Category header */}
-              <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: "1px solid #f3f4f6" }}>
+              <div className="px-4 py-2.5 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400 shrink-0">{cfg.icon}</span>
-                  <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">{cat}</span>
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{catTasks.length} TASKS</span>
+                  <span className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+                    {cfg.icon}
+                    {cat}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {catDone < catTasks.length && (
@@ -912,22 +907,22 @@ export default function Home() {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
                         setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
+                      className="text-xs px-2 py-0.5 rounded bg-gray-100 hover:bg-green-100 text-gray-500 hover:text-green-700 transition-colors"
                     >
                       一括完了
                     </button>
                   )}
-                  <span className="text-xs tabular-nums">
+                  <span className="text-xs text-gray-400 tabular-nums">
                     {catDone === catTasks.length
                       ? <span className="text-green-500 font-semibold">✓ 完了</span>
-                      : <span className="text-gray-400">{catDone} / {catTasks.length}</span>
+                      : <>{catDone} / {catTasks.length}</>
                     }
                   </span>
                 </div>
               </div>
 
               {/* Task rows */}
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-gray-100">
                 {hideDone && catTasks.every(t => t.done) && (
                   <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
                     <span>✓</span><span>このカテゴリはすべて完了しています</span>
@@ -936,24 +931,24 @@ export default function Home() {
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => (
                   <div
                     key={task.id}
-                    className={`px-4 py-3 transition-all ${
+                    className={`px-3 py-2.5 transition-all ${
                       task.done
-                        ? "bg-gray-50/60"
+                        ? "bg-gray-50"
                         : task.help
-                          ? "bg-red-50"
+                          ? "bg-red-50 border-l-4 border-red-400"
                           : task.deadline
-                            ? "bg-amber-50/50"
-                            : "hover:bg-gray-50/80"
+                            ? "bg-amber-50 border-l-4 border-amber-400"
+                            : "hover:bg-gray-50/60"
                     }`}
                   >
                     {/* Row 1: checkbox + HELP + icon + label */}
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       {/* Done checkbox */}
                       <input
                         type="checkbox"
                         checked={task.done}
                         onChange={() => toggleDone(task.id)}
-                        className="w-4 h-4 rounded accent-blue-600 cursor-pointer shrink-0"
+                        className="w-5 h-5 rounded accent-blue-500 cursor-pointer shrink-0"
                         title="完了"
                       />
 
@@ -971,10 +966,10 @@ export default function Home() {
                           className="sr-only"
                         />
                         <span
-                          className={`inline-flex items-center justify-center w-10 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
+                          className={`inline-flex items-center justify-center w-11 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
                             task.help
-                              ? "bg-red-500 border-red-500 text-white"
-                              : "bg-white border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-400"
+                              ? "bg-red-500 border-red-500 text-white shadow-sm"
+                              : "bg-white border-gray-300 text-gray-400 hover:border-red-300 hover:text-red-400"
                           }`}
                         >
                           HELP
@@ -982,7 +977,7 @@ export default function Home() {
                       </label>
 
                       {/* Icon */}
-                      <span className={`shrink-0 ${ task.done ? "text-gray-300" : getIconColor(task.id)}`}>
+                      <span className={`shrink-0 ${task.done ? "text-gray-300" : getIconColor(task.id)}`}>
                         {task.icon}
                       </span>
 
@@ -1006,20 +1001,20 @@ export default function Home() {
                     </div>
 
                     {/* Row 2: Planned selector (right-aligned) */}
-                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                    <div className="mt-1.5 flex items-center justify-end gap-1.5">
                       <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
                       <select
                         value={task.planned}
                         onChange={e => updateTask(task.id, "planned", e.target.value)}
                         disabled={task.done}
-                        className={`rounded-lg border text-xs px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
+                        className={`rounded-md border text-xs px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
                           task.done
-                            ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
+                            ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
                             : task.planned === "当日事務担当"
                               ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
                               : task.planned === "当日現場責任者"
-                                ? "border-amber-200 bg-amber-50 text-amber-700 font-medium"
-                                : "border-gray-200 bg-white text-gray-600"
+                                ? "border-amber-300 bg-amber-50 text-amber-800 font-medium"
+                                : "border-gray-200 bg-white text-gray-700"
                         }`}
                       >
                         {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
@@ -1033,20 +1028,20 @@ export default function Home() {
         })}
 
         {/* フッター操作パネル */}
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
           {/* 完了済みを隠すトグル */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <button
               role="switch"
               aria-checked={hideDone}
               onClick={() => setHideDone(v => !v)}
-              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                hideDone ? "bg-blue-600" : "bg-gray-200"
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                hideDone ? "bg-blue-500" : "bg-gray-300"
               }`}
             >
               <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  hideDone ? "translate-x-5" : "translate-x-0.5"
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  hideDone ? "translate-x-5" : "translate-x-1"
                 }`}
               />
             </button>
@@ -1063,8 +1058,8 @@ export default function Home() {
             title="元に戻す"
             className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
               undoHistory.length > 0
-                ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                : "border-gray-100 text-gray-300 cursor-not-allowed"
+                ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+                : "border-gray-200 text-gray-300 cursor-not-allowed"
             }`}
           >
             <Undo2 className="w-4 h-4" />
@@ -1073,7 +1068,7 @@ export default function Home() {
 
           <button
             onClick={handleReset}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
           >
             リセット
           </button>
