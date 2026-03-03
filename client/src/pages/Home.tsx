@@ -515,45 +515,39 @@ export default function Home() {
       <header className="sticky top-0 z-10" style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div className="max-w-4xl mx-auto px-4 pt-3 pb-2">
 
-          {/* Row 1: Logo + Title 　|　 Date nav */}
-          <div className="flex items-center justify-between gap-2">
-            {/* Logo + Title */}
-            <div className="flex items-center gap-2 min-w-0">
-              {/* FlowTask風アイコン */}
-              <div className="relative shrink-0">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#2563eb" }}>
-                  <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
-                </div>
-              </div>
-              <h1 className="text-lg font-bold text-gray-900 truncate" style={{ letterSpacing: "0.03em" }}>
-                タスク管理革命
-              </h1>
+          {/* Row 1: アイコン + タイトル（常に1行で表示） */}
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2563eb" }}>
+              <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
-
-            {/* Date nav */}
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button onClick={goToPrevDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="前日">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <div className="text-center px-1">
-                <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{dateMain}</span>
-                {dateSub && (
-                  <span className="ml-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{dateSub}</span>
-                )}
-              </div>
-              <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="習日">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              {!isToday && (
-                <button onClick={goToToday} className="ml-0.5 text-xs px-2 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium">
-                  今日
-                </button>
-              )}
-            </div>
+            <h1 className="text-lg font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
+              タスク管理革命
+            </h1>
           </div>
 
-          {/* Row 2: Progress bar */}
-          <div className="mt-2.5 flex items-center gap-2">
+          {/* Row 2: 日付ナビ */}
+          <div className="mt-2 flex items-center justify-center gap-1">
+            <button onClick={goToPrevDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="前日">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{dateMain}</span>
+              {dateSub && (
+                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{dateSub}</span>
+              )}
+            </div>
+            <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="習日">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            {!isToday && (
+              <button onClick={goToToday} className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium">
+                今日
+              </button>
+            )}
+          </div>
+
+          {/* Row 3: 進捗バー */}
+          <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
               <div
                 className="h-2 rounded-full transition-all duration-500"
