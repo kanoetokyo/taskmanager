@@ -119,6 +119,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Noto Sans JP', sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
