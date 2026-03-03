@@ -499,11 +499,24 @@ export default function Home() {
   };
 
   const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
-    setIndividualHandovers(prev => prev.map(r =>
-      r.id === recordId
-        ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
-        : r
-    ));
+    setIndividualHandovers(prev => {
+      const updated = prev.map(r =>
+        r.id === recordId
+          ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
+          : r
+      );
+      // 全項目完了時に1秒後自動削除
+      if (field === "done" && value === true) {
+        const record = updated.find(r => r.id === recordId);
+        if (record && record.tasks.every(t => t.done)) {
+          setTimeout(() => {
+            setIndividualHandovers(p => p.filter(r => r.id !== recordId));
+            toast.success("✅ 個別引き継ぎを全項目完了しました");
+          }, 800);
+        }
+      }
+      return updated;
+    });
   };
 
   const deleteIndividualTask = (recordId: string, taskId: string) => {
