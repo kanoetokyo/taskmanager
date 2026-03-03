@@ -107,7 +107,7 @@ const BASE_TASKS: TaskDef[] = [
   { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
 
   // 調整および書類作成
-  { id: "doc-a", category: "調整および書類作成", label: "Storesの空き枚のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
+  { id: "doc-a", category: "調整および書類作成", label: "STORESの空き枠のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
   { id: "doc-b", category: "調整および書類作成", label: "翌日の見積もり作成および印刷",     icon: <FileText className={iconSize} /> },
 
   // 大森事務でのTODO
