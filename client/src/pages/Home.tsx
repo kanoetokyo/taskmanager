@@ -36,6 +36,7 @@ import {
   Undo2,
   CalendarCheck,
   CheckCircle2,
+  Zap,
 } from "lucide-react";
 // ─── Individual Handover ────────────────────────────────────────────────────
 
@@ -690,7 +691,7 @@ export default function Home() {
           {/* Row 1: アイコン + タイトル（常に1行で表示） */}
           <div className="flex items-center justify-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2563eb" }}>
-              <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
+              <Zap className="w-5 h-5 text-white" strokeWidth={2.5} fill="white" />
             </div>
             <h1 className="text-xl font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
               タスク革命
