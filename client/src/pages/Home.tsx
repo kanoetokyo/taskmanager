@@ -126,13 +126,13 @@ interface CatConfig {
 }
 
 const CAT_CONFIG: Record<string, CatConfig> = {
-  "各種システムのチェック":         { border: "border-blue-400",   badge: "bg-blue-100 text-blue-700",   icon: <Tablet className="w-4 h-4" /> },
-  "顧客対応と事務作業":             { border: "border-green-400",  badge: "bg-green-100 text-green-700", icon: <Phone className="w-4 h-4" /> },
-  "決済確認":                       { border: "border-amber-400",  badge: "bg-amber-100 text-amber-700", icon: <CreditCard className="w-4 h-4" /> },
-  "LINEグループ管理":               { border: "border-cyan-400",   badge: "bg-cyan-100 text-cyan-700",   icon: <MessageCircle className="w-4 h-4" /> },
-  "アットイン清掃管理システム確認": { border: "border-orange-400", badge: "bg-orange-100 text-orange-700", icon: <ClipboardList className="w-4 h-4" /> },
-  "調整および書類作成":             { border: "border-violet-400", badge: "bg-violet-100 text-violet-700", icon: <FileText className="w-4 h-4" /> },
-  "大森事務でのTODO":             { border: "border-rose-400",   badge: "bg-rose-100 text-rose-700",   icon: <ClipboardList className="w-4 h-4" /> },
+  "各種システムのチェック":         { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <Tablet className="w-4 h-4" /> },
+  "顧客対応と事務作業":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <Phone className="w-4 h-4" /> },
+  "決済確認":                       { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <CreditCard className="w-4 h-4" /> },
+  "LINEグループ管理":               { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <MessageCircle className="w-4 h-4" /> },
+  "アットイン清掃管理システム確認": { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <ClipboardList className="w-4 h-4" /> },
+  "調整および書類作成":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <FileText className="w-4 h-4" /> },
+  "大森事務でのTODO":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <ClipboardList className="w-4 h-4" /> },
 };
 
 // ─── Icon color per task type ─────────────────────────────────────────────────
@@ -512,31 +512,31 @@ export default function Home() {
     <div className="min-h-screen" style={{ background: "#f4f6f9" }}>
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 shadow-lg" style={{ background: "linear-gradient(135deg, #c2410c 0%, #ea580c 40%, #fb923c 80%, #fdba74 100%)" }}>
+      <header className="sticky top-0 z-10" style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
         {/* Banner: Title */}
         <div className="max-w-4xl mx-auto px-4 pt-3 pb-1 text-center">
-          <h1 className="text-2xl font-black text-white" style={{ letterSpacing: "0.15em", textShadow: "0 2px 8px rgba(120,40,0,0.4)" }}>
+          <h1 className="text-2xl font-black text-slate-800" style={{ letterSpacing: "0.15em" }}>
             タスク管理革命
           </h1>
-          <p className="text-[11px] text-orange-100 tracking-widest mt-0.5">清掃業務・事務管理ツール</p>
+          <p className="text-[11px] text-slate-400 tracking-widest mt-0.5">清掃業務・事務管理ツール</p>
         </div>
 
         {/* Date nav */}
         <div className="max-w-4xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1">
-          <button onClick={goToPrevDay} className="p-1.5 rounded-md text-orange-100 hover:bg-white/15 transition-colors" title="前日">
+          <button onClick={goToPrevDay} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-200 transition-colors" title="前日">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="text-center px-2">
-            <span className="text-sm font-semibold text-white whitespace-nowrap">{dateMain}</span>
+            <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">{dateMain}</span>
             {dateSub && (
-              <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-white/20 text-white">{dateSub}</span>
+              <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600">{dateSub}</span>
             )}
           </div>
-          <button onClick={goToNextDay} className="p-1.5 rounded-md text-orange-100 hover:bg-white/15 transition-colors" title="習日">
+          <button onClick={goToNextDay} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-200 transition-colors" title="習日">
             <ChevronRight className="w-4 h-4" />
           </button>
           {!isToday && (
-            <button onClick={goToToday} className="ml-1 text-xs px-2 py-0.5 rounded-full border border-white/40 text-white hover:bg-white/15 transition-colors">
+            <button onClick={goToToday} className="ml-1 text-xs px-2 py-0.5 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-200 transition-colors">
               今日
             </button>
           )}
@@ -544,13 +544,13 @@ export default function Home() {
 
         {/* Progress bar */}
         <div className="max-w-4xl mx-auto px-4 pb-2.5 flex items-center gap-3">
-          <div className="flex-1 bg-white/25 rounded-full h-1.5 overflow-hidden">
+          <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
             <div
               className="h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#bbf7d0" : "#ffffff" }}
+              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#22c55e" : "#64748b" }}
             />
           </div>
-          <span className="text-xs text-orange-100 whitespace-nowrap tabular-nums">
+          <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
             {doneTasks} / {totalTasks}　{progressPct}%
           </span>
         </div>
