@@ -520,7 +520,7 @@ export default function Home() {
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2563eb" }}>
               <CheckCircle2 className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
-            <h1 className="text-lg font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
+            <h1 className="text-xl font-bold text-gray-900" style={{ letterSpacing: "0.03em" }}>
               タスク管理革命
             </h1>
           </div>
