@@ -512,31 +512,31 @@ export default function Home() {
     <div className="min-h-screen" style={{ background: "#f4f6f9" }}>
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 shadow-lg" style={{ background: "linear-gradient(160deg, #1a1a1a 0%, #2d2d2d 50%, #111111 100%)" }}>
+      <header className="sticky top-0 z-10 shadow-lg" style={{ background: "linear-gradient(135deg, #c2410c 0%, #ea580c 40%, #fb923c 80%, #fdba74 100%)" }}>
         {/* Banner: Title */}
         <div className="max-w-4xl mx-auto px-4 pt-3 pb-1 text-center">
-          <h1 className="text-2xl font-black text-white" style={{ letterSpacing: "0.15em", textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>
+          <h1 className="text-2xl font-black text-white" style={{ letterSpacing: "0.15em", textShadow: "0 2px 8px rgba(120,40,0,0.4)" }}>
             タスク管理革命
           </h1>
-          <p className="text-[11px] text-gray-400 tracking-widest mt-0.5">清掃業務・事務管理ツール</p>
+          <p className="text-[11px] text-orange-100 tracking-widest mt-0.5">清掃業務・事務管理ツール</p>
         </div>
 
         {/* Date nav */}
         <div className="max-w-4xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1">
-          <button onClick={goToPrevDay} className="p-1.5 rounded-md text-gray-400 hover:bg-white/10 transition-colors" title="前日">
+          <button onClick={goToPrevDay} className="p-1.5 rounded-md text-orange-100 hover:bg-white/15 transition-colors" title="前日">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="text-center px-2">
             <span className="text-sm font-semibold text-white whitespace-nowrap">{dateMain}</span>
             {dateSub && (
-              <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-white/15 text-gray-200">{dateSub}</span>
+              <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded-full bg-white/20 text-white">{dateSub}</span>
             )}
           </div>
-          <button onClick={goToNextDay} className="p-1.5 rounded-md text-gray-400 hover:bg-white/10 transition-colors" title="習日">
+          <button onClick={goToNextDay} className="p-1.5 rounded-md text-orange-100 hover:bg-white/15 transition-colors" title="習日">
             <ChevronRight className="w-4 h-4" />
           </button>
           {!isToday && (
-            <button onClick={goToToday} className="ml-1 text-xs px-2 py-0.5 rounded-full border border-white/30 text-gray-300 hover:bg-white/10 transition-colors">
+            <button onClick={goToToday} className="ml-1 text-xs px-2 py-0.5 rounded-full border border-white/40 text-white hover:bg-white/15 transition-colors">
               今日
             </button>
           )}
@@ -544,13 +544,13 @@ export default function Home() {
 
         {/* Progress bar */}
         <div className="max-w-4xl mx-auto px-4 pb-2.5 flex items-center gap-3">
-          <div className="flex-1 bg-white/15 rounded-full h-1.5 overflow-hidden">
+          <div className="flex-1 bg-white/25 rounded-full h-1.5 overflow-hidden">
             <div
               className="h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#86efac" : "#e5e7eb" }}
+              style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#bbf7d0" : "#ffffff" }}
             />
           </div>
-          <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums">
+          <span className="text-xs text-orange-100 whitespace-nowrap tabular-nums">
             {doneTasks} / {totalTasks}　{progressPct}%
           </span>
         </div>
