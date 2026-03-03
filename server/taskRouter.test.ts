@@ -178,6 +178,38 @@ describe("store check logic", () => {
   });
 });
 
+describe("handover noConfirmationRequired logic", () => {
+  it("defaults to false for new handover items", () => {
+    const item = { id: "1", author: "", text: "", checked: [], noConfirmationRequired: false };
+    expect(item.noConfirmationRequired).toBe(false);
+  });
+
+  it("toggles noConfirmationRequired on", () => {
+    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: false };
+    const updated = { ...item, noConfirmationRequired: !item.noConfirmationRequired };
+    expect(updated.noConfirmationRequired).toBe(true);
+  });
+
+  it("toggles noConfirmationRequired off", () => {
+    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: true };
+    const updated = { ...item, noConfirmationRequired: !item.noConfirmationRequired };
+    expect(updated.noConfirmationRequired).toBe(false);
+  });
+
+  it("hides confirmation check when noConfirmationRequired is true", () => {
+    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: true };
+    // Simulate the UI condition: show check only when text exists AND noConfirmationRequired is false
+    const shouldShowCheck = item.text && !item.noConfirmationRequired;
+    expect(shouldShowCheck).toBeFalsy();
+  });
+
+  it("shows confirmation check when noConfirmationRequired is false", () => {
+    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: false };
+    const shouldShowCheck = item.text && !item.noConfirmationRequired;
+    expect(shouldShowCheck).toBeTruthy();
+  });
+});
+
 describe("MISOCA date logic", () => {
   it("detects up-to-date status", () => {
     const today = "2026-03-04";

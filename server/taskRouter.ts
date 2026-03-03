@@ -88,6 +88,7 @@ const handoverRouter = router({
       author: z.string(),
       content: z.string(),
       checkedMembers: z.array(z.string()),
+      noConfirmationRequired: z.boolean().default(false),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -95,7 +96,14 @@ const handoverRouter = router({
       await db
         .insert(handoverItems)
         .values(input)
-        .onDuplicateKeyUpdate({ set: { author: input.author, content: input.content, checkedMembers: input.checkedMembers } });
+        .onDuplicateKeyUpdate({
+          set: {
+            author: input.author,
+            content: input.content,
+            checkedMembers: input.checkedMembers,
+            noConfirmationRequired: input.noConfirmationRequired,
+          },
+        });
     }),
 
   delete: publicProcedure

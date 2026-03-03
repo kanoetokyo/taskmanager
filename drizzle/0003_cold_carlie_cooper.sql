@@ -1,0 +1,1 @@
+ALTER TABLE `handover_items` ADD `noConfirmationRequired` boolean DEFAULT false NOT NULL;

@@ -210,11 +210,12 @@ interface HandoverItem {
   author: string;   // 作成者
   text: string;
   checked: string[]; // 確認済みメンバー名
+  noConfirmationRequired: boolean; // 確認不要フラグ
   inherited?: boolean; // 前日から引き継ぎされたか
 }
 
 function newHandoverItem(): HandoverItem {
-  return { id: crypto.randomUUID(), author: "", text: "", checked: [] };
+  return { id: crypto.randomUUID(), author: "", text: "", checked: [], noConfirmationRequired: false };
 }
 
 // ─── Customer Handover ─────────────────────────────────────────────────────
@@ -386,6 +387,7 @@ export default function Home() {
           author: h.author,
           text: h.content,
           checked: h.checkedMembers as string[],
+          noConfirmationRequired: h.noConfirmationRequired ?? false,
         })));
       } else {
         // No data for this date - initialize with empty item
@@ -504,6 +506,7 @@ export default function Home() {
             author: item.author,
             content: item.text,
             checkedMembers: item.checked,
+            noConfirmationRequired: item.noConfirmationRequired,
           });
         }
         const now = new Date();
@@ -638,7 +641,7 @@ export default function Home() {
     });
   };
 
-  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string) => {
+  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string | boolean) => {
     setHandoverItems(prev => {
       const updated = prev.map(item => item.id === id ? { ...item, [field]: value } : item);
       saveHandoverToDb(updated, currentDateKey);
@@ -1083,8 +1086,8 @@ export default function Home() {
           <div className="divide-y divide-gray-100 border-t border-gray-100">
             {handoverItems.map((item, idx) => {
               return (<div key={item.id} className="px-4 py-3 space-y-2">
-                {/* 作成者選択 + 削除ボタン */}
-                <div className="flex items-center gap-2">
+                {/* 作成者選択 + 確認不要トグル + 削除ボタン */}
+                <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={item.author}
                     onChange={e => updateHandoverItem(item.id, "author", e.target.value)}
@@ -1103,15 +1106,26 @@ export default function Home() {
                   {item.author && !item.inherited && (
                     <span className="text-xs text-gray-400">メモ {idx + 1}</span>
                   )}
-                  {handoverItems.length > 1 && (
-                    <button
-                      onClick={() => handleDeleteHandoverItem(item.id)}
-                      className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
-                      title="このメモを削除"
-                    >
-                      ✕
-                    </button>
-                  )}
+                  {/* 確認不要トグル */}
+                  <button
+                    onClick={() => updateHandoverItem(item.id, "noConfirmationRequired", !item.noConfirmationRequired)}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
+                      item.noConfirmationRequired
+                        ? "bg-gray-500 border-gray-500 text-white shadow-sm"
+                        : "bg-white border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600"
+                    }`}
+                    title={item.noConfirmationRequired ? "確認不要（クリックで解除）" : "確認不要にする"}
+                  >
+                    {item.noConfirmationRequired ? "✓ 確認不要" : "確認不要"}
+                  </button>
+                  {/* 削除ボタン（常に表示） */}
+                  <button
+                    onClick={() => handleDeleteHandoverItem(item.id)}
+                    className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
+                    title="このメモを削除"
+                  >
+                    ✕
+                  </button>
                 </div>
 
                 {/* テキスト入力 */}
@@ -1132,8 +1146,8 @@ export default function Home() {
                   style={{ minHeight: "60px" }}
                 />
 
-                {/* 全員確認チェック（テキストがあるときのみ） */}
-                {item.text && (
+                {/* 全員確認チェック（テキストがあるかつ確認不要でないときのみ） */}
+                {item.text && !item.noConfirmationRequired && (
                   <div className="space-y-1.5">
                   <p className="text-xs text-yellow-700 font-medium flex items-center gap-1">
                     <span>⚠️</span>内容を確認した方はお名前をタップしてください

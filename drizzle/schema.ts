@@ -56,6 +56,7 @@ export const handoverItems = mysqlTable("handover_items", {
   author: varchar("author", { length: 64 }).notNull().default(""),
   content: varchar("content", { length: 2048 }).notNull().default(""),
   checkedMembers: json("checkedMembers").notNull().$type<string[]>().default([]),
+  noConfirmationRequired: boolean("noConfirmationRequired").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

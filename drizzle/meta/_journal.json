@@ -22,6 +22,13 @@
       "when": 1772580164330,
       "tag": "0002_mighty_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1772581490564,
+      "tag": "0003_cold_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }
