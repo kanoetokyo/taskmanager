@@ -199,23 +199,29 @@ function saveTasks(dateKey: string, tasks: Task[]) {
 
 const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい"];
 
-interface HandoverMemo {
+interface HandoverItem {
+  id: string;
+  author: string;   // 作成者
   text: string;
-  checked: string[]; // チェック済みメンバー名の配列
+  checked: string[]; // 確認済みメンバー名
 }
 
-function handoverKey(dateKey: string): string { return `handover-${dateKey}`; }
+function handoverKey(dateKey: string): string { return `handover2-${dateKey}`; }
 
-function loadHandover(dateKey: string): HandoverMemo {
+function newHandoverItem(): HandoverItem {
+  return { id: crypto.randomUUID(), author: "", text: "", checked: [] };
+}
+
+function loadHandover(dateKey: string): HandoverItem[] {
   try {
     const saved = localStorage.getItem(handoverKey(dateKey));
-    if (saved) return JSON.parse(saved) as HandoverMemo;
+    if (saved) return JSON.parse(saved) as HandoverItem[];
   } catch {}
-  return { text: "", checked: [] };
+  return [newHandoverItem()];
 }
 
-function saveHandover(dateKey: string, memo: HandoverMemo) {
-  localStorage.setItem(handoverKey(dateKey), JSON.stringify(memo));
+function saveHandover(dateKey: string, items: HandoverItem[]) {
+  localStorage.setItem(handoverKey(dateKey), JSON.stringify(items));
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -226,35 +232,52 @@ export default function Home() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [hideDone, setHideDone] = useState<boolean>(false);
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
-  const [handover, setHandover] = useState<HandoverMemo>(() => loadHandover(todayKey()));
+  const [handoverItems, setHandoverItems] = useState<HandoverItem[]>(() => loadHandover(todayKey()));
 
   useEffect(() => {
     setTasks(loadTasks(currentDateKey));
-    setHandover(loadHandover(currentDateKey));
+    setHandoverItems(loadHandover(currentDateKey));
     setLastSaved(null);
   }, [currentDateKey]);
 
   // 引き継ぎメモ自動保存
   useEffect(() => {
-    const timer = setTimeout(() => saveHandover(currentDateKey, handover), 800);
+    const timer = setTimeout(() => saveHandover(currentDateKey, handoverItems), 800);
     return () => clearTimeout(timer);
-  }, [handover, currentDateKey]);
+  }, [handoverItems, currentDateKey]);
 
-  const toggleHandoverCheck = (member: string) => {
-    setHandover(prev => {
-      const alreadyChecked = prev.checked.includes(member);
+  const addHandoverItem = () => {
+    setHandoverItems(prev => [...prev, newHandoverItem()]);
+  };
+
+  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string) => {
+    setHandoverItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const deleteHandoverItem = (id: string) => {
+    setHandoverItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const toggleHandoverCheck = (itemId: string, member: string) => {
+    setHandoverItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const alreadyChecked = item.checked.includes(member);
       const newChecked = alreadyChecked
-        ? prev.checked.filter(m => m !== member)
-        : [...prev.checked, member];
-      // 全員チェック完了時はメモをクリア
+        ? item.checked.filter((m: string) => m !== member)
+        : [...item.checked, member];
+      // 全員チェック完了時はそのアイテムを削除
       if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
         setTimeout(() => {
-          setHandover({ text: "", checked: [] });
+          setHandoverItems(p => {
+            const remaining = p.filter(i => i.id !== itemId);
+            if (remaining.length === 0) return [newHandoverItem()];
+            return remaining;
+          });
           toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
         }, 600);
       }
-      return { ...prev, checked: newChecked };
-    });
+      return { ...item, checked: newChecked };
+    }));
   };
 
   useEffect(() => {
@@ -421,54 +444,90 @@ export default function Home() {
           </section>
         )}
         {/* 引き継ぎメモパネル */}
-        <section className="bg-yellow-50 border border-yellow-200 border-l-4 border-l-yellow-400 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-yellow-100">
+        <section className="bg-white border border-gray-200 border-l-4 border-l-yellow-400 rounded-xl shadow-sm overflow-hidden">
+          {/* ヘッダー */}
+          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
             <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
               <ClipboardList className="w-4 h-4" />
               引き継ぎメモ
             </span>
-            {handover.text && (
-              <span className="ml-auto text-xs text-yellow-600">
-                確認済み: {handover.checked.length} / {HANDOVER_MEMBERS.length}名
-              </span>
-            )}
+            <button
+              onClick={addHandoverItem}
+              className="ml-auto flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors font-medium"
+            >
+              <span className="text-base leading-none">+</span> メモを追加
+            </button>
           </div>
-          <div className="px-4 py-3">
-            <textarea
-              value={handover.text}
-              onChange={e => setHandover(prev => ({ ...prev, text: e.target.value }))}
-              placeholder="引き継ぎ事項を入力してください…"
-              rows={3}
-              className="w-full text-sm text-gray-800 bg-transparent resize-none focus:outline-none placeholder-yellow-300"
-            />
-          </div>
-          {/* 全員チェック欄（メモがあるときのみ表示） */}
-          {handover.text && (
-            <div className="px-4 py-2.5 border-t border-yellow-100 flex flex-wrap gap-2">
-              {HANDOVER_MEMBERS.map(member => {
-                const isChecked = handover.checked.includes(member);
-                return (
-                  <button
-                    key={member}
-                    onClick={() => toggleHandoverCheck(member)}
-                    className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
-                      isChecked
-                        ? "bg-green-500 border-green-500 text-white shadow-sm"
-                        : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+
+          {/* 各メモ */}
+          <div className="divide-y divide-gray-100">
+            {handoverItems.map((item, idx) => (
+              <div key={item.id} className="px-4 py-3 space-y-2">
+                {/* 作成者選択 + 削除ボタン */}
+                <div className="flex items-center gap-2">
+                  <select
+                    value={item.author}
+                    onChange={e => updateHandoverItem(item.id, "author", e.target.value)}
+                    className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-1 focus:ring-yellow-400 ${
+                      item.author ? "border-yellow-300 text-yellow-800 bg-yellow-50" : "border-gray-200 text-gray-400 bg-gray-50"
                     }`}
                   >
-                    {isChecked ? "✓" : ""}{member}
-                  </button>
-                );
-              })}
-              <span className="ml-auto self-center text-xs text-yellow-500">
-                {handover.checked.length === HANDOVER_MEMBERS.length
-                  ? "✨ 全員確認完了！メモをクリア中…"
-                  : `未確認: ${HANDOVER_MEMBERS.filter(m => !handover.checked.includes(m)).join("、")}`
-                }
-              </span>
-            </div>
-          )}
+                    <option value="">作成者を選択</option>
+                    {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  {item.author && (
+                    <span className="text-xs text-gray-400">メモ {idx + 1}</span>
+                  )}
+                  {handoverItems.length > 1 && (
+                    <button
+                      onClick={() => deleteHandoverItem(item.id)}
+                      className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
+                      title="このメモを削除"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* テキスト入力 */}
+                <textarea
+                  value={item.text}
+                  onChange={e => updateHandoverItem(item.id, "text", e.target.value)}
+                  placeholder="引き継ぎ事項を入力してください…"
+                  rows={2}
+                  className="w-full text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-yellow-400 placeholder-gray-300"
+                />
+
+                {/* 全員確認チェック（テキストがあるときのみ） */}
+                {item.text && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {HANDOVER_MEMBERS.map(member => {
+                      const isChecked = item.checked.includes(member);
+                      return (
+                        <button
+                          key={member}
+                          onClick={() => toggleHandoverCheck(item.id, member)}
+                          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
+                            isChecked
+                              ? "bg-green-500 border-green-500 text-white shadow-sm"
+                              : "bg-white border-gray-200 text-gray-500 hover:border-yellow-300 hover:text-yellow-700"
+                          }`}
+                        >
+                          {isChecked ? "✓ " : ""}{member}
+                        </button>
+                      );
+                    })}
+                    <span className="self-center text-xs text-gray-400 ml-1">
+                      {item.checked.length === HANDOVER_MEMBERS.length
+                        ? "✨ 全員確認完了！"
+                        : `${item.checked.length}/${HANDOVER_MEMBERS.length}名確認済`
+                      }
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
 
         {categories.map(cat => {
