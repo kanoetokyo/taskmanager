@@ -97,7 +97,7 @@ export const customerHandovers = mysqlTable("customer_handovers", {
 export type CustomerHandover = typeof customerHandovers.$inferSelect;
 export type InsertCustomerHandover = typeof customerHandovers.$inferInsert;
 
-// ─── MISOCA Status (グローバル) ────────────────────────────────────────────
+// ─── MISOCA Status (グローバル) ──────────────────────────────────────────────────────
 export const misocaStatus = mysqlTable("misoca_status", {
   id: int("id").autoincrement().primaryKey(),
   completedUntil: varchar("completedUntil", { length: 16 }).notNull().default(""),
@@ -105,3 +105,12 @@ export const misocaStatus = mysqlTable("misoca_status", {
 });
 export type MisocaStatus = typeof misocaStatus.$inferSelect;
 export type InsertMisocaStatus = typeof misocaStatus.$inferInsert;
+
+// ─── Gray Cell Status (グレーセル確認, グローバル) ─────────────────────────────────────
+export const grayCellStatus = mysqlTable("gray_cell_status", {
+  id: int("id").autoincrement().primaryKey(),
+  confirmedUntil: varchar("confirmedUntil", { length: 16 }).notNull().default(""),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GrayCellStatus = typeof grayCellStatus.$inferSelect;
+export type InsertGrayCellStatus = typeof grayCellStatus.$inferInsert;

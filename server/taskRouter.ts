@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   customerHandovers,
+  grayCellStatus,
   handoverItems,
   individualHandovers,
   misocaStatus,
@@ -220,7 +221,30 @@ const misocaRouter = router({
     }),
 });
 
-// ─── Main Task Router ─────────────────────────────────────────────────────────
+// ─── Gray Cell Status Router ────────────────────────────────────────────────────
+const grayCellRouter = router({
+  get: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return null;
+    const result = await db.select().from(grayCellStatus).limit(1);
+    return result[0] ?? null;
+  }),
+
+  upsert: publicProcedure
+    .input(z.object({ confirmedUntil: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return;
+      const existing = await db.select().from(grayCellStatus).limit(1);
+      if (existing.length > 0) {
+        await db.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil });
+      } else {
+        await db.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil });
+      }
+    }),
+});
+
+// ─── Main Task Router ─────────────────────────────────────────────────────
 export const taskRouter = router({
   taskStates: taskStatesRouter,
   storeCheck: storeCheckRouter,
@@ -228,4 +252,5 @@ export const taskRouter = router({
   individualHandover: individualHandoverRouter,
   customerHandover: customerHandoverRouter,
   misoca: misocaRouter,
+  grayCell: grayCellRouter,
 });

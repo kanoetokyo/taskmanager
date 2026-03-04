@@ -50,6 +50,13 @@
       "when": 1772592327752,
       "tag": "0006_gigantic_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1772593647818,
+      "tag": "0007_amazing_betty_brant",
+      "breakpoints": true
     }
   ]
 }

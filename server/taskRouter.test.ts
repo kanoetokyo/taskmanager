@@ -274,3 +274,46 @@ describe("MISOCA date logic", () => {
     expect(daysLeft).toBe(3);
   });
 });
+
+describe("Gray Cell date logic", () => {
+  it("detects up-to-date status", () => {
+    const today = "2026-03-04";
+    const confirmedUntil = "2026-03-06";
+    const isUpToDate = confirmedUntil >= today;
+    expect(isUpToDate).toBe(true);
+  });
+
+  it("detects outdated status", () => {
+    const today = "2026-03-04";
+    const confirmedUntil = "2026-03-01";
+    const isUpToDate = confirmedUntil >= today;
+    expect(isUpToDate).toBe(false);
+  });
+
+  it("calculates days remaining correctly", () => {
+    const today = "2026-03-04";
+    const confirmedUntil = "2026-03-11";
+    const keyToDateLocal = (key: string) => {
+      const [y, m, d] = key.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    };
+    const daysLeft = Math.round(
+      (keyToDateLocal(confirmedUntil).getTime() - keyToDateLocal(today).getTime()) / 86400000
+    );
+    expect(daysLeft).toBe(7);
+  });
+
+  it("displays correct badge text when confirmed until today", () => {
+    const today = "2026-03-04";
+    const confirmedUntil = "2026-03-04";
+    const daysLeft = 0;
+    const text = daysLeft === 0 ? "本日分までグレーセル確認済み" : `あと${daysLeft}日分確認済み`;
+    expect(text).toBe("本日分までグレーセル確認済み");
+  });
+
+  it("displays correct badge text when confirmed until future date", () => {
+    const daysLeft = 5;
+    const text = daysLeft === 0 ? "本日分までグレーセル確認済み" : `あと${daysLeft}日分確認済み`;
+    expect(text).toBe("あと5日分確認済み");
+  });
+});

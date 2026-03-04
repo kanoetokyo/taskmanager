@@ -74,3 +74,11 @@
 ## MISOCAセクションUI変更
 
 - [x] MISOCAセクションを1行に収まるようコンパクト化
+
+## グレーセル確認セクション追加
+
+- [x] drizzle/schema.tsにgray_cell_statusテーブルを追加
+- [x] pnpm db:pushでマイグレーション実行（0007_amazing_betty_brant.sql）
+- [x] server/taskRouter.tsにgrayCellルーターを追加（get / upsert）
+- [x] Home.tsxにuseQuery・useMutation・UI（MISOCAと同じ１行レイアウト）を追加
+- [x] テスト５件追加・全36テスト通過確認

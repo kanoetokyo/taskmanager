@@ -278,6 +278,7 @@ export default function Home() {
   const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
+  const [grayCell, setGrayCell] = useState<{ confirmedUntil: string }>({ confirmedUntil: "" });
   const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
@@ -331,6 +332,12 @@ export default function Home() {
     { refetchInterval: 10000 }
   );
 
+  // Gray cell status
+  const { data: grayCellData, refetch: refetchGrayCell } = trpc.task.grayCell.get.useQuery(
+    undefined,
+    { refetchInterval: 10000 }
+  );
+
   // Task states for previous day (for undone alert)
   const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
   const { data: prevDayTaskStatesData } = trpc.task.taskStates.getByDate.useQuery(
@@ -350,6 +357,7 @@ export default function Home() {
   const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
   const upsertMisoca = trpc.task.misoca.upsert.useMutation();
+  const upsertGrayCell = trpc.task.grayCell.upsert.useMutation();
 
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
@@ -454,6 +462,13 @@ export default function Home() {
       setMisoca({ completedUntil: misocaData.completedUntil });
     }
   }, [misocaData]);
+
+  // Load Gray Cell status from DB
+  useEffect(() => {
+    if (grayCellData) {
+      setGrayCell({ confirmedUntil: grayCellData.confirmedUntil });
+    }
+  }, [grayCellData]);
 
   // Load prev day tasks for undone alert
   useEffect(() => {
@@ -834,7 +849,7 @@ export default function Home() {
     });
   };
 
-  // ─── MISOCA Handler ────────────────────────────────────────────────────────
+   // ─── MISOCA Handler ──────────────────────────────────────────────────────
 
   const updateMisoca = async (completedUntil: string) => {
     setMisoca({ completedUntil });
@@ -842,6 +857,17 @@ export default function Home() {
       await upsertMisoca.mutateAsync({ completedUntil });
     } catch (e) {
       console.error("MISOCA save failed:", e);
+    }
+  };
+
+  // ─── Gray Cell Handler ───────────────────────────────────────────────────
+
+  const updateGrayCell = async (confirmedUntil: string) => {
+    setGrayCell({ confirmedUntil });
+    try {
+      await upsertGrayCell.mutateAsync({ confirmedUntil });
+    } catch (e) {
+      console.error("GrayCell save failed:", e);
     }
   };
 
@@ -857,6 +883,7 @@ export default function Home() {
         refetchIndividualHandover(),
         refetchCustomer(),
         refetchMisoca(),
+        refetchGrayCell(),
       ]);
       toast.success("最新データに同期しました");
     } catch (e) {
@@ -1460,6 +1487,49 @@ export default function Home() {
                 {isSet && (
                   <button
                     onClick={() => updateMisoca("")}
+                    className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* グレーセル確認ステータス */}
+        {(() => {
+          const today = todayKey();
+          const until = grayCell.confirmedUntil;
+          const isSet = !!until;
+          const isUpToDate = isSet && until >= today;
+          const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+          return (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
+              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <SlidersHorizontal className="w-4 h-4 text-violet-500" />
+                  <span className="text-xs font-semibold text-gray-600">グレーセル確認</span>
+                </div>
+                <input
+                  type="date"
+                  value={grayCell.confirmedUntil}
+                  onChange={e => updateGrayCell(e.target.value)}
+                  className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
+                />
+                {isSet && (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    isUpToDate ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-600"
+                  }`}>
+                    {isUpToDate
+                      ? daysLeft === 0 ? "本日分までグレーセル確認済み" : `あと${daysLeft}日分確認済み`
+                      : `${Math.abs(daysLeft)}日前で停止中`
+                    }
+                  </span>
+                )}
+                {isSet && (
+                  <button
+                    onClick={() => updateGrayCell("")}  
                     className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto"
                   >
                     ✕
