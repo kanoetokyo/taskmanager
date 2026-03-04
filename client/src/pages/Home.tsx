@@ -298,8 +298,12 @@ export default function Home() {
   // 全体引き継ぎの初回ロード完了フラグ（空アイテム追加を初回のみに限定）
   const handoverInitializedRef = useRef(false);
 
-  // タスク自動保存中フラグ（保存完了前にポーリングで上書きされないよう保護）
+  // 各セクション自動保存中フラグ（保存完了前にポーリングで上書きされないよう保護）
   const isSavingTasksRef = useRef(false);
+  const isSavingStoreCheckRef = useRef(false);
+  const isSavingHandoverRef = useRef(false);
+  const isSavingIndividualRef = useRef(false);
+  const isSavingCustomerRef = useRef(false);
 
   // 入力フォーカス中はポーリングで上書きしないためのフラグ
   const isEditingHandoverRef = useRef(false);
@@ -414,15 +418,26 @@ export default function Home() {
   // Load store check from DB
   useEffect(() => {
     if (storeCheckData) {
-      storeCheckLoadedRef.current = false;
-      const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
-      for (const row of storeCheckData) {
-        if (row.checkType === "line") newState.line = row.checkedStores as string[];
-        else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
-        else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+      if (!storeCheckLoadedRef.current) {
+        // 初回ロード: DBの値を無条件に反映
+        const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
+        for (const row of storeCheckData) {
+          if (row.checkType === "line") newState.line = row.checkedStores as string[];
+          else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
+          else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+        }
+        setStoreCheck(newState);
+        setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
+      } else if (!isSavingStoreCheckRef.current) {
+        // ポーリング更新: 保存タイマー動作中でなければDBの値を反映
+        const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
+        for (const row of storeCheckData) {
+          if (row.checkType === "line") newState.line = row.checkedStores as string[];
+          else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
+          else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+        }
+        setStoreCheck(newState);
       }
-      setStoreCheck(newState);
-      setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
     }
   }, [storeCheckData]);
 
@@ -430,22 +445,36 @@ export default function Home() {
   useEffect(() => {
     if (handoverData !== undefined) {
       if (isEditingHandoverRef.current) return; // 入力中は上書きしない
-      handoverLoadedRef.current = false;
-      if (handoverData.length > 0) {
-        setHandoverItems(handoverData.map(h => ({
-          id: h.id,
-          author: h.author,
-          text: h.content,
-          checked: h.checkedMembers as string[],
-          noConfirmationRequired: h.noConfirmationRequired ?? false,
-        })));
-        handoverInitializedRef.current = true;
-      } else if (!handoverInitializedRef.current) {
-        // DBにデータがない場合は初回のみ空アイテムを追加（ポーリングのたびに追加しない）
-        setHandoverItems([newHandoverItem()]);
-        handoverInitializedRef.current = true;
+      if (isSavingHandoverRef.current) return; // 保存中は上書きしない
+      if (!handoverLoadedRef.current) {
+        // 初回ロード
+        if (handoverData.length > 0) {
+          setHandoverItems(handoverData.map(h => ({
+            id: h.id,
+            author: h.author,
+            text: h.content,
+            checked: h.checkedMembers as string[],
+            noConfirmationRequired: h.noConfirmationRequired ?? false,
+          })));
+          handoverInitializedRef.current = true;
+        } else if (!handoverInitializedRef.current) {
+          // DBにデータがない場合は初回のみ空アイテムを追加
+          setHandoverItems([newHandoverItem()]);
+          handoverInitializedRef.current = true;
+        }
+        setTimeout(() => { handoverLoadedRef.current = true; }, 0);
+      } else {
+        // ポーリング更新: 保存中でなければDBの値を反映
+        if (handoverData.length > 0) {
+          setHandoverItems(handoverData.map(h => ({
+            id: h.id,
+            author: h.author,
+            text: h.content,
+            checked: h.checkedMembers as string[],
+            noConfirmationRequired: h.noConfirmationRequired ?? false,
+          })));
+        }
       }
-      setTimeout(() => { handoverLoadedRef.current = true; }, 0);
     }
   }, [handoverData]);
 
@@ -453,7 +482,7 @@ export default function Home() {
   useEffect(() => {
     if (individualHandoverData !== undefined) {
       if (isEditingIndividualRef.current) return; // 入力中は上書きしない
-      individualHandoverLoadedRef.current = false;
+      if (isSavingIndividualRef.current) return; // 保存中は上書きしない
       const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
         id: r.id,
         author: r.author,
@@ -467,7 +496,9 @@ export default function Home() {
         inherited: r.dateKey !== currentDateKey,
       }));
       setIndividualHandovers(records);
-      setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
+      if (!individualHandoverLoadedRef.current) {
+        setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
+      }
     }
   }, [individualHandoverData, currentDateKey]);
 
@@ -475,7 +506,7 @@ export default function Home() {
   useEffect(() => {
     if (customerData !== undefined) {
       if (isEditingCustomerRef.current) return; // 入力中は上書きしない
-      customersLoadedRef.current = false;
+      if (isSavingCustomerRef.current) return; // 保存中は上書きしない
       const records: CustomerRecord[] = customerData.map(c => ({
         id: c.id,
         name: c.customerName,
@@ -485,7 +516,9 @@ export default function Home() {
         inherited: c.dateKey !== currentDateKey,
       }));
       setCustomers(records);
-      setTimeout(() => { customersLoadedRef.current = true; }, 0);
+      if (!customersLoadedRef.current) {
+        setTimeout(() => { customersLoadedRef.current = true; }, 0);
+      }
     }
   }, [customerData, currentDateKey]);
 
@@ -566,6 +599,7 @@ export default function Home() {
   useEffect(() => {
     if (!storeCheckLoadedRef.current) return; // DB読み込み中は保存しない
     if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current);
+    isSavingStoreCheckRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     storeCheckSaveTimerRef.current = setTimeout(async () => {
       try {
         await Promise.all([
@@ -578,6 +612,8 @@ export default function Home() {
       } catch (e) {
         console.error("Store check save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      } finally {
+        isSavingStoreCheckRef.current = false; // 保存完了後にフラグを解除
       }
     }, 500);
     return () => { if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current); };
@@ -588,6 +624,7 @@ export default function Home() {
   useEffect(() => {
     if (!handoverLoadedRef.current) return; // DB読み込み中は保存しない
     if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current);
+    isSavingHandoverRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     handoverSaveTimerRef.current = setTimeout(async () => {
       try {
         for (const item of handoverItems) {
@@ -605,6 +642,8 @@ export default function Home() {
       } catch (e) {
         console.error("Handover save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      } finally {
+        isSavingHandoverRef.current = false; // 保存完了後にフラグを解除
       }
     }, 800);
     return () => { if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current); };
@@ -615,6 +654,7 @@ export default function Home() {
   useEffect(() => {
     if (!individualHandoverLoadedRef.current) return; // DB読み込み中は保存しない
     if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current);
+    isSavingIndividualRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     individualHandoverSaveTimerRef.current = setTimeout(async () => {
       try {
         for (const record of individualHandovers) {
@@ -633,6 +673,8 @@ export default function Home() {
       } catch (e) {
         console.error("Individual handover save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      } finally {
+        isSavingIndividualRef.current = false; // 保存完了後にフラグを解除
       }
     }, 800);
     return () => { if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current); };
@@ -643,6 +685,7 @@ export default function Home() {
   useEffect(() => {
     if (!customersLoadedRef.current) return; // DB読み込み中は保存しない
     if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
+    isSavingCustomerRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     customerSaveTimerRef.current = setTimeout(async () => {
       try {
         for (const c of customers) {
@@ -661,6 +704,8 @@ export default function Home() {
       } catch (e) {
         console.error("Customer save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      } finally {
+        isSavingCustomerRef.current = false; // 保存完了後にフラグを解除
       }
     }, 800);
     return () => { if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current); };
