@@ -66,3 +66,7 @@
 - [x] フロントエンドのbulkUpsert送信にhelpフラグを追加（Home.tsx）
 - [x] pnpm db:push でマイグレーション実行（0006_gigantic_reavers.sql）
 - [x] helpフラグのテスト5件追加・全31テスト通過確認
+
+## 自動更新間隔変更
+
+- [x] Home.tsxの全useQueryのrefetchInterval を30000ms→10000msに変更

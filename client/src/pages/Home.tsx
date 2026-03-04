@@ -298,44 +298,44 @@ export default function Home() {
   // Task states for current date
   const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 30000 } // 30秒ごとにポーリング
+    { refetchInterval: 10000 } // 10秒ごとにポーリング
   );
 
   // Store check for current date
   const { data: storeCheckData, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 30000 }
+    { refetchInterval: 10000 }
   );
 
   // Handover items for current date
   const { data: handoverData, refetch: refetchHandover } = trpc.task.handover.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 30000 }
+    { refetchInterval: 10000 }
   );
 
   // Individual handovers (active = not completed)
   const { data: individualHandoverData, refetch: refetchIndividualHandover } = trpc.task.individualHandover.getActive.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 30000 }
+    { refetchInterval: 10000 }
   );
 
   // Customer handovers (active)
   const { data: customerData, refetch: refetchCustomer } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
-    { refetchInterval: 30000 }
+    { refetchInterval: 10000 }
   );
 
   // MISOCA status
   const { data: misocaData, refetch: refetchMisoca } = trpc.task.misoca.get.useQuery(
     undefined,
-    { refetchInterval: 60000 }
+    { refetchInterval: 10000 }
   );
 
   // Task states for previous day (for undone alert)
   const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
   const { data: prevDayTaskStatesData } = trpc.task.taskStates.getByDate.useQuery(
     { dateKey: prevDayKey },
-    { refetchInterval: 60000 }
+    { refetchInterval: 10000 }
   );
 
   // ─── tRPC Mutations ───────────────────────────────────────────────────────
