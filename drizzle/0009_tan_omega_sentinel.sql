@@ -1,0 +1,1 @@
+ALTER TABLE `task_states` ADD `note` varchar(1024) DEFAULT '' NOT NULL;

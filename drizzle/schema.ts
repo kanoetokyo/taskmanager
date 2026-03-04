@@ -34,6 +34,7 @@ export const taskStates = mysqlTable("task_states", {
   taskId: varchar("taskId", { length: 128 }).notNull(),
   done: boolean("done").default(false).notNull(),
   help: boolean("help").default(false).notNull(),
+  note: varchar("note", { length: 1024 }).notNull().default(""),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(table.dateKey, table.taskId),
@@ -110,7 +111,18 @@ export type InsertMisocaStatus = typeof misocaStatus.$inferInsert;
 export const grayCellStatus = mysqlTable("gray_cell_status", {
   id: int("id").autoincrement().primaryKey(),
   confirmedUntil: varchar("confirmedUntil", { length: 16 }).notNull().default(""),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GrayCellStatus = typeof grayCellStatus.$inferSelect;
 export type InsertGrayCellStatus = typeof grayCellStatus.$inferInsert;
+
+// ─── STORES Shift Status (STORESシフト, グローバル) ──────────────────────────────────────
+export const storesShiftStatus = mysqlTable("stores_shift_status", {
+  id: int("id").autoincrement().primaryKey(),
+  confirmedUntil: varchar("confirmedUntil", { length: 16 }).notNull().default(""),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type StoresShiftStatus = typeof storesShiftStatus.$inferSelect;
+export type InsertStoresShiftStatus = typeof storesShiftStatus.$inferInsert;

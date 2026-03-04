@@ -7,6 +7,7 @@ import {
   individualHandovers,
   misocaStatus,
   storeCheckStates,
+  storesShiftStatus,
   taskStates,
 } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -25,27 +26,27 @@ const taskStatesRouter = router({
 
   // Upsert a task state
   upsert: publicProcedure
-    .input(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false) }))
+    .input(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false), note: z.string().default("") }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       await db
         .insert(taskStates)
-        .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help })
-        .onDuplicateKeyUpdate({ set: { done: input.done, help: input.help } });
+        .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help, note: input.note })
+        .onDuplicateKeyUpdate({ set: { done: input.done, help: input.help, note: input.note } });
     }),
 
   // Bulk upsert task states
   bulkUpsert: publicProcedure
-    .input(z.array(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false) })))
+    .input(z.array(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false), note: z.string().default("") })))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db || input.length === 0) return;
       for (const item of input) {
         await db
           .insert(taskStates)
-          .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help })
-          .onDuplicateKeyUpdate({ set: { done: item.done, help: item.help } });
+          .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help, note: item.note })
+          .onDuplicateKeyUpdate({ set: { done: item.done, help: item.help, note: item.note } });
       }
     }),
 });
@@ -231,15 +232,38 @@ const grayCellRouter = router({
   }),
 
   upsert: publicProcedure
-    .input(z.object({ confirmedUntil: z.string() }))
+    .input(z.object({ confirmedUntil: z.string(), updatedBy: z.string().default("") }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       const existing = await db.select().from(grayCellStatus).limit(1);
       if (existing.length > 0) {
-        await db.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil });
+        await db.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
       } else {
-        await db.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil });
+        await db.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      }
+    }),
+});
+
+// ─── STORES Shift Status Router ──────────────────────────────────────────────────
+const storesShiftRouter = router({
+  get: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return null;
+    const result = await db.select().from(storesShiftStatus).limit(1);
+    return result[0] ?? null;
+  }),
+
+  upsert: publicProcedure
+    .input(z.object({ confirmedUntil: z.string(), updatedBy: z.string().default("") }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return;
+      const existing = await db.select().from(storesShiftStatus).limit(1);
+      if (existing.length > 0) {
+        await db.update(storesShiftStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      } else {
+        await db.insert(storesShiftStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
       }
     }),
 });
@@ -253,4 +277,5 @@ export const taskRouter = router({
   customerHandover: customerHandoverRouter,
   misoca: misocaRouter,
   grayCell: grayCellRouter,
+  storesShift: storesShiftRouter,
 });

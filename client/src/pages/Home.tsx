@@ -86,6 +86,7 @@ interface Task extends TaskDef {
   actual: string;
   done: boolean;
   help: boolean;
+  note: string; // 備考欄（pay-aとomori-dのみ表示）
 }
 
 // ─── Store Check (LINE / POS / Raccoon) ─────────────────────────────────────
@@ -179,7 +180,7 @@ function getIconColor(id: string): string {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeInitialTasks(): Task[] {
-  return BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false }));
+  return BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" }));
 }
 
 function dateToKey(date: Date): string {
@@ -204,7 +205,7 @@ function formatDateLabel(key: string): { main: string; sub: string } {
 
 // ─── Handover Memo ──────────────────────────────────────────────────────────
 
-const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原"];
+const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "ベーさん", "篠原", "野村"];
 
 interface HandoverItem {
   id: string;
@@ -249,11 +250,12 @@ interface CustomerRecord {
   status: CustomerStatus;
   contact: string;
   memo: string;
+  assignee: string; // 記入者
   inherited?: boolean; // 前日から引き継ぎされたか
 }
 
 function newCustomerRecord(): CustomerRecord {
-  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "" };
+  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "", assignee: "" };
 }
 
 // ─── MISOCA Status ───────────────────────────────────────────────────────────
@@ -279,7 +281,8 @@ export default function Home() {
   const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
-  const [grayCell, setGrayCell] = useState<{ confirmedUntil: string }>({ confirmedUntil: "" });
+  const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
+  const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
@@ -354,6 +357,12 @@ export default function Home() {
     { refetchInterval: 30000 }
   );
 
+  // STORES Shift status
+  const { data: storesShiftData, refetch: refetchStoresShift } = trpc.task.storesShift.get.useQuery(
+    undefined,
+    { refetchInterval: 30000 }
+  );
+
   // Task states for previous day (for undone alert)
   const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
   const { data: prevDayTaskStatesData } = trpc.task.taskStates.getByDate.useQuery(
@@ -374,6 +383,7 @@ export default function Home() {
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
   const upsertMisoca = trpc.task.misoca.upsert.useMutation();
   const upsertGrayCell = trpc.task.grayCell.upsert.useMutation();
+  const upsertStoresShift = trpc.task.storesShift.upsert.useMutation();
 
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
@@ -392,6 +402,7 @@ export default function Home() {
               actual: existing?.actual ?? "",
               done: dbState?.done ?? false,
               help: dbState?.help ?? false,
+              note: dbState?.note ?? "",
             };
           });
         });
@@ -407,6 +418,7 @@ export default function Home() {
                 ...t,
                 done: dbState.done ?? t.done,
                 help: dbState.help ?? t.help,
+                note: dbState.note ?? t.note,
               };
             });
           });
@@ -513,6 +525,7 @@ export default function Home() {
         status: c.status as CustomerStatus,
         contact: c.store,
         memo: c.content,
+        assignee: c.assignee ?? "",
         inherited: c.dateKey !== currentDateKey,
       }));
       setCustomers(records);
@@ -532,9 +545,16 @@ export default function Home() {
   // Load Gray Cell status from DB
   useEffect(() => {
     if (grayCellData) {
-      setGrayCell({ confirmedUntil: grayCellData.confirmedUntil });
+      setGrayCell({ confirmedUntil: grayCellData.confirmedUntil, updatedBy: grayCellData.updatedBy ?? "" });
     }
   }, [grayCellData]);
+
+  // Load STORES Shift status from DB
+  useEffect(() => {
+    if (storesShiftData) {
+      setStoresShift({ confirmedUntil: storesShiftData.confirmedUntil, updatedBy: storesShiftData.updatedBy ?? "" });
+    }
+  }, [storesShiftData]);
 
   // Load prev day tasks for undone alert
   useEffect(() => {
@@ -547,6 +567,7 @@ export default function Home() {
           actual: "",
           done: dbState?.done ?? false,
           help: false,
+          note: dbState?.note ?? "",
         };
       });
       setPrevDayTasks(tasks);
@@ -580,7 +601,7 @@ export default function Home() {
     taskSaveTimerRef.current = setTimeout(async () => {
       try {
         await bulkUpsertTaskStates.mutateAsync(
-          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done, help: t.help }))
+          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done, help: t.help, note: t.note }))
         );
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
@@ -696,11 +717,11 @@ export default function Home() {
             store: c.contact,
             content: c.memo,
             status: c.status,
-            assignee: "",
+            assignee: c.assignee ?? "",
           });
         }
         const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
       } catch (e) {
         console.error("Customer save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
@@ -861,7 +882,7 @@ export default function Home() {
 
   // ─── Task Handlers ─────────────────────────────────────────────────────────
 
-  const updateTask = (id: string, field: "planned" | "actual", value: string) => {
+  const updateTask = (id: string, field: "planned" | "actual" | "note", value: string) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
@@ -899,7 +920,7 @@ export default function Home() {
       await bulkUpsertTaskStates.mutateAsync(
         BASE_TASKS.map(t => ({ dateKey: prevDayKey, taskId: t.id, done: true }))
       );
-      setPrevDayTasks(BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false })));
+      setPrevDayTasks(BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false, note: "" })));
       toast.success("前日の未完了タスクをすべて完了にしました");
     } catch (e) {
       toast.error("保存に失敗しました");
@@ -946,12 +967,23 @@ export default function Home() {
 
   // ─── Gray Cell Handler ───────────────────────────────────────────────────
 
-  const updateGrayCell = async (confirmedUntil: string) => {
-    setGrayCell({ confirmedUntil });
+  const updateGrayCell = async (confirmedUntil: string, updatedBy?: string) => {
+    const newUpdatedBy = updatedBy ?? grayCell.updatedBy;
+    setGrayCell({ confirmedUntil, updatedBy: newUpdatedBy });
     try {
-      await upsertGrayCell.mutateAsync({ confirmedUntil });
+      await upsertGrayCell.mutateAsync({ confirmedUntil, updatedBy: newUpdatedBy });
     } catch (e) {
       console.error("GrayCell save failed:", e);
+    }
+  };
+
+  const updateStoresShift = async (confirmedUntil: string, updatedBy?: string) => {
+    const newUpdatedBy = updatedBy ?? storesShift.updatedBy;
+    setStoresShift({ confirmedUntil, updatedBy: newUpdatedBy });
+    try {
+      await upsertStoresShift.mutateAsync({ confirmedUntil, updatedBy: newUpdatedBy });
+    } catch (e) {
+      console.error("StoresShift save failed:", e);
     }
   };
 
@@ -1497,6 +1529,16 @@ export default function Home() {
                       className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
                     />
                     <select
+                      value={c.assignee ?? ""}
+                      onChange={e => updateCustomer(c.id, "assignee", e.target.value)}
+                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                        c.assignee ? "border-blue-300 text-blue-800 bg-blue-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                      }`}
+                    >
+                      <option value="">記入者を選択</option>
+                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select
                       value={c.status}
                       onChange={e => updateCustomer(c.id, "status", e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 ${STATUS_STYLE[c.status]}`}
@@ -1552,17 +1594,39 @@ export default function Home() {
           )}
         </section>
 
-        {/* MISOCA作成完了ステータス */}
+        {/* MISOCA / グレーセル / STORESシフト 統合ステータスセクション */}
         {(() => {
           const today = todayKey();
-          const until = misoca.completedUntil;
-          const isSet = !!until;
-          const isUpToDate = isSet && until >= today;
-          const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+
+          // MISOCA
+          const misocaUntil = misoca.completedUntil;
+          const misocaSet = !!misocaUntil;
+          const misocaUpToDate = misocaSet && misocaUntil >= today;
+          const misocaDaysLeft = misocaSet ? Math.round((keyToDate(misocaUntil).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+
+          // グレーセル
+          const grayCellUntil = grayCell.confirmedUntil;
+          const grayCellSet = !!grayCellUntil;
+          const grayCellUpToDate = grayCellSet && grayCellUntil >= today;
+          const grayCellDaysLeft = grayCellSet ? Math.round((keyToDate(grayCellUntil).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+
+          // STORESシフト
+          const storesShiftUntil = storesShift.confirmedUntil;
+          const storesShiftSet = !!storesShiftUntil;
+          const storesShiftUpToDate = storesShiftSet && storesShiftUntil >= today;
+          const storesShiftDaysLeft = storesShiftSet ? Math.round((keyToDate(storesShiftUntil).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
+
           return (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
-              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 shrink-0">
+              {/* セクションヘッダー */}
+              <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-1.5">
+                <CalendarCheck className="w-4 h-4 text-slate-400" />
+                <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">進捗ステータス</span>
+              </div>
+
+              {/* MISOCA行 */}
+              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap border-b border-gray-50">
+                <div className="flex items-center gap-1.5 w-28 shrink-0">
                   <CalendarCheck className="w-4 h-4 text-emerald-500" />
                   <span className="text-xs font-semibold text-gray-600">MISOCA</span>
                 </div>
@@ -1572,42 +1636,26 @@ export default function Home() {
                   onChange={e => updateMisoca(e.target.value)}
                   className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                 />
-                {isSet && (
+                {misocaSet && (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    isUpToDate ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+                    misocaUpToDate ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
                   }`}>
-                    {isUpToDate
-                      ? daysLeft === 0 ? "本日分まで作成済み" : `あと${daysLeft}日分作成済み`
-                      : `${Math.abs(daysLeft)}日前で停止中`
+                    {misocaUpToDate
+                      ? misocaDaysLeft === 0 ? "本日分まで作成済み" : `あと${misocaDaysLeft}日分作成済み`
+                      : `${Math.abs(misocaDaysLeft)}日前で停止中`
                     }
                   </span>
                 )}
-                {isSet && (
-                  <button
-                    onClick={() => updateMisoca("")}
-                    className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto"
-                  >
-                    ✕
-                  </button>
+                {misocaSet && (
+                  <button onClick={() => updateMisoca("")} className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto">✕</button>
                 )}
               </div>
-            </section>
-          );
-        })()}
 
-        {/* グレーセル確認ステータス */}
-        {(() => {
-          const today = todayKey();
-          const until = grayCell.confirmedUntil;
-          const isSet = !!until;
-          const isUpToDate = isSet && until >= today;
-          const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
-          return (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
-              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 shrink-0">
+              {/* グレーセル行 */}
+              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap border-b border-gray-50">
+                <div className="flex items-center gap-1.5 w-28 shrink-0">
                   <SlidersHorizontal className="w-4 h-4 text-violet-500" />
-                  <span className="text-xs font-semibold text-gray-600">グレーセル確認</span>
+                  <span className="text-xs font-semibold text-gray-600">グレーセル</span>
                 </div>
                 <input
                   type="date"
@@ -1615,23 +1663,65 @@ export default function Home() {
                   onChange={e => updateGrayCell(e.target.value)}
                   className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-violet-400"
                 />
-                {isSet && (
+                <select
+                  value={grayCell.updatedBy}
+                  onChange={e => updateGrayCell(grayCell.confirmedUntil, e.target.value)}
+                  className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-1 focus:ring-violet-400 ${
+                    grayCell.updatedBy ? "border-violet-300 text-violet-800 bg-violet-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                  }`}
+                >
+                  <option value="">更新者を選択</option>
+                  {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {grayCellSet && (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    isUpToDate ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-600"
+                    grayCellUpToDate ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-600"
                   }`}>
-                    {isUpToDate
-                      ? daysLeft === 0 ? "本日分までグレーセル確認済み" : `あと${daysLeft}日分確認済み`
-                      : `${Math.abs(daysLeft)}日前で停止中`
+                    {grayCellUpToDate
+                      ? grayCellDaysLeft === 0 ? "本日分まで確認済み" : `あと${grayCellDaysLeft}日分確認済み`
+                      : `${Math.abs(grayCellDaysLeft)}日前で停止中`
                     }
                   </span>
                 )}
-                {isSet && (
-                  <button
-                    onClick={() => updateGrayCell("")}  
-                    className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto"
-                  >
-                    ✕
-                  </button>
+                {grayCellSet && (
+                  <button onClick={() => updateGrayCell("", "")} className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto">✕</button>
+                )}
+              </div>
+
+              {/* STORESシフト行 */}
+              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 w-28 shrink-0">
+                  <ShoppingBag className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-semibold text-gray-600">STORESシフト</span>
+                </div>
+                <input
+                  type="date"
+                  value={storesShift.confirmedUntil}
+                  onChange={e => updateStoresShift(e.target.value)}
+                  className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+                <select
+                  value={storesShift.updatedBy}
+                  onChange={e => updateStoresShift(storesShift.confirmedUntil, e.target.value)}
+                  className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-1 focus:ring-orange-400 ${
+                    storesShift.updatedBy ? "border-orange-300 text-orange-800 bg-orange-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                  }`}
+                >
+                  <option value="">更新者を選択</option>
+                  {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {storesShiftSet && (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    storesShiftUpToDate ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-600"
+                  }`}>
+                    {storesShiftUpToDate
+                      ? storesShiftDaysLeft === 0 ? "本日分まで確認済み" : `あと${storesShiftDaysLeft}日分確認済み`
+                      : `${Math.abs(storesShiftDaysLeft)}日前で停止中`
+                    }
+                  </span>
+                )}
+                {storesShiftSet && (
+                  <button onClick={() => updateStoresShift("", "")} className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto">✕</button>
                 )}
               </div>
             </section>
@@ -1946,6 +2036,27 @@ export default function Home() {
                         {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
                       </select>
                     </div>
+                    {/* Row 3: 備考欄（pay-aとomori-dのみ表示） */}
+                    {(task.id === "pay-a" || task.id === "omori-d") && (
+                      <div className="mt-2">
+                        <textarea
+                          value={task.note}
+                          onChange={e => {
+                            updateTask(task.id, "note", e.target.value);
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+                          }}
+                          onFocus={e => {
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+                          }}
+                          placeholder="備考を入力…"
+                          rows={1}
+                          className="w-full text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-gray-300 resize-none overflow-hidden"
+                          style={{ minHeight: "30px" }}
+                        />
+                      </div>
+                    )}
                   </div>
                   );
                 })}
