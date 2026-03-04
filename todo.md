@@ -70,3 +70,7 @@
 ## 自動更新間隔変更
 
 - [x] Home.tsxの全useQueryのrefetchInterval を30000ms→10000msに変更
+
+## MISOCAセクションUI変更
+
+- [x] MISOCAセクションを1行に収まるようコンパクト化

@@ -1436,55 +1436,35 @@ export default function Home() {
           const daysLeft = isSet ? Math.round((keyToDate(until).getTime() - keyToDate(today).getTime()) / 86400000) : 0;
           return (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
-              <div className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <CalendarCheck className="w-4 h-4 text-emerald-500" />
-                  <span className="text-sm font-semibold text-gray-700">MISOCA見積書作成完了ステータス</span>
+                  <span className="text-xs font-semibold text-gray-600">MISOCA</span>
                 </div>
+                <input
+                  type="date"
+                  value={misoca.completedUntil}
+                  onChange={e => updateMisoca(e.target.value)}
+                  className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                />
                 {isSet && (
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                     isUpToDate ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
                   }`}>
                     {isUpToDate
-                      ? daysLeft === 0 ? "本日分まで作成済み" : `あと${daysLeft}日分まで作成済み`
-                      : `${Math.abs(daysLeft)}日前で止まっています`
+                      ? daysLeft === 0 ? "本日分まで作成済み" : `あと${daysLeft}日分作成済み`
+                      : `${Math.abs(daysLeft)}日前で停止中`
                     }
                   </span>
                 )}
-              </div>
-              <div className="px-4 pb-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500 whitespace-nowrap">見積書作成済み日まで：</label>
-                    <input
-                      type="date"
-                      value={misoca.completedUntil}
-                      onChange={e => updateMisoca(e.target.value)}
-                      className="text-sm px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                    />
-                  </div>
-                  {isSet && (
-                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                      isUpToDate ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                    }`}>
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>
-                        {isUpToDate
-                          ? `${keyToDate(until).getFullYear()}年${keyToDate(until).getMonth()+1}月${keyToDate(until).getDate()}日までMISOCAで見積書作成済み`
-                          : `${keyToDate(until).getFullYear()}年${keyToDate(until).getMonth()+1}月${keyToDate(until).getDate()}日以降の見積書が未作成です`
-                        }
-                      </span>
-                    </div>
-                  )}
-                  {isSet && (
-                    <button
-                      onClick={() => updateMisoca("")}
-                      className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      リセット
-                    </button>
-                  )}
-                </div>
+                {isSet && (
+                  <button
+                    onClick={() => updateMisoca("")}
+                    className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </section>
           );
