@@ -43,3 +43,16 @@
 ## 保存失敗時のエラー通知
 
 - [x] 各save関数（タスク・店舗チェック・全体引き継ぎ・個別引き継ぎ・顧客引き継ぎ）のcatchブロックにトースト通知を追加
+
+## 同期問題の根本調査・修正（再発）
+
+- [x] DBへの書き込みが実際に行われているかSQLで確認
+- [x] taskRouter.tsのbulkUpsertの実装を確認（onDuplicateKeyUpdateが正しく動作しているか）
+- [x] フロントエンドのuseQueryのrefetch/pollingが正しく動作しているか確認
+- [x] 原因を特定して修正：dateKey varchar(8)→varchar(10)にマイグレーション（YYYY-MM-DD形式は10文字）
+
+## 自動保存・同期最終修正
+
+- [x] drizzle/schema.tsのdateKey varchar(8)をvarchar(10)に変更（全5テーブル）
+- [x] pnpm db:push でマイグレーション実行（0005_robust_arclight.sql）
+- [x] 全26テスト通過確認

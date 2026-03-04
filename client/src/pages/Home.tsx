@@ -286,6 +286,13 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [prevDayTasks, setPrevDayTasks] = useState<Task[]>([]);
 
+  // DB読み込み完了フラグ（読み込み中は自動保存を抑制）
+  const tasksLoadedRef = useRef(false);
+  const storeCheckLoadedRef = useRef(false);
+  const handoverLoadedRef = useRef(false);
+  const individualHandoverLoadedRef = useRef(false);
+  const customersLoadedRef = useRef(false);
+
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
   // Task states for current date
@@ -349,6 +356,7 @@ export default function Home() {
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData) {
+      tasksLoadedRef.current = false; // 読み込み開始
       setTasks(prev => {
         return BASE_TASKS.map(t => {
           const dbState = taskStatesData.find(s => s.taskId === t.id);
@@ -362,12 +370,15 @@ export default function Home() {
           };
         });
       });
+      // 次のレンダリング後にフラグを立てる
+      setTimeout(() => { tasksLoadedRef.current = true; }, 0);
     }
   }, [taskStatesData]);
 
   // Load store check from DB
   useEffect(() => {
     if (storeCheckData) {
+      storeCheckLoadedRef.current = false;
       const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
       for (const row of storeCheckData) {
         if (row.checkType === "line") newState.line = row.checkedStores as string[];
@@ -375,12 +386,14 @@ export default function Home() {
         else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
       }
       setStoreCheck(newState);
+      setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
     }
   }, [storeCheckData]);
 
   // Load handover items from DB
   useEffect(() => {
     if (handoverData !== undefined) {
+      handoverLoadedRef.current = false;
       if (handoverData.length > 0) {
         setHandoverItems(handoverData.map(h => ({
           id: h.id,
@@ -393,12 +406,14 @@ export default function Home() {
         // No data for this date - initialize with empty item
         setHandoverItems([newHandoverItem()]);
       }
+      setTimeout(() => { handoverLoadedRef.current = true; }, 0);
     }
   }, [handoverData]);
 
   // Load individual handovers from DB
   useEffect(() => {
     if (individualHandoverData !== undefined) {
+      individualHandoverLoadedRef.current = false;
       const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
         id: r.id,
         author: r.author,
@@ -412,12 +427,14 @@ export default function Home() {
         inherited: r.dateKey !== currentDateKey,
       }));
       setIndividualHandovers(records);
+      setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
     }
   }, [individualHandoverData, currentDateKey]);
 
   // Load customer handovers from DB
   useEffect(() => {
     if (customerData !== undefined) {
+      customersLoadedRef.current = false;
       const records: CustomerRecord[] = customerData.map(c => ({
         id: c.id,
         name: c.customerName,
@@ -427,6 +444,7 @@ export default function Home() {
         inherited: c.dateKey !== currentDateKey,
       }));
       setCustomers(records);
+      setTimeout(() => { customersLoadedRef.current = true; }, 0);
     }
   }, [customerData, currentDateKey]);
 
@@ -456,6 +474,11 @@ export default function Home() {
 
   // Reset state when date changes
   useEffect(() => {
+    tasksLoadedRef.current = false;
+    storeCheckLoadedRef.current = false;
+    handoverLoadedRef.current = false;
+    individualHandoverLoadedRef.current = false;
+    customersLoadedRef.current = false;
     setTasks(makeInitialTasks());
     setHandoverItems([newHandoverItem()]);
     setStoreCheck({ line: [], pos: [], raccoon: [] });
@@ -464,38 +487,39 @@ export default function Home() {
     setCompletedCategories(new Set());
   }, [currentDateKey]);
 
-  // ─── Auto-save Debounce Refs ───────────────────────────────────────────────
-  const storeCheckSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handoverSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const individualHandoverSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const customerSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ─── Auto-save via useEffect (debounced) ──────────────────────────────────
 
-  // ─── Store Check Auto-save ─────────────────────────────────────────────────
-  const storeCheckRef = useRef(storeCheck);
-  storeCheckRef.current = storeCheck;
-  const currentDateKeyRef = useRef(currentDateKey);
-  currentDateKeyRef.current = currentDateKey;
+  // タスク自動保存
+  const taskSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!tasksLoadedRef.current) return; // DB読み込み中は保存しない
+    if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current);
+    taskSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await bulkUpsertTaskStates.mutateAsync(
+          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done }))
+        );
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+      } catch (e) {
+        console.error("Task save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      }
+    }, 800);
+    return () => { if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current); };
+  }, [tasks, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // mutationオブジェクトへの最新参照をrefで保持（useCallbackのstale closure対策）
-  const upsertStoreCheckRef = useRef(upsertStoreCheck);
-  upsertStoreCheckRef.current = upsertStoreCheck;
-  const upsertHandoverRef = useRef(upsertHandover);
-  upsertHandoverRef.current = upsertHandover;
-  const upsertIndividualHandoverRef = useRef(upsertIndividualHandover);
-  upsertIndividualHandoverRef.current = upsertIndividualHandover;
-  const upsertCustomerRef = useRef(upsertCustomer);
-  upsertCustomerRef.current = upsertCustomer;
-  const bulkUpsertTaskStatesRef = useRef(bulkUpsertTaskStates);
-  bulkUpsertTaskStatesRef.current = bulkUpsertTaskStates;
-
-  const saveStoreCheckToDb = useCallback((state: StoreCheckState, dateKey: string) => {
-    if (storeCheckSaveTimer.current) clearTimeout(storeCheckSaveTimer.current);
-    storeCheckSaveTimer.current = setTimeout(async () => {
+  // 店舗チェック自動保存
+  const storeCheckSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!storeCheckLoadedRef.current) return; // DB読み込み中は保存しない
+    if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current);
+    storeCheckSaveTimerRef.current = setTimeout(async () => {
       try {
         await Promise.all([
-          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "line", checkedStores: state.line }),
-          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "pos", checkedStores: state.pos }),
-          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "raccoon", checkedStores: state.raccoon }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line", checkedStores: storeCheck.line }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "pos", checkedStores: storeCheck.pos }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "raccoon", checkedStores: storeCheck.raccoon }),
         ]);
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
@@ -504,18 +528,20 @@ export default function Home() {
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 500);
-  }, []);
+    return () => { if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current); };
+  }, [storeCheck, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Handover Auto-save ────────────────────────────────────────────────────
-
-  const saveHandoverToDb = useCallback((items: HandoverItem[], dateKey: string) => {
-    if (handoverSaveTimer.current) clearTimeout(handoverSaveTimer.current);
-    handoverSaveTimer.current = setTimeout(async () => {
+  // 全体引き継ぎ自動保存
+  const handoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!handoverLoadedRef.current) return; // DB読み込み中は保存しない
+    if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current);
+    handoverSaveTimerRef.current = setTimeout(async () => {
       try {
-        for (const item of items) {
-          await upsertHandoverRef.current.mutateAsync({
+        for (const item of handoverItems) {
+          await upsertHandover.mutateAsync({
             id: item.id,
-            dateKey,
+            dateKey: currentDateKey,
             author: item.author,
             content: item.text,
             checkedMembers: item.checked,
@@ -529,19 +555,21 @@ export default function Home() {
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
-  }, []);
+    return () => { if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current); };
+  }, [handoverItems, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Individual Handover Auto-save ────────────────────────────────────────
-
-  const saveIndividualHandoverToDb = useCallback((records: IndividualHandoverRecord[], dateKey: string) => {
-    if (individualHandoverSaveTimer.current) clearTimeout(individualHandoverSaveTimer.current);
-    individualHandoverSaveTimer.current = setTimeout(async () => {
+  // 個別引き継ぎ自動保存
+  const individualHandoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!individualHandoverLoadedRef.current) return; // DB読み込み中は保存しない
+    if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current);
+    individualHandoverSaveTimerRef.current = setTimeout(async () => {
       try {
-        for (const record of records) {
+        for (const record of individualHandovers) {
           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
-          await upsertIndividualHandoverRef.current.mutateAsync({
+          await upsertIndividualHandover.mutateAsync({
             id: record.id,
-            dateKey: record.inherited ? dateKey : dateKey,
+            dateKey: currentDateKey,
             author: record.author,
             target: record.target,
             tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
@@ -555,18 +583,20 @@ export default function Home() {
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
-  }, []);
+    return () => { if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current); };
+  }, [individualHandovers, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Customer Auto-save ────────────────────────────────────────────────────
-
-  const saveCustomerToDb = useCallback((records: CustomerRecord[], dateKey: string) => {
-    if (customerSaveTimer.current) clearTimeout(customerSaveTimer.current);
-    customerSaveTimer.current = setTimeout(async () => {
+  // 顧客引き継ぎ自動保存
+  const customerSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!customersLoadedRef.current) return; // DB読み込み中は保存しない
+    if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
+    customerSaveTimerRef.current = setTimeout(async () => {
       try {
-        for (const c of records) {
-          await upsertCustomerRef.current.mutateAsync({
+        for (const c of customers) {
+          await upsertCustomer.mutateAsync({
             id: c.id,
-            dateKey,
+            dateKey: currentDateKey,
             customerName: c.name,
             store: c.contact,
             content: c.memo,
@@ -581,38 +611,18 @@ export default function Home() {
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
-  }, []);
-
-  // ─── Task State Auto-save ──────────────────────────────────────────────────
-  const taskSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const saveTasksToDb = useCallback((taskList: Task[], dateKey: string) => {
-    if (taskSaveTimer.current) clearTimeout(taskSaveTimer.current);
-    taskSaveTimer.current = setTimeout(async () => {
-      try {
-        await bulkUpsertTaskStatesRef.current.mutateAsync(
-          taskList.map(t => ({ dateKey, taskId: t.id, done: t.done }))
-        );
-        const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
-      } catch (e) {
-        console.error("Task save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
-      }
-    }, 800);
-  }, []);
+    return () => { if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current); };
+  }, [customers, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Customer Handlers ─────────────────────────────────────────────────────
 
   const addCustomer = () => {
     const newRecord = newCustomerRecord();
-    const updated = [...customers, newRecord];
-    setCustomers(updated);
-    saveCustomerToDb(updated, currentDateKey);
+    setCustomers(prev => [...prev, newRecord]);
   };
 
   const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
-    const updated = customers.map(c => {
+    setCustomers(prev => prev.map(c => {
       if (c.id !== id) return c;
       const updatedRecord = { ...c, [field]: value };
       // 完了に変更した場合は1秒後に自動削除
@@ -628,9 +638,7 @@ export default function Home() {
         }, 800);
       }
       return updatedRecord;
-    });
-    setCustomers(updated);
-    saveCustomerToDb(updated, currentDateKey);
+    }));
   };
 
   const handleDeleteCustomer = async (id: string) => {
@@ -647,15 +655,11 @@ export default function Home() {
 
   const addHandoverItem = () => {
     const newItem = newHandoverItem();
-    const updated = [...handoverItems, newItem];
-    setHandoverItems(updated);
-    saveHandoverToDb(updated, currentDateKey);
+    setHandoverItems(prev => [...prev, newItem]);
   };
 
   const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string | boolean) => {
-    const updated = handoverItems.map(item => item.id === id ? { ...item, [field]: value } : item);
-    setHandoverItems(updated);
-    saveHandoverToDb(updated, currentDateKey);
+    setHandoverItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
   const handleDeleteHandoverItem = async (id: string) => {
@@ -668,41 +672,40 @@ export default function Home() {
   };
 
   const toggleHandoverCheck = (itemId: string, member: string) => {
-    const updated = handoverItems.map(item => {
-      if (item.id !== itemId) return item;
-      const alreadyChecked = item.checked.includes(member);
-      const newChecked = alreadyChecked
-        ? item.checked.filter((m: string) => m !== member)
-        : [...item.checked, member];
-      // 全員チェック完了時はそのアイテムを削除
-      if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
-        setTimeout(async () => {
-          setHandoverItems(p => {
-            const remaining = p.filter(i => i.id !== itemId);
-            if (remaining.length === 0) return [newHandoverItem()];
-            return remaining;
-          });
-          try {
-            await deleteHandover.mutateAsync({ id: itemId });
-          } catch (e) {
-            console.error("Handover delete failed:", e);
-          }
-          toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
-        }, 600);
-      }
-      return { ...item, checked: newChecked };
+    setHandoverItems(prev => {
+      const updated = prev.map(item => {
+        if (item.id !== itemId) return item;
+        const alreadyChecked = item.checked.includes(member);
+        const newChecked = alreadyChecked
+          ? item.checked.filter((m: string) => m !== member)
+          : [...item.checked, member];
+        // 全員チェック完了時はそのアイテムを削除
+        if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
+          setTimeout(async () => {
+            setHandoverItems(p => {
+              const remaining = p.filter(i => i.id !== itemId);
+              if (remaining.length === 0) return [newHandoverItem()];
+              return remaining;
+            });
+            try {
+              await deleteHandover.mutateAsync({ id: itemId });
+            } catch (e) {
+              console.error("Handover delete failed:", e);
+            }
+            toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
+          }, 600);
+        }
+        return { ...item, checked: newChecked };
+      });
+      return updated;
     });
-    setHandoverItems(updated);
-    saveHandoverToDb(updated, currentDateKey);
   };
 
   // ─── Individual Handover Handlers ─────────────────────────────────────────
 
   const addIndividualHandover = () => {
     const newRecord = newIndividualHandoverRecord();
-    const updated = [...individualHandovers, newRecord];
-    setIndividualHandovers(updated);
-    saveIndividualHandoverToDb(updated, currentDateKey);
+    setIndividualHandovers(prev => [...prev, newRecord]);
   };
 
   const handleDeleteIndividualHandover = async (id: string) => {
@@ -716,58 +719,51 @@ export default function Home() {
   };
 
   const updateIndividualHandover = (id: string, field: keyof IndividualHandoverRecord, value: string) => {
-    const updated = individualHandovers.map(r => r.id === id ? { ...r, [field]: value } : r);
-    setIndividualHandovers(updated);
-    saveIndividualHandoverToDb(updated, currentDateKey);
+    setIndividualHandovers(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
   const addIndividualTask = (recordId: string) => {
-    const updated = individualHandovers.map(r =>
+    setIndividualHandovers(prev => prev.map(r =>
       r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
-    );
-    setIndividualHandovers(updated);
-    saveIndividualHandoverToDb(updated, currentDateKey);
+    ));
   };
 
   const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
-    const updated = individualHandovers.map(r =>
-      r.id === recordId
-        ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
-        : r
-    );
-    // 全項目完了時に1秒後自動削除
-    if (field === "done" && value === true) {
-      const record = updated.find(r => r.id === recordId);
-      if (record && record.tasks.every(t => t.done)) {
-        setTimeout(async () => {
-          setIndividualHandovers(p => p.filter(r => r.id !== recordId));
-          try {
-            await deleteIndividualHandover.mutateAsync({ id: recordId });
-          } catch (e) {
-            console.error("Individual handover delete failed:", e);
-          }
-          toast.success("✅ 個別引き継ぎを全項目完了しました");
-        }, 800);
+    setIndividualHandovers(prev => {
+      const updated = prev.map(r =>
+        r.id === recordId
+          ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
+          : r
+      );
+      // 全項目完了時に1秒後自動削除
+      if (field === "done" && value === true) {
+        const record = updated.find(r => r.id === recordId);
+        if (record && record.tasks.every(t => t.done)) {
+          setTimeout(async () => {
+            setIndividualHandovers(p => p.filter(r => r.id !== recordId));
+            try {
+              await deleteIndividualHandover.mutateAsync({ id: recordId });
+            } catch (e) {
+              console.error("Individual handover delete failed:", e);
+            }
+            toast.success("✅ 個別引き継ぎを全項目完了しました");
+          }, 800);
+        }
       }
-    }
-    setIndividualHandovers(updated);
-    saveIndividualHandoverToDb(updated, currentDateKey);
+      return updated;
+    });
   };
 
   const deleteIndividualTask = (recordId: string, taskId: string) => {
-    const updated = individualHandovers.map(r =>
+    setIndividualHandovers(prev => prev.map(r =>
       r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
-    );
-    setIndividualHandovers(updated);
-    saveIndividualHandoverToDb(updated, currentDateKey);
+    ));
   };
 
   // ─── Task Handlers ─────────────────────────────────────────────────────────
 
   const updateTask = (id: string, field: "planned" | "actual", value: string) => {
-    const updated = tasks.map(t => t.id === id ? { ...t, [field]: value } : t);
-    setTasks(updated);
-    saveTasksToDb(updated, currentDateKey);
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
   const toggleDone = (id: string) => {
@@ -776,18 +772,14 @@ export default function Home() {
       // 完了にする場合はアニメーションを先に起動
       setCompletingTasks(prev => new Set(prev).add(id));
       setTimeout(() => {
-        const updated = tasks.map(t => t.id === id ? { ...t, done: true } : t);
         setUndoHistory(h => [...h.slice(-9), tasks]);
-        setTasks(updated);
-        saveTasksToDb(updated, currentDateKey);
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
         setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
       }, 400);
     } else {
       // 完了解除は即座に戻す
-      const updated = tasks.map(t => t.id === id ? { ...t, done: false } : t);
       setUndoHistory(h => [...h.slice(-9), tasks]);
-      setTasks(updated);
-      saveTasksToDb(updated, currentDateKey);
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: false } : t));
     }
   };
 
@@ -795,15 +787,12 @@ export default function Home() {
     if (undoHistory.length === 0) return;
     const prev = undoHistory[undoHistory.length - 1];
     setTasks(prev);
-    saveTasksToDb(prev, currentDateKey);
     setUndoHistory(h => h.slice(0, -1));
     toast.success("元に戻しました");
   };
 
   const toggleHelp = (id: string) => {
-    const updated = tasks.map(t => t.id === id ? { ...t, help: !t.help } : t);
-    setTasks(updated);
-    saveTasksToDb(updated, currentDateKey);
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, help: !t.help } : t));
   };
 
   const markAllPrevDone = async () => {
@@ -838,12 +827,10 @@ export default function Home() {
   const toggleStoreCheck = (type: keyof StoreCheckState, store: string) => {
     setStoreCheck(prev => {
       const checked = prev[type].includes(store);
-      const updated = {
+      return {
         ...prev,
         [type]: checked ? prev[type].filter(s => s !== store) : [...prev[type], store],
       };
-      saveStoreCheckToDb(updated, currentDateKey);
-      return updated;
     });
   };
 
@@ -898,7 +885,7 @@ export default function Home() {
         setCompletedCategories(prev => { const s = new Set(prev); s.delete(cat); return s; });
       }
     });
-  }, [tasks]);
+  }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Navigation ───────────────────────────────────────────────────────────
 
@@ -1531,9 +1518,7 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
-                        const updated = tasks.map(t => t.category === cat ? { ...t, done: true } : t);
-                        setTasks(updated);
-                        saveTasksToDb(updated, currentDateKey);
+                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
                       className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
                     >

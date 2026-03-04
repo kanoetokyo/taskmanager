@@ -30,7 +30,7 @@ export type InsertUser = typeof users.$inferInsert;
 // ─── Task States (per date) ────────────────────────────────────────────────
 export const taskStates = mysqlTable("task_states", {
   id: int("id").autoincrement().primaryKey(),
-  dateKey: varchar("dateKey", { length: 8 }).notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
   taskId: varchar("taskId", { length: 128 }).notNull(),
   done: boolean("done").default(false).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -43,7 +43,7 @@ export type InsertTaskState = typeof taskStates.$inferInsert;
 // ─── Store Check States (per date) ────────────────────────────────────────
 export const storeCheckStates = mysqlTable("store_check_states", {
   id: int("id").autoincrement().primaryKey(),
-  dateKey: varchar("dateKey", { length: 8 }).notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
   checkType: varchar("checkType", { length: 32 }).notNull(),
   checkedStores: json("checkedStores").notNull().$type<string[]>().default([]),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -56,7 +56,7 @@ export type InsertStoreCheckState = typeof storeCheckStates.$inferInsert;
 // ─── Handover Items (全体引き継ぎ, per date) ──────────────────────────────
 export const handoverItems = mysqlTable("handover_items", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  dateKey: varchar("dateKey", { length: 8 }).notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
   author: varchar("author", { length: 64 }).notNull().default(""),
   content: varchar("content", { length: 2048 }).notNull().default(""),
   checkedMembers: json("checkedMembers").notNull().$type<string[]>().default([]),
@@ -70,7 +70,7 @@ export type InsertHandoverItem = typeof handoverItems.$inferInsert;
 // ─── Individual Handover Records (個別引き継ぎ) ───────────────────────────
 export const individualHandovers = mysqlTable("individual_handovers", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  dateKey: varchar("dateKey", { length: 8 }).notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
   author: varchar("author", { length: 64 }).notNull().default(""),
   target: varchar("target", { length: 64 }).notNull().default(""),
   tasks: json("tasks").notNull().$type<Array<{ id: string; content: string; done: boolean; deadline?: string }>>().default([]),
@@ -84,7 +84,7 @@ export type InsertIndividualHandover = typeof individualHandovers.$inferInsert;
 // ─── Customer Handover Records (顧客引き継ぎ) ─────────────────────────────
 export const customerHandovers = mysqlTable("customer_handovers", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  dateKey: varchar("dateKey", { length: 8 }).notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
   customerName: varchar("customerName", { length: 128 }).notNull().default(""),
   store: varchar("store", { length: 64 }).notNull().default(""),
   content: varchar("content", { length: 2048 }).notNull().default(""),
