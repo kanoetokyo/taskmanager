@@ -476,14 +476,26 @@ export default function Home() {
   const currentDateKeyRef = useRef(currentDateKey);
   currentDateKeyRef.current = currentDateKey;
 
+  // mutationオブジェクトへの最新参照をrefで保持（useCallbackのstale closure対策）
+  const upsertStoreCheckRef = useRef(upsertStoreCheck);
+  upsertStoreCheckRef.current = upsertStoreCheck;
+  const upsertHandoverRef = useRef(upsertHandover);
+  upsertHandoverRef.current = upsertHandover;
+  const upsertIndividualHandoverRef = useRef(upsertIndividualHandover);
+  upsertIndividualHandoverRef.current = upsertIndividualHandover;
+  const upsertCustomerRef = useRef(upsertCustomer);
+  upsertCustomerRef.current = upsertCustomer;
+  const bulkUpsertTaskStatesRef = useRef(bulkUpsertTaskStates);
+  bulkUpsertTaskStatesRef.current = bulkUpsertTaskStates;
+
   const saveStoreCheckToDb = useCallback((state: StoreCheckState, dateKey: string) => {
     if (storeCheckSaveTimer.current) clearTimeout(storeCheckSaveTimer.current);
     storeCheckSaveTimer.current = setTimeout(async () => {
       try {
         await Promise.all([
-          upsertStoreCheck.mutateAsync({ dateKey, checkType: "line", checkedStores: state.line }),
-          upsertStoreCheck.mutateAsync({ dateKey, checkType: "pos", checkedStores: state.pos }),
-          upsertStoreCheck.mutateAsync({ dateKey, checkType: "raccoon", checkedStores: state.raccoon }),
+          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "line", checkedStores: state.line }),
+          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "pos", checkedStores: state.pos }),
+          upsertStoreCheckRef.current.mutateAsync({ dateKey, checkType: "raccoon", checkedStores: state.raccoon }),
         ]);
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
@@ -500,7 +512,7 @@ export default function Home() {
     handoverSaveTimer.current = setTimeout(async () => {
       try {
         for (const item of items) {
-          await upsertHandover.mutateAsync({
+          await upsertHandoverRef.current.mutateAsync({
             id: item.id,
             dateKey,
             author: item.author,
@@ -525,7 +537,7 @@ export default function Home() {
       try {
         for (const record of records) {
           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
-          await upsertIndividualHandover.mutateAsync({
+          await upsertIndividualHandoverRef.current.mutateAsync({
             id: record.id,
             dateKey: record.inherited ? dateKey : dateKey,
             author: record.author,
@@ -549,7 +561,7 @@ export default function Home() {
     customerSaveTimer.current = setTimeout(async () => {
       try {
         for (const c of records) {
-          await upsertCustomer.mutateAsync({
+          await upsertCustomerRef.current.mutateAsync({
             id: c.id,
             dateKey,
             customerName: c.name,
@@ -574,7 +586,7 @@ export default function Home() {
     if (taskSaveTimer.current) clearTimeout(taskSaveTimer.current);
     taskSaveTimer.current = setTimeout(async () => {
       try {
-        await bulkUpsertTaskStates.mutateAsync(
+        await bulkUpsertTaskStatesRef.current.mutateAsync(
           taskList.map(t => ({ dateKey, taskId: t.id, done: t.done }))
         );
         const now = new Date();
