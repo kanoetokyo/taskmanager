@@ -90,3 +90,9 @@
 - [x] textarea/inputのonFocusでtrue、onBlurでfalseにセット
 - [x] useEffect([handoverData/individualHandoverData/customerData])で入力中はスキップ
 - [x] 全36テスト通過確認
+
+## バグ修正・UI改善 (2026-03-04)
+
+- [x] バグ修正: TODOの完了チェックが10秒ポーリングで復活する問題（tasksLoadedRefのレースコンディション）
+- [x] バグ修正: 全体引き継ぎのメモ入力欄が勝手に増える問題（handoverData空時の初期化ロジック）
+- [x] UI改善: 引き継ぎ3セクションの削除ボタンをTrash2アイコンに変更・確認ダイアログを削除

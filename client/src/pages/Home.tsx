@@ -39,6 +39,7 @@ import {
   CheckCircle2,
   Zap,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -294,6 +295,12 @@ export default function Home() {
   const individualHandoverLoadedRef = useRef(false);
   const customersLoadedRef = useRef(false);
 
+  // 全体引き継ぎの初回ロード完了フラグ（空アイテム追加を初回のみに限定）
+  const handoverInitializedRef = useRef(false);
+
+  // タスク自動保存中フラグ（保存完了前にポーリングで上書きされないよう保護）
+  const isSavingTasksRef = useRef(false);
+
   // 入力フォーカス中はポーリングで上書きしないためのフラグ
   const isEditingHandoverRef = useRef(false);
   const isEditingIndividualRef = useRef(false);
@@ -369,22 +376,38 @@ export default function Home() {
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData) {
-      tasksLoadedRef.current = false; // 読み込み開始
-      setTasks(prev => {
-        return BASE_TASKS.map(t => {
-          const dbState = taskStatesData.find(s => s.taskId === t.id);
-          const existing = prev.find(p => p.id === t.id);
-          return {
-            ...t,
-            planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
-            actual: existing?.actual ?? "",
-            done: dbState?.done ?? false,
-            help: dbState?.help ?? false,
-          };
+      if (!tasksLoadedRef.current) {
+        // 初回ロード: done/helpをDBから設定し、フラグを立てる
+        setTasks(prev => {
+          return BASE_TASKS.map(t => {
+            const dbState = taskStatesData.find(s => s.taskId === t.id);
+            const existing = prev.find(p => p.id === t.id);
+            return {
+              ...t,
+              planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
+              actual: existing?.actual ?? "",
+              done: dbState?.done ?? false,
+              help: dbState?.help ?? false,
+            };
+          });
         });
-      });
-      // 次のレンダリング後にフラグを立てる
-      setTimeout(() => { tasksLoadedRef.current = true; }, 0);
+        setTimeout(() => { tasksLoadedRef.current = true; }, 0);
+      } else {
+        // ポーリング更新: 自動保存タイマーが動作中でなければDBの値を反映
+        if (!isSavingTasksRef.current) {
+          setTasks(prev => {
+            return prev.map(t => {
+              const dbState = taskStatesData.find(s => s.taskId === t.id);
+              if (!dbState) return t;
+              return {
+                ...t,
+                done: dbState.done ?? t.done,
+                help: dbState.help ?? t.help,
+              };
+            });
+          });
+        }
+      }
     }
   }, [taskStatesData]);
 
@@ -416,9 +439,11 @@ export default function Home() {
           checked: h.checkedMembers as string[],
           noConfirmationRequired: h.noConfirmationRequired ?? false,
         })));
-      } else {
-        // No data for this date - initialize with empty item
+        handoverInitializedRef.current = true;
+      } else if (!handoverInitializedRef.current) {
+        // DBにデータがない場合は初回のみ空アイテムを追加（ポーリングのたびに追加しない）
         setHandoverItems([newHandoverItem()]);
+        handoverInitializedRef.current = true;
       }
       setTimeout(() => { handoverLoadedRef.current = true; }, 0);
     }
@@ -500,6 +525,7 @@ export default function Home() {
     tasksLoadedRef.current = false;
     storeCheckLoadedRef.current = false;
     handoverLoadedRef.current = false;
+    handoverInitializedRef.current = false; // 日付変更時は初期化フラグもリセット
     individualHandoverLoadedRef.current = false;
     customersLoadedRef.current = false;
     setTasks(makeInitialTasks());
@@ -517,6 +543,7 @@ export default function Home() {
   useEffect(() => {
     if (!tasksLoadedRef.current) return; // DB読み込み中は保存しない
     if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current);
+    isSavingTasksRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     taskSaveTimerRef.current = setTimeout(async () => {
       try {
         await bulkUpsertTaskStates.mutateAsync(
@@ -527,6 +554,8 @@ export default function Home() {
       } catch (e) {
         console.error("Task save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+      } finally {
+        isSavingTasksRef.current = false; // 保存完了後にフラグを解除
       }
     }, 800);
     return () => { if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current); };
@@ -665,7 +694,6 @@ export default function Home() {
   };
 
   const handleDeleteCustomer = async (id: string) => {
-    if (!confirm("この顧客引き継ぎを削除しますか？")) return;
     setCustomers(prev => prev.filter(c => c.id !== id));
     try {
       await deleteCustomer.mutateAsync({ id });
@@ -686,7 +714,11 @@ export default function Home() {
   };
 
   const handleDeleteHandoverItem = async (id: string) => {
-    setHandoverItems(prev => prev.filter(item => item.id !== id));
+    // 削除後にアイテムが0件になる場合は空アイテムを追加
+    setHandoverItems(prev => {
+      const remaining = prev.filter(item => item.id !== id);
+      return remaining.length > 0 ? remaining : [newHandoverItem()];
+    });
     try {
       await deleteHandover.mutateAsync({ id });
     } catch (e) {
@@ -732,7 +764,6 @@ export default function Home() {
   };
 
   const handleDeleteIndividualHandover = async (id: string) => {
-    if (!confirm("この個別引き継ぎを削除しますか？")) return;
     setIndividualHandovers(prev => prev.filter(r => r.id !== id));
     try {
       await deleteIndividualHandover.mutateAsync({ id });
@@ -1130,10 +1161,10 @@ export default function Home() {
                   {/* 削除ボタン（常に表示） */}
                   <button
                     onClick={() => handleDeleteHandoverItem(item.id)}
-                    className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
+                    className="ml-auto p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                     title="このメモを削除"
                   >
-                    ✕
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
@@ -1265,9 +1296,11 @@ export default function Home() {
                     </select>
                     <button
                       onClick={() => handleDeleteIndividualHandover(record.id)}
-                      className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors px-1"
+                      className="ml-auto p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                       title="この引き継ぎを削除"
-                    >✕</button>
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                   {/* 引き継ぎ項目一覧 */}
                   <div className="space-y-2">
@@ -1333,9 +1366,11 @@ export default function Home() {
                         {record.tasks.length > 1 && (
                           <button
                             onClick={() => deleteIndividualTask(record.id, task.id)}
-                            className="mt-1 text-xs text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                            className="mt-1 p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
                             title="この項目を削除"
-                          >✕</button>
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     ))}
@@ -1427,9 +1462,11 @@ export default function Home() {
                     </select>
                     <button
                       onClick={() => handleDeleteCustomer(c.id)}
-                      className="text-xs text-gray-300 hover:text-red-400 transition-colors px-1 ml-auto"
+                      className="p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors ml-auto"
                       title="削除"
-                    >✕</button>
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                   {/* 行2: やりとり + メモ */}
                   <div className="flex items-start gap-2 flex-wrap">
