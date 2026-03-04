@@ -1,0 +1,130 @@
+{
+  "query": "SELECT dateKey, author, content, checkedMembers FROM handover_items WHERE content = '' OR content IS NULL ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute SELECT dateKey, author, content, checkedMembers FROM handover_items WHERE content = '' OR content IS NULL ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content": "",
+      "checkedMembers": "[]"
+    }
+  ],
+  "messages": [],
+  "stdout": "dateKey\tauthor\tcontent\tcheckedMembers\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n2026-03-04\t\t\t[]\n",
+  "stderr": "",
+  "execution_time_ms": 1621
+}

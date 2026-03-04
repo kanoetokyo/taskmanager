@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   customerHandovers,
@@ -80,7 +80,21 @@ const handoverRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(handoverItems).where(eq(handoverItems.dateKey, input.dateKey));
+      // 指定日のアイテム + 前日以前の未完了アイテム（content非空）を返す
+      // これにより翌日以降も未完了の引き継ぎが表示される
+      const results = await db
+        .select()
+        .from(handoverItems)
+        .where(
+          and(
+            ne(handoverItems.content, ""),
+            or(
+              eq(handoverItems.dateKey, input.dateKey),
+              lt(handoverItems.dateKey, input.dateKey)
+            )
+          )
+        );
+      return results;
     }),
 
   upsert: publicProcedure
@@ -95,6 +109,12 @@ const handoverRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
+      // contentが空のアイテムはDBに保存しない（空欄多表示バグ防止）
+      if (input.content.trim() === "") {
+        // 既存レコードがあれば削除（空にした場合のクリーンアップ）
+        await db.delete(handoverItems).where(eq(handoverItems.id, input.id));
+        return;
+      }
       await db
         .insert(handoverItems)
         .values(input)

@@ -467,6 +467,7 @@ export default function Home() {
             text: h.content,
             checked: h.checkedMembers as string[],
             noConfirmationRequired: h.noConfirmationRequired ?? false,
+            inherited: h.dateKey !== currentDateKey, // 前日以前のデータは引き継ぎバッジを表示
           })));
           handoverInitializedRef.current = true;
         } else if (!handoverInitializedRef.current) {
@@ -484,6 +485,7 @@ export default function Home() {
             text: h.content,
             checked: h.checkedMembers as string[],
             noConfirmationRequired: h.noConfirmationRequired ?? false,
+            inherited: h.dateKey !== currentDateKey, // 前日以前のデータは引き継ぎバッジを表示
           })));
         }
       }
@@ -2052,8 +2054,8 @@ export default function Home() {
                           }}
                           placeholder="備考を入力…"
                           rows={1}
-                          className="w-full text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 placeholder-gray-300 resize-none overflow-hidden"
-                          style={{ minHeight: "30px" }}
+                          className="w-full text-xs text-gray-400 bg-transparent border-0 border-b border-dashed border-gray-300 px-0 py-1 focus:outline-none focus:border-gray-400 placeholder-gray-300 resize-none overflow-hidden"
+                          style={{ minHeight: "24px" }}
                         />
                       </div>
                     )}

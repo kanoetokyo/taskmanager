@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM handover_items WHERE content = '' OR content IS NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute DELETE FROM handover_items WHERE content = '' OR content IS NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1638
+}

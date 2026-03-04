@@ -1,0 +1,150 @@
+{
+  "query": "SELECT id, dateKey, author, SUBSTR(content, 1, 30) as content_preview, checkedMembers FROM handover_items ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute SELECT id, dateKey, author, SUBSTR(content, 1, 30) as content_preview, checkedMembers FROM handover_items ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "fb2afb83-27b2-4ce3-86f5-1d5029a08083",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "1dc9b50f-7390-4d53-9981-fecf5bd27b6b",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "7938d11c-db4f-4523-b86b-dc302b031fbf",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "aaa465ba-12e2-4127-89ea-c8f81a7a473e",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "cfe3df43-bb00-4637-9385-8c38f9994828",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "34f13928-10a7-472b-9149-4893b549c01d",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "403c99a7-47c2-41ee-9432-480051bc1ae1",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "cb131af4-2f34-467b-9826-af9a15ce3d17",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "2a8d766a-2db6-4496-ad73-249214505fd7",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "be212f30-6c86-41c8-aa40-6c3e810fbd22",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "e205cc5e-4f4a-43ce-b7c0-de5e90b1d11c",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "5bb710dd-abf7-4b9e-805e-0024146c64c8",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "a87b4a87-9068-418f-b4c2-f7c00115e7c0",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "912b0d8a-2cb0-4ae2-86fd-51d98b80242e",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "0d022a66-0e8f-4bc6-b0f0-168524dd06ba",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "5b89357e-7aa2-4581-a9fc-84708f14e203",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "c3683035-ca24-4663-971e-86031b845a2e",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "4218f67b-220c-445a-b574-b6d88663c55e",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "239612db-0ab6-485f-aa62-c757831081d1",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    },
+    {
+      "id": "ca74cf0e-9801-4312-956d-02d05471f9f4",
+      "dateKey": "2026-03-04",
+      "author": "",
+      "content_preview": "",
+      "checkedMembers": "[]"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tdateKey\tauthor\tcontent_preview\tcheckedMembers\nfb2afb83-27b2-4ce3-86f5-1d5029a08083\t2026-03-04\t\t\t[]\n1dc9b50f-7390-4d53-9981-fecf5bd27b6b\t2026-03-04\t\t\t[]\n7938d11c-db4f-4523-b86b-dc302b031fbf\t2026-03-04\t\t\t[]\naaa465ba-12e2-4127-89ea-c8f81a7a473e\t2026-03-04\t\t\t[]\ncfe3df43-bb00-4637-9385-8c38f9994828\t2026-03-04\t\t\t[]\n34f13928-10a7-472b-9149-4893b549c01d\t2026-03-04\t\t\t[]\n403c99a7-47c2-41ee-9432-480051bc1ae1\t2026-03-04\t\t\t[]\ncb131af4-2f34-467b-9826-af9a15ce3d17\t2026-03-04\t\t\t[]\n2a8d766a-2db6-4496-ad73-249214505fd7\t2026-03-04\t\t\t[]\nbe212f30-6c86-41c8-aa40-6c3e810fbd22\t2026-03-04\t\t\t[]\ne205cc5e-4f4a-43ce-b7c0-de5e90b1d11c\t2026-03-04\t\t\t[]\n5bb710dd-abf7-4b9e-805e-0024146c64c8\t2026-03-04\t\t\t[]\na87b4a87-9068-418f-b4c2-f7c00115e7c0\t2026-03-04\t\t\t[]\n912b0d8a-2cb0-4ae2-86fd-51d98b80242e\t2026-03-04\t\t\t[]\n0d022a66-0e8f-4bc6-b0f0-168524dd06ba\t2026-03-04\t\t\t[]\n5b89357e-7aa2-4581-a9fc-84708f14e203\t2026-03-04\t\t\t[]\nc3683035-ca24-4663-971e-86031b845a2e\t2026-03-04\t\t\t[]\n4218f67b-220c-445a-b574-b6d88663c55e\t2026-03-04\t\t\t[]\n239612db-0ab6-485f-aa62-c757831081d1\t2026-03-04\t\t\t[]\nca74cf0e-9801-4312-956d-02d05471f9f4\t2026-03-04\t\t\t[]\n",
+  "stderr": "",
+  "execution_time_ms": 1629
+}
