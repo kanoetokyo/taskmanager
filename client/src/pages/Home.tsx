@@ -123,17 +123,18 @@ const BASE_TASKS: TaskDef[] = [
 
   // 清掃管理
   { id: "clean-a", category: "アットイン清掃管理システム確認", label: "翌日入居で清掃が漏れていないかの確認", icon: <AlertCircle className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "12:00まで" },
-  { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業",                                         icon: <Eraser className={iconSize} /> },
+  { id: "clean-b", category: "アットイン清掃管理システム確認", label: "赤くなっている清掃カードの消し込み作業（4/15まで確認する。4/15まではカレンダーへ入力、4/16以降は消し込みだけでOK）", icon: <Eraser className={iconSize} /> },
 
   // 調整および書類作成
-  { id: "doc-a", category: "調整および書類作成", label: "STORESの空き枠のシフト調整",         icon: <SlidersHorizontal className={iconSize} /> },
+  { id: "doc-a", category: "調整および書類作成", label: "STORESの空き枠のシフト調整（10日先まで確認すること）", icon: <SlidersHorizontal className={iconSize} /> },
   { id: "doc-b", category: "調整および書類作成", label: "翌日の見積もり作成および印刷",     icon: <FileText className={iconSize} /> },
 
-  // 大森事務でのTODO
-  { id: "omori-a", category: "大森事務でのTODO", label: "前日の売上日報の確認",                 icon: <BarChart2 className={iconSize} />, defaultPlanned: "当日現場責任者" },
-  { id: "omori-b", category: "大森事務でのTODO", label: "前日のインセンティブ報告の内容確認",         icon: <ClipboardList className={iconSize} />, defaultPlanned: "当日現場責任者" },
-  { id: "omori-c", category: "大森事務でのTODO", label: "1週間先までのグレーセルの確認", icon: <SlidersHorizontal className={iconSize} />, defaultPlanned: "当日現場責任者" },
-  { id: "omori-d", category: "大森事務でのTODO", label: "現金確認",                         icon: <CreditCard className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  // 大森TODO
+  { id: "omori-a", category: "大森TODO", label: "前日の売上日報の確認",                 icon: <BarChart2 className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-b", category: "大森TODO", label: "前日のインセンティブ報告の内容確認",         icon: <ClipboardList className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-c", category: "大森TODO", label: "1週間先までのグレーセルの確認", icon: <SlidersHorizontal className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-d", category: "大森TODO", label: "現金確認",                         icon: <CreditCard className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-e", category: "大森TODO", label: "アットインスラックの返信もれ確認", icon: <MessageCircle className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "17:00まで" },
 ];
 
 // ─── Category Config ──────────────────────────────────────────────────────────
@@ -151,7 +152,7 @@ const CAT_CONFIG: Record<string, CatConfig> = {
   "LINEグループ管理":               { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <MessageCircle className="w-4 h-4" /> },
   "アットイン清掃管理システム確認": { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <ClipboardList className="w-4 h-4" /> },
   "調整および書類作成":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <FileText className="w-4 h-4" /> },
-  "大森事務でのTODO":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <ClipboardList className="w-4 h-4" /> },
+  "大森TODO":             { border: "border-slate-300", badge: "bg-slate-100 text-slate-600", icon: <ClipboardList className="w-4 h-4" /> },
 };
 
 // ─── Icon color per task type ─────────────────────────────────────────────────
@@ -1758,7 +1759,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400 shrink-0">{cfg.icon}</span>
                   <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">{cat}</span>
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{catTasks.length} TASKS</span>
+
                 </div>
                 <div className="flex items-center gap-2">
                   {catDone < catTasks.length && (
@@ -1784,8 +1785,8 @@ export default function Home() {
               {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式を先頭に表示 */}
               {cat === "各種システムのチェック" && (
                 <div className="divide-y divide-gray-50">
-                  {/* 公式LINE */}
-                  <div className="px-4 py-3 space-y-2">
+                  {/* 公式LINE: 全店舗完了時は非表示 */}
+                  {storeCheck.line.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
@@ -1830,12 +1831,12 @@ export default function Home() {
                         }
                       </span>
                     </div>
-                  </div>
-                  {/* POS */}
-                  <div className="px-4 py-3 space-y-2">
+                  </div>}
+                  {/* POS: 全店舗完了時は非表示 */}
+                  {storeCheck.pos.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
-                      <span className="text-sm text-gray-700 font-medium flex-1">POSのチェック</span>
+                      <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5 pl-6">
                       {STORE_NAMES.map(store => {
@@ -1876,9 +1877,9 @@ export default function Home() {
                         }
                       </span>
                     </div>
-                  </div>
-                  {/* ラクーン */}
-                  <div className="px-4 py-3 space-y-2">
+                  </div>}
+                  {/* ラクーン: 全店舗完了時は非表示 */}
+                  {storeCheck.raccoon.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
@@ -1922,10 +1923,9 @@ export default function Home() {
                         }
                       </span>
                     </div>
-                  </div>
+                  </div>}
                 </div>
               )}
-
               {/* Task rows */}
               <div className="divide-y divide-gray-50">
                 {hideDone && catTasks.every(t => t.done) && (
@@ -1955,10 +1955,10 @@ export default function Home() {
                     <div className="flex items-center gap-2.5">
                       {/* Task number */}
                       {taskNum !== undefined && (
-                        <span className={`shrink-0 text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full ${
-                          task.done ? "bg-gray-200 text-gray-400" : "bg-blue-100 text-blue-600"
+                        <span className={`shrink-0 text-[11px] tabular-nums ${
+                          task.done ? "text-gray-300" : "text-gray-400"
                         }`}>
-                          {taskNum}
+                          {taskNum}.
                         </span>
                       )}
                       {/* Done checkbox */}
