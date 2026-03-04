@@ -1,4 +1,4 @@
-import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -34,7 +34,9 @@ export const taskStates = mysqlTable("task_states", {
   taskId: varchar("taskId", { length: 128 }).notNull(),
   done: boolean("done").default(false).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(table.dateKey, table.taskId),
+}));
 export type TaskState = typeof taskStates.$inferSelect;
 export type InsertTaskState = typeof taskStates.$inferInsert;
 
@@ -45,7 +47,9 @@ export const storeCheckStates = mysqlTable("store_check_states", {
   checkType: varchar("checkType", { length: 32 }).notNull(),
   checkedStores: json("checkedStores").notNull().$type<string[]>().default([]),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  dateKeyCheckTypeIdx: uniqueIndex("store_check_states_date_type_unique").on(table.dateKey, table.checkType),
+}));
 export type StoreCheckState = typeof storeCheckStates.$inferSelect;
 export type InsertStoreCheckState = typeof storeCheckStates.$inferInsert;
 

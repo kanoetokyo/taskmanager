@@ -1,0 +1,2 @@
+ALTER TABLE `store_check_states` ADD CONSTRAINT `store_check_states_date_type_unique` UNIQUE(`dateKey`,`checkType`);--> statement-breakpoint
+ALTER TABLE `task_states` ADD CONSTRAINT `task_states_date_task_unique` UNIQUE(`dateKey`,`taskId`);

@@ -585,10 +585,12 @@ export default function Home() {
   const saveTasksToDb = useCallback((taskList: Task[], dateKey: string) => {
     if (taskSaveTimer.current) clearTimeout(taskSaveTimer.current);
     taskSaveTimer.current = setTimeout(async () => {
+      console.log("[DEBUG] saveTasksToDb firing, dateKey:", dateKey, "tasks:", taskList.length);
       try {
-        await bulkUpsertTaskStatesRef.current.mutateAsync(
+        const result = await bulkUpsertTaskStatesRef.current.mutateAsync(
           taskList.map(t => ({ dateKey, taskId: t.id, done: t.done }))
         );
+        console.log("[DEBUG] saveTasksToDb success:", result);
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
@@ -601,35 +603,31 @@ export default function Home() {
 
   const addCustomer = () => {
     const newRecord = newCustomerRecord();
-    setCustomers(prev => {
-      const updated = [...prev, newRecord];
-      saveCustomerToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = [...customers, newRecord];
+    setCustomers(updated);
+    saveCustomerToDb(updated, currentDateKey);
   };
 
   const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
-    setCustomers(prev => {
-      const updated = prev.map(c => {
-        if (c.id !== id) return c;
-        const updatedRecord = { ...c, [field]: value };
-        // 完了に変更した場合は1秒後に自動削除
-        if (field === "status" && value === "完了") {
-          setTimeout(async () => {
-            setCustomers(p => p.filter(r => r.id !== id));
-            try {
-              await deleteCustomer.mutateAsync({ id });
-            } catch (e) {
-              console.error("Customer delete failed:", e);
-            }
-            toast.success("顧客引き継ぎを完了として削除しました");
-          }, 800);
-        }
-        return updatedRecord;
-      });
-      saveCustomerToDb(updated, currentDateKey);
-      return updated;
+    const updated = customers.map(c => {
+      if (c.id !== id) return c;
+      const updatedRecord = { ...c, [field]: value };
+      // 完了に変更した場合は1秒後に自動削除
+      if (field === "status" && value === "完了") {
+        setTimeout(async () => {
+          setCustomers(p => p.filter(r => r.id !== id));
+          try {
+            await deleteCustomer.mutateAsync({ id });
+          } catch (e) {
+            console.error("Customer delete failed:", e);
+          }
+          toast.success("顧客引き継ぎを完了として削除しました");
+        }, 800);
+      }
+      return updatedRecord;
     });
+    setCustomers(updated);
+    saveCustomerToDb(updated, currentDateKey);
   };
 
   const handleDeleteCustomer = async (id: string) => {
@@ -646,19 +644,15 @@ export default function Home() {
 
   const addHandoverItem = () => {
     const newItem = newHandoverItem();
-    setHandoverItems(prev => {
-      const updated = [...prev, newItem];
-      saveHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = [...handoverItems, newItem];
+    setHandoverItems(updated);
+    saveHandoverToDb(updated, currentDateKey);
   };
 
   const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string | boolean) => {
-    setHandoverItems(prev => {
-      const updated = prev.map(item => item.id === id ? { ...item, [field]: value } : item);
-      saveHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = handoverItems.map(item => item.id === id ? { ...item, [field]: value } : item);
+    setHandoverItems(updated);
+    saveHandoverToDb(updated, currentDateKey);
   };
 
   const handleDeleteHandoverItem = async (id: string) => {
@@ -671,45 +665,41 @@ export default function Home() {
   };
 
   const toggleHandoverCheck = (itemId: string, member: string) => {
-    setHandoverItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== itemId) return item;
-        const alreadyChecked = item.checked.includes(member);
-        const newChecked = alreadyChecked
-          ? item.checked.filter((m: string) => m !== member)
-          : [...item.checked, member];
-        // 全員チェック完了時はそのアイテムを削除
-        if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
-          setTimeout(async () => {
-            setHandoverItems(p => {
-              const remaining = p.filter(i => i.id !== itemId);
-              if (remaining.length === 0) return [newHandoverItem()];
-              return remaining;
-            });
-            try {
-              await deleteHandover.mutateAsync({ id: itemId });
-            } catch (e) {
-              console.error("Handover delete failed:", e);
-            }
-            toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
-          }, 600);
-        }
-        return { ...item, checked: newChecked };
-      });
-      saveHandoverToDb(updated, currentDateKey);
-      return updated;
+    const updated = handoverItems.map(item => {
+      if (item.id !== itemId) return item;
+      const alreadyChecked = item.checked.includes(member);
+      const newChecked = alreadyChecked
+        ? item.checked.filter((m: string) => m !== member)
+        : [...item.checked, member];
+      // 全員チェック完了時はそのアイテムを削除
+      if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
+        setTimeout(async () => {
+          setHandoverItems(p => {
+            const remaining = p.filter(i => i.id !== itemId);
+            if (remaining.length === 0) return [newHandoverItem()];
+            return remaining;
+          });
+          try {
+            await deleteHandover.mutateAsync({ id: itemId });
+          } catch (e) {
+            console.error("Handover delete failed:", e);
+          }
+          toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
+        }, 600);
+      }
+      return { ...item, checked: newChecked };
     });
+    setHandoverItems(updated);
+    saveHandoverToDb(updated, currentDateKey);
   };
 
   // ─── Individual Handover Handlers ─────────────────────────────────────────
 
   const addIndividualHandover = () => {
     const newRecord = newIndividualHandoverRecord();
-    setIndividualHandovers(prev => {
-      const updated = [...prev, newRecord];
-      saveIndividualHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = [...individualHandovers, newRecord];
+    setIndividualHandovers(updated);
+    saveIndividualHandoverToDb(updated, currentDateKey);
   };
 
   const handleDeleteIndividualHandover = async (id: string) => {
@@ -723,68 +713,58 @@ export default function Home() {
   };
 
   const updateIndividualHandover = (id: string, field: keyof IndividualHandoverRecord, value: string) => {
-    setIndividualHandovers(prev => {
-      const updated = prev.map(r => r.id === id ? { ...r, [field]: value } : r);
-      saveIndividualHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = individualHandovers.map(r => r.id === id ? { ...r, [field]: value } : r);
+    setIndividualHandovers(updated);
+    saveIndividualHandoverToDb(updated, currentDateKey);
   };
 
   const addIndividualTask = (recordId: string) => {
-    setIndividualHandovers(prev => {
-      const updated = prev.map(r =>
-        r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
-      );
-      saveIndividualHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = individualHandovers.map(r =>
+      r.id === recordId ? { ...r, tasks: [...r.tasks, newIndividualTask()] } : r
+    );
+    setIndividualHandovers(updated);
+    saveIndividualHandoverToDb(updated, currentDateKey);
   };
 
   const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
-    setIndividualHandovers(prev => {
-      const updated = prev.map(r =>
-        r.id === recordId
-          ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
-          : r
-      );
-      // 全項目完了時に1秒後自動削除
-      if (field === "done" && value === true) {
-        const record = updated.find(r => r.id === recordId);
-        if (record && record.tasks.every(t => t.done)) {
-          setTimeout(async () => {
-            setIndividualHandovers(p => p.filter(r => r.id !== recordId));
-            try {
-              await deleteIndividualHandover.mutateAsync({ id: recordId });
-            } catch (e) {
-              console.error("Individual handover delete failed:", e);
-            }
-            toast.success("✅ 個別引き継ぎを全項目完了しました");
-          }, 800);
-        }
+    const updated = individualHandovers.map(r =>
+      r.id === recordId
+        ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
+        : r
+    );
+    // 全項目完了時に1秒後自動削除
+    if (field === "done" && value === true) {
+      const record = updated.find(r => r.id === recordId);
+      if (record && record.tasks.every(t => t.done)) {
+        setTimeout(async () => {
+          setIndividualHandovers(p => p.filter(r => r.id !== recordId));
+          try {
+            await deleteIndividualHandover.mutateAsync({ id: recordId });
+          } catch (e) {
+            console.error("Individual handover delete failed:", e);
+          }
+          toast.success("✅ 個別引き継ぎを全項目完了しました");
+        }, 800);
       }
-      saveIndividualHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    }
+    setIndividualHandovers(updated);
+    saveIndividualHandoverToDb(updated, currentDateKey);
   };
 
   const deleteIndividualTask = (recordId: string, taskId: string) => {
-    setIndividualHandovers(prev => {
-      const updated = prev.map(r =>
-        r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
-      );
-      saveIndividualHandoverToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = individualHandovers.map(r =>
+      r.id === recordId ? { ...r, tasks: r.tasks.filter(t => t.id !== taskId) } : r
+    );
+    setIndividualHandovers(updated);
+    saveIndividualHandoverToDb(updated, currentDateKey);
   };
 
   // ─── Task Handlers ─────────────────────────────────────────────────────────
 
   const updateTask = (id: string, field: "planned" | "actual", value: string) => {
-    setTasks(prev => {
-      const updated = prev.map(t => t.id === id ? { ...t, [field]: value } : t);
-      saveTasksToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = tasks.map(t => t.id === id ? { ...t, [field]: value } : t);
+    setTasks(updated);
+    saveTasksToDb(updated, currentDateKey);
   };
 
   const toggleDone = (id: string) => {
@@ -793,42 +773,34 @@ export default function Home() {
       // 完了にする場合はアニメーションを先に起動
       setCompletingTasks(prev => new Set(prev).add(id));
       setTimeout(() => {
-        setTasks(prev => {
-          setUndoHistory(h => [...h.slice(-9), prev]);
-          const updated = prev.map(t => t.id === id ? { ...t, done: true } : t);
-          saveTasksToDb(updated, currentDateKey);
-          return updated;
-        });
+        const updated = tasks.map(t => t.id === id ? { ...t, done: true } : t);
+        setUndoHistory(h => [...h.slice(-9), tasks]);
+        setTasks(updated);
+        saveTasksToDb(updated, currentDateKey);
         setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
       }, 400);
     } else {
       // 完了解除は即座に戻す
-      setTasks(prev => {
-        setUndoHistory(h => [...h.slice(-9), prev]);
-        const updated = prev.map(t => t.id === id ? { ...t, done: false } : t);
-        saveTasksToDb(updated, currentDateKey);
-        return updated;
-      });
+      const updated = tasks.map(t => t.id === id ? { ...t, done: false } : t);
+      setUndoHistory(h => [...h.slice(-9), tasks]);
+      setTasks(updated);
+      saveTasksToDb(updated, currentDateKey);
     }
   };
 
   const undoLast = () => {
-    setUndoHistory(h => {
-      if (h.length === 0) return h;
-      const prev = h[h.length - 1];
-      setTasks(prev);
-      saveTasksToDb(prev, currentDateKey);
-      toast.success("元に戻しました");
-      return h.slice(0, -1);
-    });
+    if (undoHistory.length === 0) return;
+    const prev = undoHistory[undoHistory.length - 1];
+    setTasks(prev);
+    saveTasksToDb(prev, currentDateKey);
+    setUndoHistory(h => h.slice(0, -1));
+    toast.success("元に戻しました");
   };
 
   const toggleHelp = (id: string) => {
-    setTasks(prev => {
-      const updated = prev.map(t => t.id === id ? { ...t, help: !t.help } : t);
-      saveTasksToDb(updated, currentDateKey);
-      return updated;
-    });
+    const updated = tasks.map(t => t.id === id ? { ...t, help: !t.help } : t);
+    setTasks(updated);
+    saveTasksToDb(updated, currentDateKey);
   };
 
   const markAllPrevDone = async () => {

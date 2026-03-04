@@ -34,3 +34,8 @@
 ## 自動保存バグ修正
 
 - [x] useCallbackの依存配列を修正（useRefでmutationの最新参照を保持するstale closure対策）
+
+## 同期バグ調査・修正
+
+- [x] MISOCAと他セクションの実装の違いを調査して原因を特定
+- [x] 同期が機能しない全セクションを修正（stale closure：setXxx(prev =>)内でのsave呼び出しをsetter外に移動）
