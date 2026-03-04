@@ -501,6 +501,7 @@ export default function Home() {
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Store check save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 500);
   }, []);
@@ -525,6 +526,7 @@ export default function Home() {
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Handover save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
   }, []);
@@ -550,6 +552,7 @@ export default function Home() {
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Individual handover save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
   }, []);
@@ -575,6 +578,7 @@ export default function Home() {
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Customer save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
   }, []);
@@ -585,16 +589,15 @@ export default function Home() {
   const saveTasksToDb = useCallback((taskList: Task[], dateKey: string) => {
     if (taskSaveTimer.current) clearTimeout(taskSaveTimer.current);
     taskSaveTimer.current = setTimeout(async () => {
-      console.log("[DEBUG] saveTasksToDb firing, dateKey:", dateKey, "tasks:", taskList.length);
       try {
-        const result = await bulkUpsertTaskStatesRef.current.mutateAsync(
+        await bulkUpsertTaskStatesRef.current.mutateAsync(
           taskList.map(t => ({ dateKey, taskId: t.id, done: t.done }))
         );
-        console.log("[DEBUG] saveTasksToDb success:", result);
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Task save failed:", e);
+        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
       }
     }, 800);
   }, []);
