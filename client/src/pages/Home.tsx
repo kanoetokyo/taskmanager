@@ -315,50 +315,50 @@ export default function Home() {
   // Task states for current date
   const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 10000 } // 10秒ごとにポーリング
+    { refetchInterval: 30000 } // 30秒ごとにポーリング
   );
 
   // Store check for current date
   const { data: storeCheckData, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // Handover items for current date
   const { data: handoverData, refetch: refetchHandover } = trpc.task.handover.getByDate.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // Individual handovers (active = not completed)
   const { data: individualHandoverData, refetch: refetchIndividualHandover } = trpc.task.individualHandover.getActive.useQuery(
     { dateKey: currentDateKey },
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // Customer handovers (active)
   const { data: customerData, refetch: refetchCustomer } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // MISOCA status
   const { data: misocaData, refetch: refetchMisoca } = trpc.task.misoca.get.useQuery(
     undefined,
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // Gray cell status
   const { data: grayCellData, refetch: refetchGrayCell } = trpc.task.grayCell.get.useQuery(
     undefined,
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // Task states for previous day (for undone alert)
   const prevDayKey = (() => { const d = keyToDate(currentDateKey); d.setDate(d.getDate() - 1); return dateToKey(d); })();
   const { data: prevDayTaskStatesData } = trpc.task.taskStates.getByDate.useQuery(
     { dateKey: prevDayKey },
-    { refetchInterval: 10000 }
+    { refetchInterval: 30000 }
   );
 
   // ─── tRPC Mutations ───────────────────────────────────────────────────────
@@ -1638,7 +1638,14 @@ export default function Home() {
           );
         })()}
 
-        {categories.map(cat => {
+        {(() => {
+          // 全タスクの通し番号マップ（BASE_TASKSの順序に基づく）
+          const taskNumberMap = new Map<string, number>();
+          let globalIdx = 1;
+          for (const t of BASE_TASKS) {
+            taskNumberMap.set(t.id, globalIdx++);
+          }
+          return categories.map(cat => {
           const catTasks  = tasks.filter(t => t.category === cat);
           const catDone   = catTasks.filter(t => t.done).length;
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
@@ -1709,6 +1716,21 @@ export default function Home() {
                           </button>
                         );
                       })}
+                      {storeCheck.line.length < STORE_NAMES.length ? (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, line: [...STORE_NAMES] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white"
+                        >
+                          一括完了
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
+                        >
+                          リセット
+                        </button>
+                      )}
                       <span className="self-center text-xs text-gray-400 ml-1">
                         {storeCheck.line.length === STORE_NAMES.length
                           ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
@@ -1740,6 +1762,21 @@ export default function Home() {
                           </button>
                         );
                       })}
+                      {storeCheck.pos.length < STORE_NAMES.length ? (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white"
+                        >
+                          一括完了
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
+                        >
+                          リセット
+                        </button>
+                      )}
                       <span className="self-center text-xs text-gray-400 ml-1">
                         {storeCheck.pos.length === STORE_NAMES.length
                           ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
@@ -1771,6 +1808,21 @@ export default function Home() {
                           </button>
                         );
                       })}
+                      {storeCheck.raccoon.length < STORE_NAMES.length ? (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [...STORE_NAMES] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-500 hover:border-indigo-500 hover:text-white"
+                        >
+                          一括完了
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))}
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
+                        >
+                          リセット
+                        </button>
+                      )}
                       <span className="self-center text-xs text-gray-400 ml-1">
                         {storeCheck.raccoon.length === STORE_NAMES.length
                           ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
@@ -1789,7 +1841,9 @@ export default function Home() {
                     <span>✓</span><span>このカテゴリはすべて完了しています</span>
                   </div>
                 )}
-                {catTasks.filter(task => !(hideDone && task.done)).map(task => (
+                {catTasks.filter(task => !(hideDone && task.done)).map(task => {
+                  const taskNum = taskNumberMap.get(task.id);
+                  return (
                   <div
                     key={task.id}
                     className={`px-4 py-3 transition-all duration-300 ${
@@ -1807,6 +1861,14 @@ export default function Home() {
                   >
                     {/* Row 1: checkbox + HELP + icon + label */}
                     <div className="flex items-center gap-2.5">
+                      {/* Task number */}
+                      {taskNum !== undefined && (
+                        <span className={`shrink-0 text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full ${
+                          task.done ? "bg-gray-200 text-gray-400" : "bg-blue-100 text-blue-600"
+                        }`}>
+                          {taskNum}
+                        </span>
+                      )}
                       {/* Done checkbox */}
                       <input
                         type="checkbox"
@@ -1885,11 +1947,13 @@ export default function Home() {
                       </select>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           );
-        })}
+        });
+        })()}
 
         {/* フッター操作パネル */}
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
