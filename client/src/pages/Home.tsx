@@ -294,6 +294,11 @@ export default function Home() {
   const individualHandoverLoadedRef = useRef(false);
   const customersLoadedRef = useRef(false);
 
+  // 入力フォーカス中はポーリングで上書きしないためのフラグ
+  const isEditingHandoverRef = useRef(false);
+  const isEditingIndividualRef = useRef(false);
+  const isEditingCustomerRef = useRef(false);
+
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
   // Task states for current date
@@ -401,6 +406,7 @@ export default function Home() {
   // Load handover items from DB
   useEffect(() => {
     if (handoverData !== undefined) {
+      if (isEditingHandoverRef.current) return; // 入力中は上書きしない
       handoverLoadedRef.current = false;
       if (handoverData.length > 0) {
         setHandoverItems(handoverData.map(h => ({
@@ -421,6 +427,7 @@ export default function Home() {
   // Load individual handovers from DB
   useEffect(() => {
     if (individualHandoverData !== undefined) {
+      if (isEditingIndividualRef.current) return; // 入力中は上書きしない
       individualHandoverLoadedRef.current = false;
       const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
         id: r.id,
@@ -442,6 +449,7 @@ export default function Home() {
   // Load customer handovers from DB
   useEffect(() => {
     if (customerData !== undefined) {
+      if (isEditingCustomerRef.current) return; // 入力中は上書きしない
       customersLoadedRef.current = false;
       const records: CustomerRecord[] = customerData.map(c => ({
         id: c.id,
@@ -1138,9 +1146,11 @@ export default function Home() {
                     e.target.style.height = e.target.scrollHeight + "px";
                   }}
                   onFocus={e => {
+                    isEditingHandoverRef.current = true;
                     e.target.style.height = "auto";
                     e.target.style.height = e.target.scrollHeight + "px";
                   }}
+                  onBlur={() => { isEditingHandoverRef.current = false; }}
                   placeholder="引き継ぎ事項を入力してください…"
                   rows={2}
                   className="w-full text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-yellow-400 placeholder-gray-300"
@@ -1282,9 +1292,11 @@ export default function Home() {
                               e.target.style.height = e.target.scrollHeight + "px";
                             }}
                             onFocus={e => {
+                              isEditingIndividualRef.current = true;
                               e.target.style.height = "auto";
                               e.target.style.height = e.target.scrollHeight + "px";
                             }}
+                            onBlur={() => { isEditingIndividualRef.current = false; }}
                             placeholder={`引き継ぎ内容 ${tIdx + 1}を入力…`}
                             rows={1}
                             className={`w-full text-sm border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none overflow-hidden placeholder-gray-300 ${
@@ -1399,6 +1411,8 @@ export default function Home() {
                       type="text"
                       value={c.name}
                       onChange={e => updateCustomer(c.id, "name", e.target.value)}
+                      onFocus={() => { isEditingCustomerRef.current = true; }}
+                      onBlur={() => { isEditingCustomerRef.current = false; }}
                       placeholder="顧客名を入力"
                       className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
                     />
@@ -1437,9 +1451,11 @@ export default function Home() {
                         e.target.style.height = e.target.scrollHeight + "px";
                       }}
                       onFocus={e => {
+                        isEditingCustomerRef.current = true;
                         e.target.style.height = "auto";
                         e.target.style.height = e.target.scrollHeight + "px";
                       }}
+                      onBlur={() => { isEditingCustomerRef.current = false; }}
                       placeholder="メモを入力…"
                       rows={1}
                       className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300 resize-none overflow-hidden"

@@ -82,3 +82,11 @@
 - [x] server/taskRouter.tsにgrayCellルーターを追加（get / upsert）
 - [x] Home.tsxにuseQuery・useMutation・UI（MISOCAと同じ１行レイアウト）を追加
 - [x] テスト５件追加・全36テスト通過確認
+
+## 入力中にデータが消えるバグ修正
+
+- [x] 全体・個別・顧客引き継ぎのuseEffectで入力中にDBデータで上書きされる原因を特定
+- [x] isEditingHandoverRef/isEditingIndividualRef/isEditingCustomerRefを追加
+- [x] textarea/inputのonFocusでtrue、onBlurでfalseにセット
+- [x] useEffect([handoverData/individualHandoverData/customerData])で入力中はスキップ
+- [x] 全36テスト通過確認
