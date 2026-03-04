@@ -1,0 +1,1 @@
+ALTER TABLE `task_states` ADD `help` boolean DEFAULT false NOT NULL;

@@ -33,6 +33,7 @@ export const taskStates = mysqlTable("task_states", {
   dateKey: varchar("dateKey", { length: 10 }).notNull(),
   taskId: varchar("taskId", { length: 128 }).notNull(),
   done: boolean("done").default(false).notNull(),
+  help: boolean("help").default(false).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(table.dateKey, table.taskId),

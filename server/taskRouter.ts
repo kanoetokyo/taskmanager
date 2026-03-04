@@ -24,27 +24,27 @@ const taskStatesRouter = router({
 
   // Upsert a task state
   upsert: publicProcedure
-    .input(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean() }))
+    .input(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       await db
         .insert(taskStates)
-        .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done })
-        .onDuplicateKeyUpdate({ set: { done: input.done } });
+        .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help })
+        .onDuplicateKeyUpdate({ set: { done: input.done, help: input.help } });
     }),
 
   // Bulk upsert task states
   bulkUpsert: publicProcedure
-    .input(z.array(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean() })))
+    .input(z.array(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false) })))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db || input.length === 0) return;
       for (const item of input) {
         await db
           .insert(taskStates)
-          .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done })
-          .onDuplicateKeyUpdate({ set: { done: item.done } });
+          .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help })
+          .onDuplicateKeyUpdate({ set: { done: item.done, help: item.help } });
       }
     }),
 });

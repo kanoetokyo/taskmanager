@@ -56,3 +56,13 @@
 - [x] drizzle/schema.tsのdateKey varchar(8)をvarchar(10)に変更（全5テーブル）
 - [x] pnpm db:push でマイグレーション実行（0005_robust_arclight.sql）
 - [x] 全26テスト通過確認
+
+## HELPフラグ同期バグ修正
+
+- [x] スキーマ・ルーター・フロントエンドでHELPフラグが保存されない原因を調査
+- [x] task_statesテーブルにhelpカラム追加（drizzle/schema.ts）
+- [x] バックエンドAPIのupsert・bulkUpsertにhelpフラグを追加（taskRouter.ts）
+- [x] フロントエンドのDB読み込み時にhelpフラグを反映（dbState?.help）
+- [x] フロントエンドのbulkUpsert送信にhelpフラグを追加（Home.tsx）
+- [x] pnpm db:push でマイグレーション実行（0006_gigantic_reavers.sql）
+- [x] helpフラグのテスト5件追加・全31テスト通過確認

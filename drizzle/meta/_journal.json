@@ -43,6 +43,13 @@
       "when": 1772591611609,
       "tag": "0005_robust_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1772592327752,
+      "tag": "0006_gigantic_reavers",
+      "breakpoints": true
     }
   ]
 }

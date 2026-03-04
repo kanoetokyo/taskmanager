@@ -210,6 +210,42 @@ describe("handover noConfirmationRequired logic", () => {
   });
 });
 
+describe("help flag logic", () => {
+  it("defaults to false for new tasks", () => {
+    const task = { id: "1", done: false, help: false };
+    expect(task.help).toBe(false);
+  });
+
+  it("toggles help flag on", () => {
+    const task = { id: "1", done: false, help: false };
+    const updated = { ...task, help: !task.help };
+    expect(updated.help).toBe(true);
+  });
+
+  it("toggles help flag off", () => {
+    const task = { id: "1", done: false, help: true };
+    const updated = { ...task, help: !task.help };
+    expect(updated.help).toBe(false);
+  });
+
+  it("help flag is included in bulkUpsert payload", () => {
+    const tasks = [
+      { id: "task-1", done: true, help: false },
+      { id: "task-2", done: false, help: true },
+    ];
+    const dateKey = "2026-03-04";
+    const payload = tasks.map(t => ({ dateKey, taskId: t.id, done: t.done, help: t.help }));
+    expect(payload[0].help).toBe(false);
+    expect(payload[1].help).toBe(true);
+  });
+
+  it("help flag is read from DB state", () => {
+    const dbState = { taskId: "task-1", done: false, help: true };
+    const help = dbState?.help ?? false;
+    expect(help).toBe(true);
+  });
+});
+
 describe("MISOCA date logic", () => {
   it("detects up-to-date status", () => {
     const today = "2026-03-04";

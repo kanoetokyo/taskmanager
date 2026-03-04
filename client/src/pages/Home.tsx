@@ -366,7 +366,7 @@ export default function Home() {
             planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
             actual: existing?.actual ?? "",
             done: dbState?.done ?? false,
-            help: existing?.help ?? false,
+            help: dbState?.help ?? false,
           };
         });
       });
@@ -497,7 +497,7 @@ export default function Home() {
     taskSaveTimerRef.current = setTimeout(async () => {
       try {
         await bulkUpsertTaskStates.mutateAsync(
-          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done }))
+          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done, help: t.help }))
         );
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
