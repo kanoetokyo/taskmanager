@@ -1172,140 +1172,6 @@ export default function Home() {
             )}
           </section>
         )}
-        {/* 引き継ぎメモパネル */}
-        <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
-          {/* ヘッダー（アコーディオン） */}
-          <div
-            className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
-            onClick={() => setHandoverOpen(v => !v)}
-          >
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-              <ClipboardList className="w-4 h-4" />
-              全体引き継ぎ
-            </span>
-            {!handoverOpen && handoverItems.some(i => i.text) && (
-              <span className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full font-medium">
-                {handoverItems.filter(i => i.text).length}件
-              </span>
-            )}
-            <div className="ml-auto flex items-center gap-2">
-              {handoverOpen && (
-                <button
-                  onClick={e => { e.stopPropagation(); addHandoverItem(); }}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors font-medium"
-                >
-                  <span className="text-base leading-none">+</span> メモを追加
-                </button>
-              )}
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${handoverOpen ? "rotate-180" : ""}`} />
-            </div>
-          </div>
-
-          {/* 各メモ（アコーディオン本体） */}
-          {handoverOpen && (
-          <div className="divide-y divide-gray-100 border-t border-gray-100">
-            {handoverItems.map((item, idx) => {
-              return (<div key={item.id} className="px-4 py-3 space-y-2">
-                {/* 作成者選択 + 確認不要トグル + 削除ボタン */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <select
-                    value={item.author}
-                    onChange={e => updateHandoverItem(item.id, "author", e.target.value)}
-                    className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-1 focus:ring-yellow-400 ${
-                      item.author ? "border-yellow-300 text-yellow-800 bg-yellow-50" : "border-gray-200 text-gray-400 bg-gray-50"
-                    }`}
-                  >
-                    <option value="">作成者を選択</option>
-                    {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  {item.inherited && (
-                    <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
-                      ↩ 前日から引き継ぎ
-                    </span>
-                  )}
-                  {item.author && !item.inherited && (
-                    <span className="text-xs text-gray-400">メモ {idx + 1}</span>
-                  )}
-                  {/* 確認不要トグル */}
-                  <button
-                    onClick={() => updateHandoverItem(item.id, "noConfirmationRequired", !item.noConfirmationRequired)}
-                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
-                      item.noConfirmationRequired
-                        ? "bg-gray-500 border-gray-500 text-white shadow-sm"
-                        : "bg-white border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600"
-                    }`}
-                    title={item.noConfirmationRequired ? "確認不要（クリックで解除）" : "確認不要にする"}
-                  >
-                    {item.noConfirmationRequired ? "✓ 確認不要" : "確認不要"}
-                  </button>
-                  {/* 削除ボタン（常に表示） */}
-                  <button
-                    onClick={() => handleDeleteHandoverItem(item.id)}
-                    className="ml-auto p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    title="このメモを削除"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* テキスト入力 */}
-                <textarea
-                  value={item.text}
-                  onChange={e => {
-                    updateHandoverItem(item.id, "text", e.target.value);
-                    e.target.style.height = "auto";
-                    e.target.style.height = e.target.scrollHeight + "px";
-                  }}
-                  onFocus={e => {
-                    isEditingHandoverRef.current = true;
-                    e.target.style.height = "auto";
-                    e.target.style.height = e.target.scrollHeight + "px";
-                  }}
-                  onBlur={() => { isEditingHandoverRef.current = false; }}
-                  placeholder="引き継ぎ事項を入力してください…"
-                  rows={2}
-                  className="w-full text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-yellow-400 placeholder-gray-300"
-                  style={{ minHeight: "60px" }}
-                />
-
-                {/* 全員確認チェック（テキストがあるかつ確認不要でないときのみ） */}
-                {item.text && !item.noConfirmationRequired && (
-                  <div className="space-y-1.5">
-                  <p className="text-xs text-yellow-700 font-medium flex items-center gap-1">
-                    <span>⚠️</span>内容を確認した方はお名前をタップしてください
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {HANDOVER_MEMBERS.map(member => {
-                      const isChecked = item.checked.includes(member);
-                      return (
-                        <button
-                          key={member}
-                          onClick={() => toggleHandoverCheck(item.id, member)}
-                          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
-                            isChecked
-                              ? "bg-green-500 border-green-500 text-white shadow-sm"
-                              : "bg-white border-gray-200 text-gray-500 hover:border-yellow-300 hover:text-yellow-700"
-                          }`}
-                        >
-                          {isChecked ? "✓ " : ""}{member}
-                        </button>
-                      );
-                    })}
-                    <span className="self-center text-xs text-gray-400 ml-1">
-                      {item.checked.length === HANDOVER_MEMBERS.length
-                        ? "✨ 全員確認完了！"
-                        : `${item.checked.length}/${HANDOVER_MEMBERS.length}名確認済`
-                      }
-                    </span>
-                  </div>
-                  </div>
-                )}
-              </div>);
-            })}
-          </div>
-          )}
-        </section>
-
         {/* 個別引き継ぎパネル */}
         <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
           {/* ヘッダー（アコーディオン） */}
@@ -1744,6 +1610,106 @@ export default function Home() {
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
 
           return (
+            <>
+            {cat === "大森TODO" && (
+              <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+                {/* 退勤前チェックヘッダー */}
+                <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                    <CalendarCheck className="w-4 h-4" />
+                    退勤前チェック
+                  </span>
+                  <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
+                  <span className="ml-auto text-xs text-gray-400">
+                    {[storeCheck.line.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+                  </span>
+                </div>
+                {/* 公式LINE */}
+                <div className="px-4 py-3 space-y-2 border-b border-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
+                    <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
+                    {storeCheck.line.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+                  </div>
+                  {storeCheck.line.length < STORE_NAMES.length ? (
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.line.includes(store);
+                        return (
+                          <button key={store} onClick={() => toggleStoreCheck("line", store)}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"}`}>
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white">一括完了</button>
+                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.line.length}/{STORE_NAMES.length}店舗</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+                    </div>
+                  )}
+                </div>
+                {/* POS */}
+                <div className="px-4 py-3 space-y-2 border-b border-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
+                    <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
+                    {storeCheck.pos.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+                  </div>
+                  {storeCheck.pos.length < STORE_NAMES.length ? (
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.pos.includes(store);
+                        return (
+                          <button key={store} onClick={() => toggleStoreCheck("pos", store)}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-700"}`}>
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white">一括完了</button>
+                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.pos.length}/{STORE_NAMES.length}店舗</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+                    </div>
+                  )}
+                </div>
+                {/* ラクーン */}
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
+                    <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
+                    {storeCheck.raccoon.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+                  </div>
+                  {storeCheck.raccoon.length < STORE_NAMES.length ? (
+                    <div className="flex flex-wrap gap-1.5 pl-6">
+                      {STORE_NAMES.map(store => {
+                        const checked = storeCheck.raccoon.includes(store);
+                        return (
+                          <button key={store} onClick={() => toggleStoreCheck("raccoon", store)}
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-700"}`}>
+                            {checked ? "✓ " : ""}{store}
+                          </button>
+                        );
+                      })}
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-500 hover:border-indigo-500 hover:text-white">一括完了</button>
+                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.raccoon.length}/{STORE_NAMES.length}店舗</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 pl-6">
+                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
             <section
               key={cat}
               className={`rounded-xl border overflow-hidden transition-all duration-300 ${
@@ -1782,11 +1748,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式を先頭に表示 */}
+              {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式は退勤前チェックセクションに移動したため非表示 */}
               {cat === "各種システムのチェック" && (
                 <div className="divide-y divide-gray-50">
-                  {/* 公式LINE: 全店舗完了時は非表示 */}
-                  {storeCheck.line.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
+                  {/* 公式LINE/POS/ラクーン: 退勤前チェックセクションに移動したためここでは非表示 */}
+                  {false && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
@@ -1832,8 +1798,8 @@ export default function Home() {
                       </span>
                     </div>
                   </div>}
-                  {/* POS: 全店舗完了時は非表示 */}
-                  {storeCheck.pos.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
+                  {/* POS: 退勤前チェックセクションに移動 */}
+                  {false && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
@@ -1878,8 +1844,8 @@ export default function Home() {
                       </span>
                     </div>
                   </div>}
-                  {/* ラクーン: 全店舗完了時は非表示 */}
-                  {storeCheck.raccoon.length < STORE_NAMES.length && <div className="px-4 py-3 space-y-2">
+                  {/* ラクーン: 退勤前チェックセクションに移動 */}
+                  {false && <div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
@@ -2064,6 +2030,7 @@ export default function Home() {
                 })}
               </div>
             </section>
+            </>  
           );
         });
         })()}
