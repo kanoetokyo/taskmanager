@@ -104,7 +104,7 @@ interface StoreCheckState {
 const iconSize = "w-4 h-4 shrink-0";
 
 const BASE_TASKS: TaskDef[] = [
-  { id: "sys-d-1", category: "各種システムのチェック", label: "メールのチェック（osouji.oimachi@gmail.com）", icon: <Mail className={iconSize} /> },
+  { id: "sys-d-1", category: "各種システムのチェック", label: "メールのチェック（osouji.oimachi@gmail.com）（ご近所割のスプシ確認）", icon: <Mail className={iconSize} /> },
   { id: "sys-e-1", category: "各種システムのチェック", label: "Storesの予約確認チェック",             icon: <ShoppingBag className={iconSize} /> },
 
   // 顧客対応と事務作業
