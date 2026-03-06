@@ -138,6 +138,9 @@ const BASE_TASKS: TaskDef[] = [
   { id: "omori-c", category: "大森TODO", label: "1週間先までのグレーセルの確認", icon: <SlidersHorizontal className={iconSize} />, defaultPlanned: "当日現場責任者" },
   { id: "omori-d", category: "大森TODO", label: "現金確認",                         icon: <CreditCard className={iconSize} />, defaultPlanned: "当日現場責任者" },
   { id: "omori-e", category: "大森TODO", label: "アットインスラックの返信もれ確認", icon: <MessageCircle className={iconSize} />, defaultPlanned: "当日現場責任者", deadline: "17:00まで" },
+  { id: "omori-f", category: "大森TODO", label: "タイミー手配・修正依頼確認", icon: <Users className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-g", category: "大森TODO", label: "アットイン・富士通の鍵確認（曜日トレーに入れる）", icon: <Package className={iconSize} />, defaultPlanned: "当日現場責任者" },
+  { id: "omori-h", category: "大森TODO", label: "アットイン管理表と完了分の付け合わせ", icon: <ClipboardList className={iconSize} />, defaultPlanned: "当日現場責任者" },
 ];
 
 // ─── Category Config ──────────────────────────────────────────────────────────
@@ -319,6 +322,12 @@ export default function Home() {
   const isEditingHandoverRef = useRef(false);
   const isEditingIndividualRef = useRef(false);
   const isEditingCustomerRef = useRef(false);
+
+  // stale closure防止: tasksとcurrentDateKeyの最新値をRefで保持
+  const tasksRef = useRef<Task[]>(tasks);
+  const currentDateKeyRef = useRef<string>(currentDateKey);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+  useEffect(() => { currentDateKeyRef.current = currentDateKey; }, [currentDateKey]);
 
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
@@ -604,14 +613,19 @@ export default function Home() {
 
   // タスク自動保存
   const taskSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bulkUpsertTaskStatesRef = useRef(bulkUpsertTaskStates);
+  useEffect(() => { bulkUpsertTaskStatesRef.current = bulkUpsertTaskStates; });
   useEffect(() => {
     if (!tasksLoadedRef.current) return; // DB読み込み中は保存しない
     if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current);
     isSavingTasksRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     taskSaveTimerRef.current = setTimeout(async () => {
       try {
-        await bulkUpsertTaskStates.mutateAsync(
-          tasks.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: t.done, help: t.help, note: t.note }))
+        // stale closure防止: Refから最新値を取得
+        const latestTasks = tasksRef.current;
+        const latestDateKey = currentDateKeyRef.current;
+        await bulkUpsertTaskStatesRef.current.mutateAsync(
+          latestTasks.map(t => ({ dateKey: latestDateKey, taskId: t.id, done: t.done, help: t.help, note: t.note ?? "" }))
         );
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
