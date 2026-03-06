@@ -290,6 +290,8 @@ export default function Home() {
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
+  const [customerFilter, setCustomerFilter] = useState<string>("all"); // "all" | ステータス名
+  const [customerSort, setCustomerSort] = useState<"added" | "status">("added"); // 追加順 or ステータス順
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
   const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ line: [], pos: [], raccoon: [] });
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
@@ -1377,13 +1379,49 @@ export default function Home() {
           {/* 顧客一覧（アコーディオン本体） */}
           {customerOpen && (
           <div className="border-t border-gray-100">
-            {customers.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                引き継ぎが必要な顧客を追加してください
+            {/* フィルター・ソートバー */}
+            {customers.length > 0 && (
+              <div className="px-4 py-2 flex flex-wrap items-center gap-1.5 border-b border-gray-100 bg-gray-50/60">
+                {/* フィルターボタン */}
+                {(["all", ...(CUSTOMER_STATUSES as readonly string[])] as string[]).map(s => {
+                  const count = s === "all" ? customers.length : customers.filter(c => c.status === s).length;
+                  const label = s === "all" ? "すべて" : s === "不通・未対応" ? "不通" : s === "調整中・仮予約中" ? "調整中" : s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setCustomerFilter(s)}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                        customerFilter === s
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  );
+                })}
+                {/* ソートボタン */}
+                <button
+                  onClick={() => setCustomerSort(v => v === "added" ? "status" : "added")}
+                  className="ml-auto text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors font-medium flex items-center gap-1"
+                >
+                  {customerSort === "added" ? "追加順 ↑" : "ステータス順"}
+                </button>
               </div>
-            ) : (
+            )}
+            {(() => {
+              const STATUS_ORDER: Record<string, number> = { "不通・未対応": 0, "調整中・仮予約中": 1, "保留": 2 };
+              const filtered = customerFilter === "all" ? customers : customers.filter(c => c.status === customerFilter);
+              const sorted = customerSort === "status"
+                ? [...filtered].sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99))
+                : filtered;
+              return sorted.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-gray-400">
+                  {customers.length === 0 ? "引き継ぎが必要な顧客を追加してください" : "該当する顧客はいません"}
+                </div>
+              ) : (
             <div className="divide-y divide-gray-100">
-              {customers.map(c => (
+              {sorted.map(c => (
                 <div key={c.id} className={`px-4 py-3 space-y-2 ${
                   c.status === "不通・未対応" ? "bg-red-50/40" :
                   c.status === "調整中・仮予約中" ? "bg-yellow-50/40" :
@@ -1508,14 +1546,13 @@ export default function Home() {
                        </button>
                      )}
                    </div>
-                 </div>
-              ))}
+                 </div>              ))}
             </div>
-            )}
+            );
+            })()}
           </div>
           )}
         </section>
-
         {/* MISOCA / グレーセル / STORESシフト 統合ステータスセクション */}
         {(() => {
           const today = todayKey();
