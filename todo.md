@@ -118,7 +118,7 @@
 - [ ] フロントエンドに添付ファイルUI（アップロード・プレビュー・削除）を追加する
 
 ## 顧客引き継ぎURLリンク機能 (2026-03-06)
-- [ ] customerHandoversテーブルにlinks（JSON配列）カラムを追加する
-- [ ] APIのupsertにlinksを追加する
-- [ ] フロントエンドにURLリンク入力欄（最大4件）を追加する
-- [ ] pnpm db:push でマイグレーション実行する
+- [x] customerHandoversテーブルのlinks（JSON配列）カラムを追加する
+- [x] APIのupsertのlinksを追加する
+- [x] フロントエンドにURLリンク入力欄（最大4件）を追加する
+- [x] pnpm db:push でマイグレーション実行する

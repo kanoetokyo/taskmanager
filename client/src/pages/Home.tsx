@@ -40,6 +40,9 @@ import {
   Zap,
   RefreshCw,
   Trash2,
+  X,
+  Plus,
+  Link,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -245,18 +248,19 @@ const STATUS_STYLE: Record<CustomerStatus, string> = {
   "完了": "bg-green-100 text-green-700 border-green-300",
 };
 
-interface CustomerRecord {
+ interface CustomerRecord {
   id: string;
   name: string;
   status: CustomerStatus;
   contact: string;
   memo: string;
   assignee: string; // 記入者
+  links: string[]; // URLリンク（最大4件）
   inherited?: boolean; // 前日から引き継ぎされたか
 }
 
 function newCustomerRecord(): CustomerRecord {
-  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "", assignee: "" };
+  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "", assignee: "", links: [] };
 }
 
 // ─── MISOCA Status ───────────────────────────────────────────────────────────
@@ -529,6 +533,7 @@ export default function Home() {
         contact: c.store,
         memo: c.content,
         assignee: c.assignee ?? "",
+        links: Array.isArray(c.links) ? (c.links as string[]) : [],
         inherited: c.dateKey !== currentDateKey,
       }));
       setCustomers(records);
@@ -721,6 +726,7 @@ export default function Home() {
             content: c.memo,
             status: c.status,
             assignee: c.assignee ?? "",
+            links: c.links ?? [],
           });
         }
         const now = new Date();
@@ -1458,8 +1464,51 @@ export default function Home() {
                       className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300 resize-none overflow-hidden"
                       style={{ minHeight: "34px" }}
                     />
-                  </div>
-                </div>
+                   </div>
+                   {/* 行3: URLリンク（最大4件） */}
+                   <div className="flex flex-col gap-1 mt-0.5">
+                     {(c.links ?? []).map((link, idx) => (
+                       <div key={idx} className="flex items-center gap-1.5">
+                         <span className="text-xs text-gray-400 shrink-0">🔗</span>
+                         <input
+                           type="url"
+                           value={link}
+                           onChange={e => {
+                             const newLinks = [...(c.links ?? [])];
+                             newLinks[idx] = e.target.value;
+                             setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
+                           }}
+                           onFocus={() => { isEditingCustomerRef.current = true; }}
+                           onBlur={() => { isEditingCustomerRef.current = false; }}
+                           placeholder="URLを入力…"
+                           className="flex-1 text-xs text-blue-600 border-0 border-b border-dashed border-gray-300 bg-transparent px-1 py-0.5 focus:outline-none focus:border-blue-400 placeholder-gray-300"
+                         />
+                         <button
+                           onClick={() => {
+                             const newLinks = (c.links ?? []).filter((_, i) => i !== idx);
+                             setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
+                           }}
+                           className="text-gray-300 hover:text-red-400 transition-colors p-0.5"
+                           title="リンクを削除"
+                         >
+                           <X className="w-3 h-3" />
+                         </button>
+                       </div>
+                     ))}
+                     {(c.links ?? []).length < 4 && (
+                       <button
+                         onClick={() => {
+                           const newLinks = [...(c.links ?? []), ""];
+                           setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
+                         }}
+                         className="text-xs text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1 mt-0.5 w-fit"
+                       >
+                         <Plus className="w-3 h-3" />
+                         リンクを追加
+                       </button>
+                     )}
+                   </div>
+                 </div>
               ))}
             </div>
             )}
