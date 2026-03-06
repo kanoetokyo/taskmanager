@@ -1,0 +1,1 @@
+ALTER TABLE `customer_handovers` ADD `links` json DEFAULT ('[]') NOT NULL;

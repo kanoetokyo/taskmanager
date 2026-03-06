@@ -92,6 +92,7 @@ export const customerHandovers = mysqlTable("customer_handovers", {
   content: varchar("content", { length: 2048 }).notNull().default(""),
   status: varchar("status", { length: 32 }).notNull().default("対応中"),
   assignee: varchar("assignee", { length: 64 }).notNull().default(""),
+  links: json("links").$type<string[]>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

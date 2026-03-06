@@ -1124,7 +1124,11 @@ export default function Home() {
       </header>
 
       {/* ── Main ── */}
-      <main className="max-w-4xl mx-auto px-4 py-5 space-y-4">
+       <main className="max-w-7xl mx-auto px-4 py-5">
+        <div className="lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+
+        {/* 左カラム：引き継ぎ・ステータス系 */}
+        <div className="space-y-4">
 
         {/* 前日未完了タスクアラート */}
         {prevDayUndoneTasks.length > 0 && (
@@ -1596,6 +1600,11 @@ export default function Home() {
             </section>
           );
         })()}
+
+        </div>{/* /左カラム */}
+
+        {/* 右カラム：タスク一覧・退勤前チェック・大森TODO */}
+        <div className="space-y-4">
 
         {(() => {
           // 全タスクの通し番号マップ（BASE_TASKSの順序に基づく）
@@ -2082,7 +2091,11 @@ export default function Home() {
           </button>
         </div>
 
-        <p className="text-center text-xs text-gray-400 pb-6">
+        </div>{/* /右カラム */}
+
+        </div>{/* /グリッド */}
+
+        <p className="text-center text-xs text-gray-400 pb-6 mt-4">
           データはクラウドに自動保存されます。複数デバイスでリアルタイム同期されます。
         </p>
       </main>

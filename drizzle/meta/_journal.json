@@ -71,6 +71,20 @@
       "when": 1772615200001,
       "tag": "0009_tan_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1772800052688,
+      "tag": "0010_curly_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1772800076886,
+      "tag": "0011_bright_agent_brand",
+      "breakpoints": true
     }
   ]
 }
