@@ -1146,8 +1146,8 @@ export default function Home() {
       </header>
 
       {/* ── Main ── */}
-       <main className="max-w-7xl mx-auto px-4 py-5">
-        <div className="lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+        <main className="max-w-screen-2xl mx-auto px-4 py-5">
+         <div className="lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
 
         {/* 左カラム：引き継ぎ・ステータス系 */}
         <div className="space-y-4">
@@ -1703,7 +1703,7 @@ export default function Home() {
 
         </div>{/* /左カラム */}
 
-        {/* 右カラム：タスク一覧・退勤前チェック・大森TODO */}
+        {/* 中列：タスク一覧（大森TODO以外） */}
         <div className="space-y-4">
 
         {(() => {
@@ -1713,14 +1713,14 @@ export default function Home() {
           for (const t of BASE_TASKS) {
             taskNumberMap.set(t.id, globalIdx++);
           }
-          return categories.map(cat => {
+          return categories.filter(cat => cat !== "大森TODO").map(cat => {
           const catTasks  = tasks.filter(t => t.category === cat);
           const catDone   = catTasks.filter(t => t.done).length;
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
 
           return (
             <>
-            {cat === "大森TODO" && (
+            {false && (
               <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
                 {/* 退勤前チェックヘッダー */}
                 <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
@@ -2191,7 +2191,242 @@ export default function Home() {
           </button>
         </div>
 
-        </div>{/* /右カラム */}
+        </div>{/* /中列 */}
+
+        {/* 右列：退勤前チェック・大森TODO */}
+        <div className="space-y-4">
+
+        {/* 退勤前チェックセクション */}
+        <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+              <CalendarCheck className="w-4 h-4" />
+              退勤前チェック
+            </span>
+            <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
+            <span className="ml-auto text-xs text-gray-400">
+              {[storeCheck.line.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+            </span>
+          </div>
+          {/* 公式LINE */}
+          <div className="px-4 py-3 space-y-2 border-b border-gray-50">
+            <div className="flex items-center gap-2">
+              <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
+              <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
+            </div>
+            {storeCheck.line.length < STORE_NAMES.length ? (
+              <div className="flex flex-wrap gap-1.5 pl-6">
+                {STORE_NAMES.map(store => {
+                  const checked = storeCheck.line.includes(store);
+                  return (
+                    <button
+                      key={store}
+                      onClick={() => setStoreCheck(prev => ({
+                        ...prev,
+                        line: checked ? prev.line.filter(s => s !== store) : [...prev.line, store]
+                      }))}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
+                      }`}
+                    >
+                      {checked ? "✓ " : ""}{store}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pl-6">
+                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+              </div>
+            )}
+          </div>
+          {/* ポス */}
+          <div className="px-4 py-3 space-y-2 border-b border-gray-50">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
+              <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
+            </div>
+            {storeCheck.pos.length < STORE_NAMES.length ? (
+              <div className="flex flex-wrap gap-1.5 pl-6">
+                {STORE_NAMES.map(store => {
+                  const checked = storeCheck.pos.includes(store);
+                  return (
+                    <button
+                      key={store}
+                      onClick={() => setStoreCheck(prev => ({
+                        ...prev,
+                        pos: checked ? prev.pos.filter(s => s !== store) : [...prev.pos, store]
+                      }))}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
+                      }`}
+                    >
+                      {checked ? "✓ " : ""}{store}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pl-6">
+                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+              </div>
+            )}
+          </div>
+          {/* ラクーン */}
+          <div className="px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
+              <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
+            </div>
+            {storeCheck.raccoon.length < STORE_NAMES.length ? (
+              <div className="flex flex-wrap gap-1.5 pl-6">
+                {STORE_NAMES.map(store => {
+                  const checked = storeCheck.raccoon.includes(store);
+                  return (
+                    <button
+                      key={store}
+                      onClick={() => setStoreCheck(prev => ({
+                        ...prev,
+                        raccoon: checked ? prev.raccoon.filter(s => s !== store) : [...prev.raccoon, store]
+                      }))}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
+                      }`}
+                    >
+                      {checked ? "✓ " : ""}{store}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pl-6">
+                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
+                <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 大森TODOカテゴリ */}
+        {(() => {
+          const taskNumberMap = new Map<string, number>();
+          let globalIdx = 1;
+          for (const t of BASE_TASKS) { taskNumberMap.set(t.id, globalIdx++); }
+          const cat = "大森TODO";
+          const catTasks = tasks.filter(t => t.category === cat);
+          const catDone = catTasks.filter(t => t.done).length;
+          const cfg = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
+          return (
+            <section
+              key={cat}
+              className={`rounded-xl border overflow-hidden transition-all duration-300 ${
+                flashCategories.has(cat) ? "bg-green-50 border-green-300" : "bg-white border-gray-200"
+              }`}
+              style={{ boxShadow: flashCategories.has(cat) ? "0 0 0 2px #86efac" : "0 1px 3px rgba(0,0,0,0.06)" }}
+            >
+              <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: "1px solid #f3f4f6" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 shrink-0">{cfg.icon}</span>
+                  <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">{cat}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {catDone < catTasks.length && (
+                    <button
+                      onClick={() => {
+                        setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
+                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
+                      }}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
+                    >
+                      一括完了
+                    </button>
+                  )}
+                  <span className="text-xs tabular-nums">
+                    {catDone === catTasks.length
+                      ? <span className="text-green-500 font-semibold">✓ 完了</span>
+                      : <span className="text-gray-400">{catDone} / {catTasks.length}</span>
+                    }
+                  </span>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {catTasks.map((task) => {
+                  const taskNum = taskNumberMap.get(task.id);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`px-4 py-3 transition-all duration-200 ${
+                        task.done ? "opacity-50" : ""
+                      } ${
+                        hideDone && task.done ? "hidden" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {taskNum !== undefined && (
+                          <span className="text-[10px] font-bold text-gray-300 tabular-nums w-4 shrink-0 text-right">{taskNum}</span>
+                        )}
+                        <button
+                          onClick={() => toggleDone(task.id)}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                            completingTasks.has(task.id)
+                              ? "border-green-400 bg-green-50 animate-pulse"
+                              : task.done
+                              ? "border-green-400 bg-green-400"
+                              : "border-gray-300 hover:border-blue-400"
+                          }`}
+                        >
+                          {(task.done || completingTasks.has(task.id)) && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                          )}
+                        </button>
+                        <label
+                          className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
+                            task.done ? "opacity-30 pointer-events-none" : ""
+                          }`}
+                          onClick={() => toggleHelp(task.id)}
+                        >
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                            task.help
+                              ? "bg-amber-400 border-amber-400 text-white"
+                              : "border-gray-200 text-gray-300 hover:border-amber-300 hover:text-amber-400"
+                          }`}>HELP</span>
+                        </label>
+                        <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
+                        <span className={`flex-1 text-sm leading-snug ${ task.done ? "line-through text-gray-400" : "text-gray-800" }`}>
+                          {task.label}
+                          {task.deadline && !task.done && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                              ⏰ {task.deadline}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-end gap-1.5">
+                        <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
+                        <select
+                          value={task.planned}
+                          onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, planned: e.target.value } : t))}
+                          className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:border-blue-300"
+                        >
+                          {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {hideDone && catTasks.every(t => t.done) && (
+                <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
+                  <span>✓</span><span>このカテゴリはすべて完了しています</span>
+                </div>
+              )}
+            </section>
+          );
+        })()}
+
+        </div>{/* /右列 */}
 
         </div>{/* /グリッド */}
 
