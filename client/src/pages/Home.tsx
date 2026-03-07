@@ -1860,8 +1860,8 @@ export default function Home() {
               {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式は退勤前チェックセクションに移動したため非表示 */}
               {cat === "各種システムのチェック" && (
                 <div className="divide-y divide-gray-50">
-                  {/* 公式LINE/POS/ラクーン: 退勤前チェックセクションに移動したためここでは非表示 */}
-                  {false && <div className="px-4 py-3 space-y-2">
+                  {/* 公式LINE */}
+                  {<div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
@@ -1907,8 +1907,8 @@ export default function Home() {
                       </span>
                     </div>
                   </div>}
-                  {/* POS: 退勤前チェックセクションに移動 */}
-                  {false && <div className="px-4 py-3 space-y-2">
+                  {/* POS */}
+                  {<div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
@@ -1953,8 +1953,8 @@ export default function Home() {
                       </span>
                     </div>
                   </div>}
-                  {/* ラクーン: 退勤前チェックセクションに移動 */}
-                  {false && <div className="px-4 py-3 space-y-2">
+                  {/* ラクーン */}
+                  {<div className="px-4 py-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
                       <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
