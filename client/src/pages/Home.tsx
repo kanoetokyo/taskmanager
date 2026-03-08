@@ -368,6 +368,44 @@ function SortableCategoryRow({
   );
 }
 
+// タスク並び替え用コンポーネント（編集モード時のドラッグハンドル付き）
+interface SortableTaskRowProps {
+  sortableId: string;
+  isEditMode: boolean;
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+}
+function SortableTaskRow({ sortableId, isEditMode, children, className, style }: SortableTaskRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sortableId,
+    disabled: !isEditMode,
+  });
+  const dragStyle: React.CSSProperties = {
+    ...style,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    position: isDragging ? "relative" : undefined,
+  };
+  return (
+    <div ref={setNodeRef} style={dragStyle} className={className}>
+      {isEditMode && (
+        <button
+          {...attributes}
+          {...listeners}
+          className="absolute left-1 top-1/2 -translate-y-1/2 p-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 z-10"
+          title="ドラッグで並び替え"
+          style={{ touchAction: "none" }}
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}
 export default function Home() {
   const utils = trpc.useUtils();
 
@@ -2344,13 +2382,15 @@ export default function Home() {
                     ?.find(c => c.name === cat)
                     ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id)?.id ?? null;
                   const isThisEditing = editingTaskId !== null && editingTaskId === defId;
+                  const sortableId = defId ? `def-${defId}` : task.id;
                   return (
-                  <div
+                  <SortableTaskRow
                     key={task.id}
-                    id={defId ? `def-${defId}` : task.id}
-                    className={`px-4 py-3 transition-all duration-300 ${
+                    sortableId={sortableId}
+                    isEditMode={isEditMode}
+                    className={`relative px-4 py-3 transition-all duration-300 ${
                       isEditMode
-                        ? "bg-amber-50/30 border-l-2 border-amber-300"
+                        ? "bg-amber-50/30 border-l-2 border-amber-300 pl-8"
                         : completingTasks.has(task.id)
                           ? "opacity-0 scale-95 pointer-events-none"
                           : task.done
@@ -2526,7 +2566,7 @@ export default function Home() {
                     )}
                   </>
                     )}
-                  </div>
+                  </SortableTaskRow>
                   );
                 })}
                 {/* 編集モード時: タスク追加ボタン */}
@@ -2717,6 +2757,16 @@ export default function Home() {
                   </span>
                 </div>
               </div>
+              {(() => {
+                const catDefTasks2 = taskDefinitionData?.find(c => c.name === cat)?.tasks ?? [];
+                const sortableIds2 = catDefTasks2.map(t => `def-${t.id}`);
+                return (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(event, cat)}
+                >
+                  <SortableContext items={sortableIds2} strategy={verticalListSortingStrategy}>
               <div className="divide-y divide-gray-50">
                 {catTasks.map((task) => {
                   const taskNum = taskNumberMap.get(task.id);
@@ -2730,15 +2780,18 @@ export default function Home() {
                     return null;
                   })();
                   const isThisEditing = editingTaskId !== null && editingTaskId === defId;
+                  const sortableId2 = defId ? `def-${defId}` : task.id;
                   return (
-                    <div
+                    <SortableTaskRow
                       key={task.id}
-                      className={`px-4 py-3 transition-all duration-200 ${
+                      sortableId={sortableId2}
+                      isEditMode={isEditMode}
+                      className={`relative px-4 py-3 transition-all duration-200 ${
                         task.done ? "opacity-50" : ""
                       } ${
                         hideDone && task.done ? "hidden" : ""
                       } ${
-                        isEditMode ? "bg-amber-50/30" : ""
+                        isEditMode ? "bg-amber-50/30 pl-8" : ""
                       }`}
                     >
                       {isEditMode && isThisEditing ? (
@@ -2848,12 +2901,16 @@ export default function Home() {
                               </button>
                             </div>
                           )}
-                        </>
+                      </>
                       )}
-                    </div>
+                    </SortableTaskRow>
                   );
                 })}
               </div>
+                  </SortableContext>
+                </DndContext>
+                );
+              })()}
               {/* 編集モード時: タスク追加ボタン */}
               {isEditMode && (
                 <div className="px-4 py-2">
