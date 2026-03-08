@@ -1263,24 +1263,7 @@ export default function Home() {
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-500" : ""}`} />
             </button>
-            <button
-              onClick={() => {
-                setIsEditMode(v => !v);
-                setEditingTaskId(null);
-              }}
-              className={`ml-auto flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
-                isEditMode
-                  ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
-                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
-              }`}
-              title="タスク編集モード"
-            >
-              {isEditMode ? (
-                <><X className="w-3 h-3" />編集終了</>
-              ) : (
-                <><SlidersHorizontal className="w-3 h-3" />タスク編集</>
-              )}
-            </button>
+
           </div>
 
           {/* Row 2: 日付ナビ */}
@@ -2417,53 +2400,6 @@ export default function Home() {
         });
         })()}
 
-        {/* フッター操作パネル */}
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {/* 完了済みを隠すトグル */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <button
-              role="switch"
-              aria-checked={hideDone}
-              onClick={() => setHideDone(v => !v)}
-              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                hideDone ? "bg-blue-600" : "bg-gray-200"
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  hideDone ? "translate-x-5" : "translate-x-0.5"
-                }`}
-              />
-            </button>
-            <span className="text-sm text-gray-600 whitespace-nowrap">完了済みを隠す</span>
-          </label>
-
-          <div className="flex-1" />
-
-          {lastSaved && <span className="text-gray-400 text-xs whitespace-nowrap">{lastSaved}</span>}
-
-          <button
-            onClick={undoLast}
-            disabled={undoHistory.length === 0}
-            title="元に戻す"
-            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-              undoHistory.length > 0
-                ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                : "border-gray-100 text-gray-300 cursor-not-allowed"
-            }`}
-          >
-            <Undo2 className="w-4 h-4" />
-            <span>元に戻す</span>
-          </button>
-
-          <button
-            onClick={handleReset}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
-          >
-            リセット
-          </button>
-        </div>
-
         </div>{/* /中列 */}
 
         {/* 右列：退勤前チェック・大森TODO */}
@@ -2786,6 +2722,73 @@ export default function Home() {
             </section>
           );
         })()}
+
+        {/* フッター操作パネル */}
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          {/* 完了済みを隠すトグル */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <button
+              role="switch"
+              aria-checked={hideDone}
+              onClick={() => setHideDone(v => !v)}
+              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                hideDone ? "bg-blue-600" : "bg-gray-200"
+              }`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  hideDone ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+            <span className="text-sm text-gray-600 whitespace-nowrap">完了済みを隠す</span>
+          </label>
+
+          {/* タスク編集ボタン */}
+          <button
+            onClick={() => {
+              setIsEditMode(v => !v);
+              setEditingTaskId(null);
+            }}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+              isEditMode
+                ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+                : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+            }`}
+            title="タスク編集モード"
+          >
+            {isEditMode ? (
+              <><X className="w-3 h-3" />編集終了</>
+            ) : (
+              <><SlidersHorizontal className="w-3 h-3" />タスク編集</>
+            )}
+          </button>
+
+          <div className="flex-1" />
+
+          {lastSaved && <span className="text-gray-400 text-xs whitespace-nowrap">{lastSaved}</span>}
+
+          <button
+            onClick={undoLast}
+            disabled={undoHistory.length === 0}
+            title="元に戻す"
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              undoHistory.length > 0
+                ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "border-gray-100 text-gray-300 cursor-not-allowed"
+            }`}
+          >
+            <Undo2 className="w-4 h-4" />
+            <span>元に戻す</span>
+          </button>
+
+          <button
+            onClick={handleReset}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+          >
+            リセット
+          </button>
+        </div>
 
         </div>{/* /右列 */}
 
