@@ -249,7 +249,7 @@ function newHandoverItem(): HandoverItem {
 
 // ─── Customer Handover ─────────────────────────────────────────────────────
 
-const CUSTOMER_STATUSES = ["不通・未対応", "調整中・仮予約中", "保留"] as const;
+const CUSTOMER_STATUSES = ["これから", "不通・未対応", "調整中・仮予約中", "保留"] as const;
 const CUSTOMER_STATUSES_ALL = [...CUSTOMER_STATUSES, "完了"] as const;
 type CustomerStatus = typeof CUSTOMER_STATUSES_ALL[number];
 
@@ -265,6 +265,7 @@ const CONTACT_OPTIONS = [
 ];
 
 const STATUS_STYLE: Record<CustomerStatus, string> = {
+  "これから": "bg-blue-100 text-blue-700 border-blue-300",
   "不通・未対応": "bg-red-100 text-red-700 border-red-300",
   "調整中・仮予約中": "bg-yellow-100 text-yellow-700 border-yellow-300",
   "保留": "bg-gray-100 text-gray-600 border-gray-300",
@@ -1780,7 +1781,7 @@ export default function Home() {
               </div>
             )}
             {(() => {
-              const STATUS_ORDER: Record<string, number> = { "不通・未対応": 0, "調整中・仮予約中": 1, "保留": 2 };
+              const STATUS_ORDER: Record<string, number> = { "これから": 0, "不通・未対応": 1, "調整中・仮予約中": 2, "保留": 3 };
               const filtered = customerFilter === "all" ? customers : customers.filter(c => c.status === customerFilter);
               const sorted = customerSort === "status"
                 ? [...filtered].sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99))
@@ -1793,6 +1794,7 @@ export default function Home() {
             <div className="divide-y divide-gray-100">
               {sorted.map(c => (
                 <div key={c.id} className={`px-4 py-3 space-y-2 ${
+                  c.status === "これから" ? "bg-blue-50/40" :
                   c.status === "不通・未対応" ? "bg-red-50/40" :
                   c.status === "調整中・仮予約中" ? "bg-yellow-50/40" :
                   c.status === "保留" ? "bg-gray-50/60" : ""
