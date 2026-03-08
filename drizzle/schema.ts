@@ -127,3 +127,31 @@ export const storesShiftStatus = mysqlTable("stores_shift_status", {
 });
 export type StoresShiftStatus = typeof storesShiftStatus.$inferSelect;
 export type InsertStoresShiftStatus = typeof storesShiftStatus.$inferInsert;
+
+// ─── Task Categories (タスクカテゴリマスタ) ───────────────────────────────────
+export const taskCategories = mysqlTable("task_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TaskCategory = typeof taskCategories.$inferSelect;
+export type InsertTaskCategory = typeof taskCategories.$inferInsert;
+
+// ─── Task Definitions (タスク定義マスタ) ─────────────────────────────────────
+export const taskDefinitions = mysqlTable("task_definitions", {
+  id: int("id").autoincrement().primaryKey(),
+  categoryId: int("categoryId").notNull(),
+  label: varchar("label", { length: 512 }).notNull(),
+  defaultPlanned: varchar("defaultPlanned", { length: 64 }).notNull().default("当日事務担当"),
+  deadline: varchar("deadline", { length: 64 }).notNull().default(""),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  legacyId: varchar("legacyId", { length: 128 }), // 既存BASE_TASKS文字列IDとの互換性維持用
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TaskDefinition = typeof taskDefinitions.$inferSelect;
+export type InsertTaskDefinition = typeof taskDefinitions.$inferInsert;

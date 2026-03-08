@@ -10,7 +10,7 @@
  * - マルチデバイスリアルタイム同期（tRPC + DB）
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -45,6 +45,23 @@ import {
   Link,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ─── Individual Handover ────────────────────────────────────────────────────
 
@@ -331,6 +348,12 @@ export default function Home() {
 
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
+  // Task definitions from DB (master data)
+  const { data: taskDefinitionData, refetch: refetchTaskDefinitions } = trpc.taskDefinition.getAll.useQuery(
+    undefined,
+    { staleTime: 5 * 60 * 1000 } // 5分間キャッシュ
+  );
+
   // Task states for current date
   const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDate.useQuery(
     { dateKey: currentDateKey },
@@ -401,15 +424,64 @@ export default function Home() {
   const upsertGrayCell = trpc.task.grayCell.upsert.useMutation();
   const upsertStoresShift = trpc.task.storesShift.upsert.useMutation();
 
+  // ─── Task Definition Mutations (編集モード用) ─────────────────────────────
+  const createTaskDef = trpc.taskDefinition.addTask.useMutation();
+  const updateTaskDef = trpc.taskDefinition.updateTask.useMutation();
+  const deleteTaskDef = trpc.taskDefinition.deleteTask.useMutation();
+  const reorderTaskDef = trpc.taskDefinition.reorderTasks.useMutation();
+
+  // ─── 編集モード State ─────────────────────────────────────────────────────
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [editingDefaultPlanned, setEditingDefaultPlanned] = useState("");
+  const [editingDeadline, setEditingDeadline] = useState("");
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [addTaskCategory, setAddTaskCategory] = useState("");
+  const [addTaskLabel, setAddTaskLabel] = useState("");
+  const [addTaskDefaultPlanned, setAddTaskDefaultPlanned] = useState("当日事務担当");
+  const [addTaskDeadline, setAddTaskDeadline] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; label: string } | null>(null);
+
+  // dnd-kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // ─── DBタスク定義からTaskDef配列を生成 ─────────────────────────────────────
+  // taskDefinitionDataがロード済みならDBデータを使用、未ロード中はBASE_TASKSをフォールバック
+  const activeTasks: TaskDef[] = useMemo(() => {
+    if (!taskDefinitionData || taskDefinitionData.length === 0) return BASE_TASKS;
+    const result: TaskDef[] = [];
+    for (const cat of taskDefinitionData) {
+      for (const def of cat.tasks) {
+        const taskId = def.legacyId ?? `def-${def.id}`;
+        const baseTask = BASE_TASKS.find(t => t.id === def.legacyId);
+        const catConfig = CAT_CONFIG[cat.name];
+        const icon = baseTask?.icon ?? catConfig?.icon ?? <ClipboardList className="w-4 h-4 shrink-0" />;
+        result.push({
+          id: taskId,
+          category: cat.name,
+          label: def.label,
+          icon,
+          defaultPlanned: def.defaultPlanned || undefined,
+          deadline: def.deadline || undefined,
+        });
+      }
+    }
+    return result;
+  }, [taskDefinitionData]);
+
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData) {
       if (!tasksLoadedRef.current) {
-        // 初回ロード: done/helpをDBから設定し、フラグを立てる
+        // 初回load: done/helpをDBから設定し、フラグを立てる
         setTasks(prev => {
-          return BASE_TASKS.map(t => {
+          return activeTasks.map(t => {
             const dbState = taskStatesData.find(s => s.taskId === t.id);
             const existing = prev.find(p => p.id === t.id);
             return {
@@ -578,7 +650,7 @@ export default function Home() {
   // Load prev day tasks for undone alert
   useEffect(() => {
     if (prevDayTaskStatesData !== undefined) {
-      const tasks = BASE_TASKS.map(t => {
+      const prevTasks = activeTasks.map(t => {
         const dbState = prevDayTaskStatesData.find(s => s.taskId === t.id);
         return {
           ...t,
@@ -589,7 +661,7 @@ export default function Home() {
           note: dbState?.note ?? "",
         };
       });
-      setPrevDayTasks(tasks);
+      setPrevDayTasks(prevTasks);
     }
   }, [prevDayTaskStatesData]);
 
@@ -601,13 +673,13 @@ export default function Home() {
     handoverInitializedRef.current = false; // 日付変更時は初期化フラグもリセット
     individualHandoverLoadedRef.current = false;
     customersLoadedRef.current = false;
-    setTasks(makeInitialTasks());
+    setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
     setHandoverItems([newHandoverItem()]);
     setStoreCheck({ line: [], pos: [], raccoon: [] });
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
-  }, [currentDateKey]);
+  }, [currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Auto-save via useEffect (debounced) ──────────────────────────────────
 
@@ -943,9 +1015,9 @@ export default function Home() {
   const markAllPrevDone = async () => {
     try {
       await bulkUpsertTaskStates.mutateAsync(
-        BASE_TASKS.map(t => ({ dateKey: prevDayKey, taskId: t.id, done: true }))
+        activeTasks.map(t => ({ dateKey: prevDayKey, taskId: t.id, done: true }))
       );
-      setPrevDayTasks(BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false, note: "" })));
+      setPrevDayTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false, note: "" })));
       toast.success("前日の未完了タスクをすべて完了にしました");
     } catch (e) {
       toast.error("保存に失敗しました");
@@ -954,7 +1026,7 @@ export default function Home() {
 
   const handleReset = async () => {
     if (!confirm("この日の全設定をリセットしますか？")) return;
-    const initial = makeInitialTasks();
+    const initial = activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" }));
     setTasks(initial);
     try {
       await bulkUpsertTaskStates.mutateAsync(
@@ -1034,9 +1106,97 @@ export default function Home() {
     }
   };
 
-  // ─── Category completion detection ────────────────────────────────────────
+  // ─── 編集モード Handlers ─────────────────────────────────────────────────────
 
-  const categories = Array.from(new Set(BASE_TASKS.map(t => t.category)));
+  // タスク編集開始
+  const startEditTask = (defId: number, label: string, defaultPlanned: string, deadline: string) => {
+    setEditingTaskId(defId);
+    setEditingLabel(label);
+    setEditingDefaultPlanned(defaultPlanned || "当日事務担当");
+    setEditingDeadline(deadline || "");
+  };
+
+  // タスク編集保存
+  const saveEditTask = async () => {
+    if (!editingTaskId || !editingLabel.trim()) return;
+    try {
+      await updateTaskDef.mutateAsync({
+        id: editingTaskId,
+        label: editingLabel.trim(),
+        defaultPlanned: editingDefaultPlanned,
+        deadline: editingDeadline,
+      });
+      await utils.taskDefinition.getAll.invalidate();
+      setEditingTaskId(null);
+      toast.success("タスクを更新しました");
+    } catch (e) {
+      toast.error("保存に失敗しました");
+    }
+  };
+
+  // タスク削除
+  const handleDeleteTask = async (defId: number, label: string) => {
+    setDeleteConfirm({ id: defId, label });
+  };
+
+  const confirmDeleteTask = async (defId: number) => {
+    try {
+      await deleteTaskDef.mutateAsync({ id: defId });
+      await utils.taskDefinition.getAll.invalidate();
+      setDeleteConfirm(null);
+      toast.success("タスクを削除しました");
+    } catch (e) {
+      toast.error("削除に失敗しました");
+    }
+  };
+
+  // タスク追加
+  const handleAddTask = async () => {
+    if (!addTaskLabel.trim()) return;
+    const catData = taskDefinitionData?.find(c => c.name === addTaskCategory);
+    if (!catData) return;
+    try {
+      await createTaskDef.mutateAsync({
+        categoryId: catData.id,
+        label: addTaskLabel.trim(),
+        defaultPlanned: addTaskDefaultPlanned,
+        deadline: addTaskDeadline,
+      });
+      await utils.taskDefinition.getAll.invalidate();
+      setShowAddTaskDialog(false);
+      setAddTaskLabel("");
+      setAddTaskDefaultPlanned("当日事務担当");
+      setAddTaskDeadline("");
+      toast.success("タスクを追加しました");
+    } catch (e) {
+      toast.error("追加に失敗しました");
+    }
+  };
+
+  // タスク並び替え（ドラッグ＆ドロップ）
+  const handleDragEnd = async (event: DragEndEvent, categoryName: string) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const catData = taskDefinitionData?.find(c => c.name === categoryName);
+    if (!catData) return;
+    const catTasks = catData.tasks;
+    const oldIndex = catTasks.findIndex(t => `def-${t.id}` === active.id);
+    const newIndex = catTasks.findIndex(t => `def-${t.id}` === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(catTasks, oldIndex, newIndex);
+    try {
+      await reorderTaskDef.mutateAsync({
+        tasks: reordered.map((t, idx) => ({ id: t.id, sortOrder: idx })),
+      });
+      await utils.taskDefinition.getAll.invalidate();
+    } catch (e) {
+      toast.error("並び替えに失敗しました");
+    }
+  };
+
+  // ─── Category completion detection ────────────────────────────────────────────
+
+  const categories = Array.from(new Set(activeTasks.map(t => t.category)));
   useEffect(() => {
     categories.forEach(cat => {
       const catTasks = tasks.filter(t => t.category === cat);
@@ -1102,6 +1262,24 @@ export default function Home() {
               title="最新データに同期"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-500" : ""}`} />
+            </button>
+            <button
+              onClick={() => {
+                setIsEditMode(v => !v);
+                setEditingTaskId(null);
+              }}
+              className={`ml-auto flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+                isEditMode
+                  ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+              }`}
+              title="タスク編集モード"
+            >
+              {isEditMode ? (
+                <><X className="w-3 h-3" />編集終了</>
+              ) : (
+                <><SlidersHorizontal className="w-3 h-3" />タスク編集</>
+              )}
             </button>
           </div>
 
@@ -1707,10 +1885,10 @@ export default function Home() {
         <div className="space-y-4">
 
         {(() => {
-          // 全タスクの通し番号マップ（BASE_TASKSの順序に基づく）
+          // 全タスクの通し番号マップ（activeTasksの順序に基づく）
           const taskNumberMap = new Map<string, number>();
           let globalIdx = 1;
-          for (const t of BASE_TASKS) {
+          for (const t of activeTasks) {
             taskNumberMap.set(t.id, globalIdx++);
           }
           return categories.filter(cat => cat !== "大森TODO").map(cat => {
@@ -2002,7 +2180,18 @@ export default function Home() {
                 </div>
               )}
               {/* Task rows */}
-              <div className="divide-y divide-gray-50">
+              {(() => {
+                // 編集モード用: このカテゴリのDBタスク定義
+                const catDefTasks = taskDefinitionData?.find(c => c.name === cat)?.tasks ?? [];
+                const sortableIds = catDefTasks.map(t => `def-${t.id}`);
+                return (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(event, cat)}
+                >
+                  <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+                    <div className="divide-y divide-gray-50">
                 {hideDone && catTasks.every(t => t.done) && (
                   <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
                     <span>✓</span><span>このカテゴリはすべて完了しています</span>
@@ -2010,22 +2199,66 @@ export default function Home() {
                 )}
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => {
                   const taskNum = taskNumberMap.get(task.id);
+                  // 編集モード用: DBのidを取得
+                  const defId = taskDefinitionData
+                    ?.find(c => c.name === cat)
+                    ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id)?.id ?? null;
+                  const isThisEditing = editingTaskId !== null && editingTaskId === defId;
                   return (
                   <div
                     key={task.id}
+                    id={defId ? `def-${defId}` : task.id}
                     className={`px-4 py-3 transition-all duration-300 ${
-                      completingTasks.has(task.id)
-                        ? "opacity-0 scale-95 pointer-events-none"
-                        : task.done
-                          ? "opacity-60 bg-gray-50/60"
-                          : task.help
-                            ? "bg-red-50"
-                            : task.deadline
-                              ? "bg-amber-50/50"
-                              : "hover:bg-gray-50/80"
+                      isEditMode
+                        ? "bg-amber-50/30 border-l-2 border-amber-300"
+                        : completingTasks.has(task.id)
+                          ? "opacity-0 scale-95 pointer-events-none"
+                          : task.done
+                            ? "opacity-60 bg-gray-50/60"
+                            : task.help
+                              ? "bg-red-50"
+                              : task.deadline
+                                ? "bg-amber-50/50"
+                                : "hover:bg-gray-50/80"
                     }`}
-                    style={{ transform: completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
+                    style={{ transform: !isEditMode && completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
                   >
+                    {/* 編集モード時: インライン編集UI */}
+                    {isEditMode && isThisEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editingLabel}
+                          onChange={e => setEditingLabel(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") saveEditTask(); if (e.key === "Escape") setEditingTaskId(null); }}
+                          className="w-full text-sm border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-400">デフォルト担当:</span>
+                          <select
+                            value={editingDefaultPlanned}
+                            onChange={e => setEditingDefaultPlanned(e.target.value)}
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none"
+                          >
+                            {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <span className="text-[10px] text-gray-400">期限:</span>
+                          <input
+                            type="text"
+                            value={editingDeadline}
+                            onChange={e => setEditingDeadline(e.target.value)}
+                            placeholder="例: 17:00まで"
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-24 focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={saveEditTask} className="text-xs px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 font-medium">保存</button>
+                          <button onClick={() => setEditingTaskId(null)} className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">キャンセル</button>
+                        </div>
+                      </div>
+                    ) : (
+                    <>
                     {/* Row 1: checkbox + HELP + icon + label */}
                     <div className="flex items-center gap-2.5">
                       {/* Task number */}
@@ -2134,10 +2367,50 @@ export default function Home() {
                         />
                       </div>
                     )}
+                    {/* 編集モード時: 編集・削除ボタン */}
+                    {isEditMode && !isThisEditing && defId !== null && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "")}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
+                        >
+                          <FileText className="w-3 h-3" />編集
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(defId, task.label)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />削除
+                        </button>
+                      </div>
+                    )}
+                  </>
+                    )}
                   </div>
                   );
                 })}
+                {/* 編集モード時: タスク追加ボタン */}
+                {isEditMode && (
+                  <div className="px-4 py-2">
+                    <button
+                      onClick={() => {
+                        setAddTaskCategory(cat);
+                        setAddTaskLabel("");
+                        setAddTaskDefaultPlanned("当日事務担当");
+                        setAddTaskDeadline("");
+                        setShowAddTaskDialog(true);
+                      }}
+                      className="w-full text-xs py-1.5 rounded-lg border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 font-medium flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />タスクを追加
+                    </button>
+                  </div>
+                )}
               </div>
+                  </SortableContext>
+                </DndContext>
+                );
+              })()}
             </section>
             </>  
           );
@@ -2313,7 +2586,7 @@ export default function Home() {
         {(() => {
           const taskNumberMap = new Map<string, number>();
           let globalIdx = 1;
-          for (const t of BASE_TASKS) { taskNumberMap.set(t.id, globalIdx++); }
+          for (const t of activeTasks) { taskNumberMap.set(t.id, globalIdx++); }
           const cat = "大森TODO";
           const catTasks = tasks.filter(t => t.category === cat);
           const catDone = catTasks.filter(t => t.done).length;
@@ -2431,9 +2704,93 @@ export default function Home() {
         </div>{/* /グリッド */}
 
         <p className="text-center text-xs text-gray-400 pb-6 mt-4">
-          データはクラウドに自動保存されます。複数デバイスでリアルタイム同期されます。
+          データはクラウドに自務保存されます。複数デバイスでリアルタイム同期されます。
         </p>
       </main>
+
+      {/* タスク追加ダイアログ */}
+      {showAddTaskDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowAddTaskDialog(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-gray-800 mb-4">タスクを追加 — {addTaskCategory}</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 font-medium">タスク名 <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={addTaskLabel}
+                  onChange={e => setAddTaskLabel(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && addTaskLabel.trim()) handleAddTask(); if (e.key === "Escape") setShowAddTaskDialog(false); }}
+                  placeholder="タスクの内容を入力…"
+                  className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 font-medium">デフォルト担当</label>
+                  <select
+                    value={addTaskDefaultPlanned}
+                    onChange={e => setAddTaskDefaultPlanned(e.target.value)}
+                    className="mt-1 w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 font-medium">期限（任意）</label>
+                  <input
+                    type="text"
+                    value={addTaskDeadline}
+                    onChange={e => setAddTaskDeadline(e.target.value)}
+                    placeholder="例: 17:00まで"
+                    className="mt-1 w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={handleAddTask}
+                disabled={!addTaskLabel.trim()}
+                className="flex-1 text-sm py-2 rounded-xl bg-amber-500 text-white font-semibold hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                追加する
+              </button>
+              <button
+                onClick={() => setShowAddTaskDialog(false)}
+                className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 削除確認ダイアログ */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-gray-800 mb-2">タスクを削除</h2>
+            <p className="text-sm text-gray-600 mb-4">「{deleteConfirm.label}」を削除しますか？<br /><span className="text-xs text-gray-400">この操作は元に戻せません。</span></p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => confirmDeleteTask(deleteConfirm.id)}
+                className="flex-1 text-sm py-2 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors"
+              >
+                削除する
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
