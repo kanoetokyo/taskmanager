@@ -43,6 +43,9 @@ import {
   X,
   Plus,
   Link,
+  FolderOpen,
+  GripVertical,
+  Pencil,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -289,7 +292,81 @@ interface MisocaStatus {
   completedUntil: string; // YYYY-MM-DD 形式。この日付まで見積書作成済み
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ─────────────────────────────────────────────────────────────────────────────────
+
+// カテゴリ並び替え用コンポーネント
+interface SortableCategoryRowProps {
+  cat: { id: number; name: string; tasks: unknown[] };
+  editingCategoryId: number | null;
+  editingCategoryName: string;
+  setEditingCategoryName: (v: string) => void;
+  handleSaveCategory: () => void;
+  setEditingCategoryId: (id: number | null) => void;
+  setEditingCategoryName2: (v: string) => void;
+  handleDeleteCategory: (id: number, name: string) => void;
+}
+
+function SortableCategoryRow({
+  cat,
+  editingCategoryId,
+  editingCategoryName,
+  setEditingCategoryName,
+  handleSaveCategory,
+  setEditingCategoryId,
+  handleDeleteCategory,
+}: SortableCategoryRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(cat.id) });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="mb-2">
+      {editingCategoryId === cat.id ? (
+        <div className="flex items-center gap-2 bg-indigo-50 rounded-xl px-3 py-2">
+          <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
+          <input
+            type="text"
+            value={editingCategoryName}
+            onChange={e => setEditingCategoryName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") handleSaveCategory();
+              if (e.key === "Escape") { setEditingCategoryId(null); setEditingCategoryName(""); }
+            }}
+            className="flex-1 text-sm border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            autoFocus
+          />
+          <button onClick={handleSaveCategory} className="text-xs px-2 py-1 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600">保存</button>
+          <button onClick={() => { setEditingCategoryId(null); setEditingCategoryName(""); }} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">キャンセル</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 rounded-xl px-3 py-2.5 transition-colors group">
+          <button {...attributes} {...listeners} className="p-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 shrink-0" title="ドラッグで並び替え">
+            <GripVertical className="w-4 h-4" />
+          </button>
+          <span className="flex-1 text-sm font-medium text-gray-700">{cat.name}</span>
+          <span className="text-xs text-gray-400">{cat.tasks.length}タスク</span>
+          <button
+            onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}
+            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-indigo-500 transition-all"
+            title="カテゴリ名を編集"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => handleDeleteCategory(cat.id, cat.name)}
+            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+            title="カテゴリを削除"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const utils = trpc.useUtils();
@@ -429,6 +506,10 @@ export default function Home() {
   const updateTaskDef = trpc.taskDefinition.updateTask.useMutation();
   const deleteTaskDef = trpc.taskDefinition.deleteTask.useMutation();
   const reorderTaskDef = trpc.taskDefinition.reorderTasks.useMutation();
+  const createCategoryDef = trpc.taskDefinition.addCategory.useMutation();
+  const updateCategoryDef = trpc.taskDefinition.updateCategory.useMutation();
+  const deleteCategoryDef = trpc.taskDefinition.deleteCategory.useMutation();
+  const reorderCategoriesDef = trpc.taskDefinition.reorderCategories.useMutation();
 
   // ─── 編集モード State ─────────────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
@@ -442,6 +523,13 @@ export default function Home() {
   const [addTaskDefaultPlanned, setAddTaskDefaultPlanned] = useState("当日事務担当");
   const [addTaskDeadline, setAddTaskDeadline] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; label: string } | null>(null);
+  // カテゴリ管理 State
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: number; name: string; taskCount: number } | null>(null);
+  const [categoryDragOrder, setCategoryDragOrder] = useState<number[]>([]);
 
   // dnd-kit sensors
   const sensors = useSensors(
@@ -1170,6 +1258,75 @@ export default function Home() {
       toast.success("タスクを追加しました");
     } catch (e) {
       toast.error("追加に失敗しました");
+    }
+  };
+
+  // ─── カテゴリ管理 Handlers ─────────────────────────────────────────────────
+
+  // カテゴリ追加
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    try {
+      await createCategoryDef.mutateAsync({ name: newCategoryName.trim() });
+      await utils.taskDefinition.getAll.invalidate();
+      setNewCategoryName("");
+      toast.success("カテゴリを追加しました");
+    } catch (e) {
+      toast.error("カテゴリの追加に失敗しました");
+    }
+  };
+
+  // カテゴリ名変更保存
+  const handleSaveCategory = async () => {
+    if (!editingCategoryId || !editingCategoryName.trim()) return;
+    try {
+      await updateCategoryDef.mutateAsync({ id: editingCategoryId, name: editingCategoryName.trim() });
+      await utils.taskDefinition.getAll.invalidate();
+      setEditingCategoryId(null);
+      setEditingCategoryName("");
+      toast.success("カテゴリ名を変更しました");
+    } catch (e) {
+      toast.error("カテゴリ名の変更に失敗しました");
+    }
+  };
+
+  // カテゴリ削除確認
+  const handleDeleteCategory = (id: number, name: string) => {
+    const taskCount = taskDefinitionData?.find(c => c.id === id)?.tasks.length ?? 0;
+    setDeleteCategoryConfirm({ id, name, taskCount });
+  };
+
+  // カテゴリ削除実行
+  const confirmDeleteCategory = async () => {
+    if (!deleteCategoryConfirm) return;
+    try {
+      await deleteCategoryDef.mutateAsync({ id: deleteCategoryConfirm.id });
+      await utils.taskDefinition.getAll.invalidate();
+      setDeleteCategoryConfirm(null);
+      toast.success("カテゴリを削除しました");
+    } catch (e) {
+      toast.error("カテゴリの削除に失敗しました");
+    }
+  };
+
+  // カテゴリ並び替え（ドラッグ＆ドロップ）
+  const handleCategoryDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !taskDefinitionData) return;
+    const ids = categoryDragOrder.length > 0 ? categoryDragOrder : taskDefinitionData.map(c => c.id);
+    const oldIndex = ids.indexOf(Number(active.id));
+    const newIndex = ids.indexOf(Number(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(ids, oldIndex, newIndex);
+    setCategoryDragOrder(reordered);
+    try {
+      await reorderCategoriesDef.mutateAsync({
+        categories: reordered.map((id, idx) => ({ id, sortOrder: idx })),
+      });
+      await utils.taskDefinition.getAll.invalidate();
+    } catch (e) {
+      toast.error("並び替えに失敗しました");
+      setCategoryDragOrder([]);
     }
   };
 
@@ -2749,6 +2906,7 @@ export default function Home() {
             onClick={() => {
               setIsEditMode(v => !v);
               setEditingTaskId(null);
+              if (isEditMode) setShowCategoryManager(false);
             }}
             className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
               isEditMode
@@ -2763,6 +2921,21 @@ export default function Home() {
               <><SlidersHorizontal className="w-3 h-3" />タスク編集</>
             )}
           </button>
+
+          {/* カテゴリ管理ボタン */}
+          {isEditMode && (
+            <button
+              onClick={() => setShowCategoryManager(v => !v)}
+              className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${
+                showCategoryManager
+                  ? "bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600"
+                  : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"
+              }`}
+              title="カテゴリを管理"
+            >
+              <FolderOpen className="w-3 h-3" />カテゴリ管理
+            </button>
+          )}
 
           <div className="flex-1" />
 
@@ -2850,6 +3023,107 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowAddTaskDialog(false)}
+                className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* カテゴリ管理モーダル */}
+      {showCategoryManager && isEditMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCategoryManager(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-indigo-500" />
+                <h2 className="text-base font-bold text-gray-800">カテゴリ管理</h2>
+              </div>
+              <button onClick={() => setShowCategoryManager(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* カテゴリ一覧（ドラッグ並び替え） */}
+            <div className="overflow-y-auto flex-1 px-4 py-3">
+              <p className="text-xs text-gray-400 mb-3">ドラッグで並び替え、ペンアイコンで名前編集、ゴミアイコンで削除できます。</p>
+              {taskDefinitionData && (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleCategoryDragEnd}
+                >
+                  <SortableContext
+                    items={(categoryDragOrder.length > 0 ? categoryDragOrder : taskDefinitionData.map(c => c.id)).map(id => String(id))}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {(categoryDragOrder.length > 0
+                      ? categoryDragOrder.map(id => taskDefinitionData.find(c => c.id === id)).filter(Boolean)
+                      : taskDefinitionData
+                    ).map(cat => (
+                      <SortableCategoryRow
+                        key={cat!.id}
+                        cat={cat!}
+                        editingCategoryId={editingCategoryId}
+                        editingCategoryName={editingCategoryName}
+                        setEditingCategoryName={setEditingCategoryName}
+                        handleSaveCategory={handleSaveCategory}
+                        setEditingCategoryId={setEditingCategoryId}
+                        setEditingCategoryName2={setEditingCategoryName}
+                        handleDeleteCategory={handleDeleteCategory}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+
+            {/* 新規カテゴリ追加 */}
+            <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+              <p className="text-xs text-gray-500 font-medium mb-2">新しいカテゴリを追加</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newCategoryName.trim()) handleAddCategory(); }}
+                  placeholder="カテゴリ名を入力…"
+                  className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!newCategoryName.trim()}
+                  className="flex items-center gap-1 text-sm px-3 py-2 rounded-xl bg-indigo-500 text-white font-semibold hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Plus className="w-4 h-4" />追加
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* カテゴリ削除確認ダイアログ */}
+      {deleteCategoryConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setDeleteCategoryConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-gray-800 mb-2">カテゴリを削除</h2>
+            <p className="text-sm text-gray-600 mb-1">「{deleteCategoryConfirm.name}」を削除しますか？</p>
+            {deleteCategoryConfirm.taskCount > 0 && (
+              <p className="text-xs text-red-500 mb-3">★ このカテゴリには{deleteCategoryConfirm.taskCount}件のタスクがあります。タスクも同時に削除されます。</p>
+            )}
+            <p className="text-xs text-gray-400 mb-4">この操作は元に戻せません。</p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmDeleteCategory}
+                className="flex-1 text-sm py-2 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors"
+              >
+                削除する
+              </button>
+              <button
+                onClick={() => setDeleteCategoryConfirm(null)}
                 className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
               >
                 キャンセル

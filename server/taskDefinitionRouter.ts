@@ -1,6 +1,10 @@
 /**
  * タスク定義マスタ管理ルーター
  * - getAll: カテゴリ＋タスク定義を一括取得
+ * - addCategory: カテゴリ追加
+ * - updateCategory: カテゴリ名変更
+ * - deleteCategory: カテゴリ削除（配下のタスクも論理削除）
+ * - reorderCategories: カテゴリ並び替え
  * - addTask: タスク追加
  * - updateTask: タスク編集（ラベル・担当者・期限）
  * - deleteTask: タスク論理削除
@@ -35,6 +39,90 @@ export const taskDefinitionRouter = router({
       tasks: definitions.filter((d: TaskDefinition) => d.categoryId === cat.id),
     }));
   }),
+
+  // ─── カテゴリ管理 ────────────────────────────────────────────────────────
+
+  // カテゴリ追加
+  addCategory: publicProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(128),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB not available");
+      const existing: TaskCategory[] = await db
+        .select()
+        .from(taskCategories)
+        .where(eq(taskCategories.isActive, true))
+        .orderBy(asc(taskCategories.sortOrder));
+      const maxSort = existing.length > 0 ? existing[existing.length - 1].sortOrder + 1 : 0;
+      const [result] = await db.insert(taskCategories).values({
+        name: input.name,
+        sortOrder: maxSort,
+        isActive: true,
+      });
+      return { id: (result as any).insertId };
+    }),
+
+  // カテゴリ名変更
+  updateCategory: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().min(1).max(128),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB not available");
+      await db
+        .update(taskCategories)
+        .set({ name: input.name })
+        .where(eq(taskCategories.id, input.id));
+      return { success: true };
+    }),
+
+  // カテゴリ削除（配下のタスクも論理削除）
+  deleteCategory: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB not available");
+      await db
+        .update(taskDefinitions)
+        .set({ isActive: false })
+        .where(eq(taskDefinitions.categoryId, input.id));
+      await db
+        .update(taskCategories)
+        .set({ isActive: false })
+        .where(eq(taskCategories.id, input.id));
+      return { success: true };
+    }),
+
+  // カテゴリ並び替え（sortOrderを一括更新）
+  reorderCategories: publicProcedure
+    .input(
+      z.object({
+        categories: z.array(z.object({ id: z.number(), sortOrder: z.number() })),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB not available");
+      await Promise.all(
+        input.categories.map(({ id, sortOrder }) =>
+          db
+            .update(taskCategories)
+            .set({ sortOrder })
+            .where(eq(taskCategories.id, id))
+        )
+      );
+      return { success: true };
+    }),
+
+  // ─── タスク管理 ────────────────────────────────────────────────────────
 
   // タスク追加
   addTask: publicProcedure
