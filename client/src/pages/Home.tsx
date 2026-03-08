@@ -2627,6 +2627,16 @@ export default function Home() {
               <div className="divide-y divide-gray-50">
                 {catTasks.map((task) => {
                   const taskNum = taskNumberMap.get(task.id);
+                  // DBタスク定義IDを取得（legacyIdから逆引き）
+                  const defId = (() => {
+                    if (!taskDefinitionData) return null;
+                    for (const c of taskDefinitionData) {
+                      const found = c.tasks.find(d => (d.legacyId ?? `def-${d.id}`) === task.id);
+                      if (found) return found.id;
+                    }
+                    return null;
+                  })();
+                  const isThisEditing = editingTaskId !== null && editingTaskId === defId;
                   return (
                     <div
                       key={task.id}
@@ -2634,62 +2644,140 @@ export default function Home() {
                         task.done ? "opacity-50" : ""
                       } ${
                         hideDone && task.done ? "hidden" : ""
+                      } ${
+                        isEditMode ? "bg-amber-50/30" : ""
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        {taskNum !== undefined && (
-                          <span className="text-[10px] font-bold text-gray-300 tabular-nums w-4 shrink-0 text-right">{taskNum}</span>
-                        )}
-                        <button
-                          onClick={() => toggleDone(task.id)}
-                          className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                            completingTasks.has(task.id)
-                              ? "border-green-400 bg-green-50 animate-pulse"
-                              : task.done
-                              ? "border-green-400 bg-green-400"
-                              : "border-gray-300 hover:border-blue-400"
-                          }`}
-                        >
-                          {(task.done || completingTasks.has(task.id)) && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                          )}
-                        </button>
-                        <label
-                          className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
-                            task.done ? "opacity-30 pointer-events-none" : ""
-                          }`}
-                          onClick={() => toggleHelp(task.id)}
-                        >
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                            task.help
-                              ? "bg-amber-400 border-amber-400 text-white"
-                              : "border-gray-200 text-gray-300 hover:border-amber-300 hover:text-amber-400"
-                          }`}>HELP</span>
-                        </label>
-                        <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
-                        <span className={`flex-1 text-sm leading-snug ${ task.done ? "line-through text-gray-400" : "text-gray-800" }`}>
-                          {task.label}
-                          {task.deadline && !task.done && (
-                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
-                              ⏰ {task.deadline}
+                      {isEditMode && isThisEditing ? (
+                        // 編集インラインフォーム
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editingLabel}
+                            onChange={e => setEditingLabel(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") saveEditTask(); if (e.key === "Escape") setEditingTaskId(null); }}
+                            className="w-full text-sm border border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-gray-400">デフォルト担当</label>
+                              <select
+                                value={editingDefaultPlanned}
+                                onChange={e => setEditingDefaultPlanned(e.target.value)}
+                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
+                              >
+                                {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-gray-400">期限</label>
+                              <input
+                                type="text"
+                                value={editingDeadline}
+                                onChange={e => setEditingDeadline(e.target.value)}
+                                placeholder="例: 17:00まで"
+                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={saveEditTask} className="flex-1 text-xs py-1.5 rounded-lg bg-amber-500 text-white font-semibold hover:bg-amber-600">保存</button>
+                            <button onClick={() => setEditingTaskId(null)} className="flex-1 text-xs py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">キャンセル</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2.5">
+                            {taskNum !== undefined && (
+                              <span className="text-[10px] font-bold text-gray-300 tabular-nums w-4 shrink-0 text-right">{taskNum}</span>
+                            )}
+                            <button
+                              onClick={() => toggleDone(task.id)}
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                                completingTasks.has(task.id)
+                                  ? "border-green-400 bg-green-50 animate-pulse"
+                                  : task.done
+                                  ? "border-green-400 bg-green-400"
+                                  : "border-gray-300 hover:border-blue-400"
+                              }`}
+                            >
+                              {(task.done || completingTasks.has(task.id)) && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                              )}
+                            </button>
+                            <label
+                              className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
+                                task.done ? "opacity-30 pointer-events-none" : ""
+                              }`}
+                              onClick={() => toggleHelp(task.id)}
+                            >
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                task.help
+                                  ? "bg-amber-400 border-amber-400 text-white"
+                                  : "border-gray-200 text-gray-300 hover:border-amber-300 hover:text-amber-400"
+                              }`}>HELP</span>
+                            </label>
+                            <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
+                            <span className={`flex-1 text-sm leading-snug ${ task.done ? "line-through text-gray-400" : "text-gray-800" }`}>
+                              {task.label}
+                              {task.deadline && !task.done && (
+                                <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                                  ⏰ {task.deadline}
+                                </span>
+                              )}
                             </span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-1.5">
+                            <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
+                            <select
+                              value={task.planned}
+                              onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, planned: e.target.value } : t))}
+                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:border-blue-300"
+                            >
+                              {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+                          {/* 編集モード時: 編集・削除ボタン */}
+                          {isEditMode && defId !== null && (
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "")}
+                                className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
+                              >
+                                <FileText className="w-3 h-3" />編集
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTask(defId, task.label)}
+                                className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />削除
+                              </button>
+                            </div>
                           )}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-end gap-1.5">
-                        <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
-                        <select
-                          value={task.planned}
-                          onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, planned: e.target.value } : t))}
-                          className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:border-blue-300"
-                        >
-                          {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
               </div>
+              {/* 編集モード時: タスク追加ボタン */}
+              {isEditMode && (
+                <div className="px-4 py-2">
+                  <button
+                    onClick={() => {
+                      setAddTaskCategory(cat);
+                      setAddTaskLabel("");
+                      setAddTaskDefaultPlanned("当日現場責任者");
+                      setAddTaskDeadline("");
+                      setShowAddTaskDialog(true);
+                    }}
+                    className="w-full text-xs py-2 rounded-lg border border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 font-medium flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />タスクを追加
+                  </button>
+                </div>
+              )}
               {hideDone && catTasks.every(t => t.done) && (
                 <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
                   <span>✓</span><span>このカテゴリはすべて完了しています</span>
