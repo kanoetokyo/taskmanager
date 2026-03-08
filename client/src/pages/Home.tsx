@@ -10,7 +10,7 @@
  * - マルチデバイスリアルタイム同期（tRPC + DB）
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -1880,7 +1880,7 @@ export default function Home() {
           const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
 
           return (
-            <>
+            <Fragment key={cat}>
             {false && (
               <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
                 {/* 退勤前チェックヘッダー */}
@@ -2395,7 +2395,7 @@ export default function Home() {
                 );
               })()}
             </section>
-            </>  
+            </Fragment>  
           );
         });
         })()}
