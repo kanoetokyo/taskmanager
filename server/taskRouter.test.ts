@@ -104,41 +104,11 @@ describe("task state logic", () => {
   });
 });
 
-describe("handover member check logic", () => {
-  const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原"];
-
-  it("toggles member check on", () => {
-    const checked: string[] = [];
-    const member = "前田";
-    const alreadyChecked = checked.includes(member);
-    const newChecked = alreadyChecked
-      ? checked.filter(m => m !== member)
-      : [...checked, member];
-    expect(newChecked).toContain("前田");
-    expect(newChecked.length).toBe(1);
-  });
-
-  it("toggles member check off", () => {
-    const checked = ["前田", "加藤"];
-    const member = "前田";
-    const alreadyChecked = checked.includes(member);
-    const newChecked = alreadyChecked
-      ? checked.filter(m => m !== member)
-      : [...checked, member];
-    expect(newChecked).not.toContain("前田");
-    expect(newChecked.length).toBe(1);
-  });
-
-  it("detects all members checked", () => {
-    const checked = [...HANDOVER_MEMBERS];
-    expect(checked.length).toBe(HANDOVER_MEMBERS.length);
-  });
-});
-
 describe("customer status logic", () => {
-  const CUSTOMER_STATUSES_ALL = ["不通・未対応", "調整中・仮予約中", "保留", "完了"] as const;
+  const CUSTOMER_STATUSES_ALL = ["これから", "不通・未対応", "調整中・仮予約中", "保留", "完了"] as const;
 
-  it("has correct status options", () => {
+  it("has correct status options including これから", () => {
+    expect(CUSTOMER_STATUSES_ALL).toContain("これから");
     expect(CUSTOMER_STATUSES_ALL).toContain("不通・未対応");
     expect(CUSTOMER_STATUSES_ALL).toContain("調整中・仮予約中");
     expect(CUSTOMER_STATUSES_ALL).toContain("保留");
@@ -175,38 +145,6 @@ describe("store check logic", () => {
   it("detects all stores checked", () => {
     const checked = [...STORE_NAMES];
     expect(checked.length === STORE_NAMES.length).toBe(true);
-  });
-});
-
-describe("handover noConfirmationRequired logic", () => {
-  it("defaults to false for new handover items", () => {
-    const item = { id: "1", author: "", text: "", checked: [], noConfirmationRequired: false };
-    expect(item.noConfirmationRequired).toBe(false);
-  });
-
-  it("toggles noConfirmationRequired on", () => {
-    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: false };
-    const updated = { ...item, noConfirmationRequired: !item.noConfirmationRequired };
-    expect(updated.noConfirmationRequired).toBe(true);
-  });
-
-  it("toggles noConfirmationRequired off", () => {
-    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: true };
-    const updated = { ...item, noConfirmationRequired: !item.noConfirmationRequired };
-    expect(updated.noConfirmationRequired).toBe(false);
-  });
-
-  it("hides confirmation check when noConfirmationRequired is true", () => {
-    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: true };
-    // Simulate the UI condition: show check only when text exists AND noConfirmationRequired is false
-    const shouldShowCheck = item.text && !item.noConfirmationRequired;
-    expect(shouldShowCheck).toBeFalsy();
-  });
-
-  it("shows confirmation check when noConfirmationRequired is false", () => {
-    const item = { id: "1", author: "", text: "test", checked: [], noConfirmationRequired: false };
-    const shouldShowCheck = item.text && !item.noConfirmationRequired;
-    expect(shouldShowCheck).toBeTruthy();
   });
 });
 

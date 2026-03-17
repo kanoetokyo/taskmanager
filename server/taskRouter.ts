@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   customerHandovers,
   grayCellStatus,
-  handoverItems,
   individualHandovers,
   misocaStatus,
   storeCheckStates,
@@ -75,69 +74,6 @@ const storeCheckRouter = router({
     }),
 });
 
-// ─── Handover Items (全体引き継ぎ) ────────────────────────────────────────────
-const handoverRouter = router({
-  getByDate: publicProcedure
-    .input(z.object({ dateKey: z.string() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return [];
-      // 指定日のアイテム + 前日以前の未完了アイテム（content非空）を返す
-      // これにより翌日以降も未完了の引き継ぎが表示される
-      const results = await db
-        .select()
-        .from(handoverItems)
-        .where(
-          and(
-            ne(handoverItems.content, ""),
-            or(
-              eq(handoverItems.dateKey, input.dateKey),
-              lt(handoverItems.dateKey, input.dateKey)
-            )
-          )
-        );
-      return results;
-    }),
-
-  upsert: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      dateKey: z.string(),
-      author: z.string(),
-      content: z.string(),
-      checkedMembers: z.array(z.string()),
-      noConfirmationRequired: z.boolean().default(false),
-    }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return;
-      // contentが空のアイテムはDBに保存しない（空欄多表示バグ防止）
-      if (input.content.trim() === "") {
-        // 既存レコードがあれば削除（空にした場合のクリーンアップ）
-        await db.delete(handoverItems).where(eq(handoverItems.id, input.id));
-        return;
-      }
-      await db
-        .insert(handoverItems)
-        .values(input)
-        .onDuplicateKeyUpdate({
-          set: {
-            author: input.author,
-            content: input.content,
-            checkedMembers: input.checkedMembers,
-            noConfirmationRequired: input.noConfirmationRequired,
-          },
-        });
-    }),
-
-  delete: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return;
-      await db.delete(handoverItems).where(eq(handoverItems.id, input.id));
-    }),
-});
 
 // ─── Individual Handovers (個別引き継ぎ) ──────────────────────────────────────
 const individualHandoverRouter = router({
@@ -296,7 +232,6 @@ const storesShiftRouter = router({
 export const taskRouter = router({
   taskStates: taskStatesRouter,
   storeCheck: storeCheckRouter,
-  handover: handoverRouter,
   individualHandover: individualHandoverRouter,
   customerHandover: customerHandoverRouter,
   misoca: misocaRouter,

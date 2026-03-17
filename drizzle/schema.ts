@@ -55,20 +55,6 @@ export const storeCheckStates = mysqlTable("store_check_states", {
 export type StoreCheckState = typeof storeCheckStates.$inferSelect;
 export type InsertStoreCheckState = typeof storeCheckStates.$inferInsert;
 
-// ─── Handover Items (全体引き継ぎ, per date) ──────────────────────────────
-export const handoverItems = mysqlTable("handover_items", {
-  id: varchar("id", { length: 64 }).primaryKey(),
-  dateKey: varchar("dateKey", { length: 10 }).notNull(),
-  author: varchar("author", { length: 64 }).notNull().default(""),
-  content: varchar("content", { length: 2048 }).notNull().default(""),
-  checkedMembers: json("checkedMembers").notNull().$type<string[]>().default([]),
-  noConfirmationRequired: boolean("noConfirmationRequired").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-export type HandoverItem = typeof handoverItems.$inferSelect;
-export type InsertHandoverItem = typeof handoverItems.$inferInsert;
-
 // ─── Individual Handover Records (個別引き継ぎ) ───────────────────────────
 export const individualHandovers = mysqlTable("individual_handovers", {
   id: varchar("id", { length: 64 }).primaryKey(),

@@ -189,3 +189,11 @@
 - [x] store_check_statesの3日超レコードをサーバー起動時・getByDate呼び出し時に自動削除する
 - [x] クリーンアップ関数をserver/db.tsに追加する
 - [x] テストを追加する
+
+## handover_items（全体引き継ぎ）の完全削除 (2026-03-17)
+- [x] drizzle/schema.tsからhandoverItems・HandoverItem・InsertHandoverItemを削除
+- [x] server/taskRouter.tsからhandoverRouterとhandoverItemsのimportを削除
+- [x] server/routers.tsからhandover関連ルートを削除
+- [x] client/src/pages/Home.tsxから全体引き継ぎ関連のstate・hooks・handlers・JSXを削除
+- [x] テストファイルからhandover関連テストを削除
+- [x] DBマイグレーション実行（pnpm db:push）

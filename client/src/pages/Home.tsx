@@ -232,20 +232,7 @@ function formatDateLabel(key: string): { main: string; sub: string } {
 
 // ─── Handover Memo ──────────────────────────────────────────────────────────
 
-const HANDOVER_MEMBERS = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "ベーさん", "篠原", "野村"];
-
-interface HandoverItem {
-  id: string;
-  author: string;   // 作成者
-  text: string;
-  checked: string[]; // 確認済みメンバー名
-  noConfirmationRequired: boolean; // 確認不要フラグ
-  inherited?: boolean; // 前日から引き継ぎされたか
-}
-
-function newHandoverItem(): HandoverItem {
-  return { id: crypto.randomUUID(), author: "", text: "", checked: [], noConfirmationRequired: false };
-}
+const MEMBER_LIST = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "ベーさん", "篠原", "野村"];
 
 // ─── Customer Handover ─────────────────────────────────────────────────────
 
@@ -415,7 +402,6 @@ export default function Home() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [hideDone, setHideDone] = useState<boolean>(false);
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
-  const [handoverItems, setHandoverItems] = useState<HandoverItem[]>([newHandoverItem()]);
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
   const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
   const [completedCategories, setCompletedCategories] = useState<Set<string>>(new Set());
@@ -424,7 +410,6 @@ export default function Home() {
   const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
   const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
-  const [handoverOpen, setHandoverOpen] = useState<boolean>(false);
   const [customerOpen, setCustomerOpen] = useState<boolean>(false);
   const [customerFilter, setCustomerFilter] = useState<string>("all"); // "all" | ステータス名
   const [customerSort, setCustomerSort] = useState<"added" | "status">("added"); // 追加順 or ステータス順
@@ -437,22 +422,17 @@ export default function Home() {
   // DB読み込み完了フラグ（読み込み中は自動保存を抑制）
   const tasksLoadedRef = useRef(false);
   const storeCheckLoadedRef = useRef(false);
-  const handoverLoadedRef = useRef(false);
   const individualHandoverLoadedRef = useRef(false);
   const customersLoadedRef = useRef(false);
 
-  // 全体引き継ぎの初回ロード完了フラグ（空アイテム追加を初回のみに限定）
-  const handoverInitializedRef = useRef(false);
 
   // 各セクション自動保存中フラグ（保存完了前にポーリングで上書きされないよう保護）
   const isSavingTasksRef = useRef(false);
   const isSavingStoreCheckRef = useRef(false);
-  const isSavingHandoverRef = useRef(false);
   const isSavingIndividualRef = useRef(false);
   const isSavingCustomerRef = useRef(false);
 
   // 入力フォーカス中はポーリングで上書きしないためのフラグ
-  const isEditingHandoverRef = useRef(false);
   const isEditingIndividualRef = useRef(false);
   const isEditingCustomerRef = useRef(false);
 
@@ -478,12 +458,6 @@ export default function Home() {
 
   // Store check for current date
   const { data: storeCheckData, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
-    { dateKey: currentDateKey },
-    { refetchInterval: 30000 }
-  );
-
-  // Handover items for current date
-  const { data: handoverData, refetch: refetchHandover } = trpc.task.handover.getByDate.useQuery(
     { dateKey: currentDateKey },
     { refetchInterval: 30000 }
   );
@@ -530,8 +504,6 @@ export default function Home() {
   const upsertTaskState = trpc.task.taskStates.upsert.useMutation();
   const bulkUpsertTaskStates = trpc.task.taskStates.bulkUpsert.useMutation();
   const upsertStoreCheck = trpc.task.storeCheck.upsert.useMutation();
-  const upsertHandover = trpc.task.handover.upsert.useMutation();
-  const deleteHandover = trpc.task.handover.delete.useMutation();
   const upsertIndividualHandover = trpc.task.individualHandover.upsert.useMutation();
   const deleteIndividualHandover = trpc.task.individualHandover.delete.useMutation();
   const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
@@ -668,45 +640,6 @@ export default function Home() {
     }
   }, [storeCheckData]);
 
-  // Load handover items from DB
-  useEffect(() => {
-    if (handoverData !== undefined) {
-      if (isEditingHandoverRef.current) return; // 入力中は上書きしない
-      if (isSavingHandoverRef.current) return; // 保存中は上書きしない
-      if (!handoverLoadedRef.current) {
-        // 初回ロード
-        if (handoverData.length > 0) {
-          setHandoverItems(handoverData.map(h => ({
-            id: h.id,
-            author: h.author,
-            text: h.content,
-            checked: h.checkedMembers as string[],
-            noConfirmationRequired: h.noConfirmationRequired ?? false,
-            inherited: h.dateKey !== currentDateKey, // 前日以前のデータは引き継ぎバッジを表示
-          })));
-          handoverInitializedRef.current = true;
-        } else if (!handoverInitializedRef.current) {
-          // DBにデータがない場合は初回のみ空アイテムを追加
-          setHandoverItems([newHandoverItem()]);
-          handoverInitializedRef.current = true;
-        }
-        setTimeout(() => { handoverLoadedRef.current = true; }, 0);
-      } else {
-        // ポーリング更新: 保存中でなければDBの値を反映
-        if (handoverData.length > 0) {
-          setHandoverItems(handoverData.map(h => ({
-            id: h.id,
-            author: h.author,
-            text: h.content,
-            checked: h.checkedMembers as string[],
-            noConfirmationRequired: h.noConfirmationRequired ?? false,
-            inherited: h.dateKey !== currentDateKey, // 前日以前のデータは引き継ぎバッジを表示
-          })));
-        }
-      }
-    }
-  }, [handoverData]);
-
   // Load individual handovers from DB
   useEffect(() => {
     if (individualHandoverData !== undefined) {
@@ -796,12 +729,9 @@ export default function Home() {
   useEffect(() => {
     tasksLoadedRef.current = false;
     storeCheckLoadedRef.current = false;
-    handoverLoadedRef.current = false;
-    handoverInitializedRef.current = false; // 日付変更時は初期化フラグもリセット
     individualHandoverLoadedRef.current = false;
     customersLoadedRef.current = false;
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
-    setHandoverItems([newHandoverItem()]);
     setStoreCheck({ line: [], pos: [], raccoon: [] });
     setLastSaved(null);
     setUndoHistory([]);
@@ -862,36 +792,6 @@ export default function Home() {
     }, 500);
     return () => { if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current); };
   }, [storeCheck, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 全体引き継ぎ自動保存
-  const handoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!handoverLoadedRef.current) return; // DB読み込み中は保存しない
-    if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current);
-    isSavingHandoverRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
-    handoverSaveTimerRef.current = setTimeout(async () => {
-      try {
-        for (const item of handoverItems) {
-          await upsertHandover.mutateAsync({
-            id: item.id,
-            dateKey: currentDateKey,
-            author: item.author,
-            content: item.text,
-            checkedMembers: item.checked,
-            noConfirmationRequired: item.noConfirmationRequired,
-          });
-        }
-        const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
-      } catch (e) {
-        console.error("Handover save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
-      } finally {
-        isSavingHandoverRef.current = false; // 保存完了後にフラグを解除
-      }
-    }, 800);
-    return () => { if (handoverSaveTimerRef.current) clearTimeout(handoverSaveTimerRef.current); };
-  }, [handoverItems, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 個別引き継ぎ自動保存
   const individualHandoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -993,58 +893,6 @@ export default function Home() {
   };
 
   // ─── Handover Handlers ─────────────────────────────────────────────────────
-
-  const addHandoverItem = () => {
-    const newItem = newHandoverItem();
-    setHandoverItems(prev => [...prev, newItem]);
-  };
-
-  const updateHandoverItem = (id: string, field: keyof HandoverItem, value: string | boolean) => {
-    setHandoverItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-  };
-
-  const handleDeleteHandoverItem = async (id: string) => {
-    // 削除後にアイテムが0件になる場合は空アイテムを追加
-    setHandoverItems(prev => {
-      const remaining = prev.filter(item => item.id !== id);
-      return remaining.length > 0 ? remaining : [newHandoverItem()];
-    });
-    try {
-      await deleteHandover.mutateAsync({ id });
-    } catch (e) {
-      console.error("Handover delete failed:", e);
-    }
-  };
-
-  const toggleHandoverCheck = (itemId: string, member: string) => {
-    setHandoverItems(prev => {
-      const updated = prev.map(item => {
-        if (item.id !== itemId) return item;
-        const alreadyChecked = item.checked.includes(member);
-        const newChecked = alreadyChecked
-          ? item.checked.filter((m: string) => m !== member)
-          : [...item.checked, member];
-        // 全員チェック完了時はそのアイテムを削除
-        if (!alreadyChecked && newChecked.length === HANDOVER_MEMBERS.length) {
-          setTimeout(async () => {
-            setHandoverItems(p => {
-              const remaining = p.filter(i => i.id !== itemId);
-              if (remaining.length === 0) return [newHandoverItem()];
-              return remaining;
-            });
-            try {
-              await deleteHandover.mutateAsync({ id: itemId });
-            } catch (e) {
-              console.error("Handover delete failed:", e);
-            }
-            toast.success("全員が確認しました。引き継ぎメモをクリアしました。");
-          }, 600);
-        }
-        return { ...item, checked: newChecked };
-      });
-      return updated;
-    });
-  };
 
   // ─── Individual Handover Handlers ─────────────────────────────────────────
 
@@ -1219,7 +1067,6 @@ export default function Home() {
       await Promise.all([
         refetchTaskStates(),
         refetchStoreCheck(),
-        refetchHandover(),
         refetchIndividualHandover(),
         refetchCustomer(),
         refetchMisoca(),
@@ -1610,7 +1457,7 @@ export default function Home() {
                       }`}
                     >
                       <option value="">作成者を選択</option>
-                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <span className="text-xs text-gray-400">→</span>
                     <select
@@ -1621,7 +1468,7 @@ export default function Home() {
                       }`}
                     >
                       <option value="">対象者を選択</option>
-                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <button
                       onClick={() => handleDeleteIndividualHandover(record.id)}
@@ -1825,7 +1672,7 @@ export default function Home() {
                       }`}
                     >
                       <option value="">記入者を選択</option>
-                      {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <select
                       value={c.status}
@@ -2002,7 +1849,7 @@ export default function Home() {
                   }`}
                 >
                   <option value="">更新者を選択</option>
-                  {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 {grayCellSet && (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -2039,7 +1886,7 @@ export default function Home() {
                   }`}
                 >
                   <option value="">更新者を選択</option>
-                  {HANDOVER_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 {storesShiftSet && (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
