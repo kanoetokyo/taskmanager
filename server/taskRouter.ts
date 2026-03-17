@@ -10,10 +10,10 @@ import {
   storesShiftStatus,
   taskStates,
 } from "../drizzle/schema";
-import { getDb } from "./db";
+import { cleanupOldDateKeyRecords, getDb } from "./db";
 import { publicProcedure, router } from "./_core/trpc";
 
-// ─── Task States ──────────────────────────────────────────────────────────────
+// ─── Task States ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const taskStatesRouter = router({
   // Get all task states for a date
   getByDate: publicProcedure
@@ -21,6 +21,8 @@ const taskStatesRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
+      // 3日超の古いデータをクリーンアップ（非同期・エラーは無視）
+      cleanupOldDateKeyRecords().catch(() => {});
       return db.select().from(taskStates).where(eq(taskStates.dateKey, input.dateKey));
     }),
 

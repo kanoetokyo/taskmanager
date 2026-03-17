@@ -1,0 +1,40 @@
+{
+  "query": "\nSELECT tbl, cnt, oldest, newest FROM (\n  SELECT 'task_states' AS tbl, COUNT(*) AS cnt, MIN(dateKey) AS oldest, MAX(dateKey) AS newest FROM task_states\n  UNION ALL SELECT 'store_check_states', COUNT(*), MIN(dateKey), MAX(dateKey) FROM store_check_states\n  UNION ALL SELECT 'handover_items', COUNT(*), MIN(dateKey), MAX(dateKey) FROM handover_items\n  UNION ALL SELECT 'individual_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM individual_handovers\n  UNION ALL SELECT 'customer_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM customer_handovers\n) t;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute \nSELECT tbl, cnt, oldest, newest FROM (\n  SELECT 'task_states' AS tbl, COUNT(*) AS cnt, MIN(dateKey) AS oldest, MAX(dateKey) AS newest FROM task_states\n  UNION ALL SELECT 'store_check_states', COUNT(*), MIN(dateKey), MAX(dateKey) FROM store_check_states\n  UNION ALL SELECT 'handover_items', COUNT(*), MIN(dateKey), MAX(dateKey) FROM handover_items\n  UNION ALL SELECT 'individual_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM individual_handovers\n  UNION ALL SELECT 'customer_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM customer_handovers\n) t;\n",
+  "rows": [
+    {
+      "tbl": "task_states",
+      "cnt": "349",
+      "oldest": "2026-03-01",
+      "newest": "2026-03-17"
+    },
+    {
+      "tbl": "individual_handovers",
+      "cnt": "4",
+      "oldest": "2026-03-07",
+      "newest": "2026-03-16"
+    },
+    {
+      "tbl": "handover_items",
+      "cnt": "0",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "customer_handovers",
+      "cnt": "22",
+      "oldest": "2026-03-06",
+      "newest": "2026-03-17"
+    },
+    {
+      "tbl": "store_check_states",
+      "cnt": "54",
+      "oldest": "2026-02-28",
+      "newest": "2026-03-17"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tcnt\toldest\tnewest\ntask_states\t349\t2026-03-01\t2026-03-17\nindividual_handovers\t4\t2026-03-07\t2026-03-16\nhandover_items\t0\tNULL\tNULL\ncustomer_handovers\t22\t2026-03-06\t2026-03-17\nstore_check_states\t54\t2026-02-28\t2026-03-17\n",
+  "stderr": "",
+  "execution_time_ms": 1585
+}

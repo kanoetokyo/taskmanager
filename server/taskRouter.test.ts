@@ -317,3 +317,44 @@ describe("Gray Cell date logic", () => {
     expect(text).toBe("あと5日分確認済み");
   });
 });
+
+describe("cleanup old date key records logic", () => {
+  /** cutoffKey: 今日から3日前の日付文字列を計算するロジックのテスト */
+  function calcCutoffKey(today: string): string {
+    const [y, m, d] = today.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    date.setDate(date.getDate() - 3);
+    return date.toISOString().slice(0, 10);
+  }
+
+  it("calculates cutoff key as 3 days before today", () => {
+    const cutoff = calcCutoffKey("2026-03-17");
+    expect(cutoff).toBe("2026-03-14");
+  });
+
+  it("records older than cutoff should be deleted", () => {
+    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
+    const records = [
+      { dateKey: "2026-03-13" }, // 4日前 → 削除対象
+      { dateKey: "2026-03-14" }, // ちょうど3日前 → 残す（lt: strictly less than）
+      { dateKey: "2026-03-15" }, // 2日前 → 残す
+      { dateKey: "2026-03-17" }, // 今日 → 残す
+    ];
+    const toDelete = records.filter(r => r.dateKey < cutoff);
+    const toKeep = records.filter(r => r.dateKey >= cutoff);
+    expect(toDelete.map(r => r.dateKey)).toEqual(["2026-03-13"]);
+    expect(toKeep.map(r => r.dateKey)).toEqual(["2026-03-14", "2026-03-15", "2026-03-17"]);
+  });
+
+  it("keeps records from exactly 3 days ago", () => {
+    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
+    const record = { dateKey: "2026-03-14" };
+    expect(record.dateKey < cutoff).toBe(false); // 削除されない
+  });
+
+  it("deletes records from 4 or more days ago", () => {
+    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
+    const record = { dateKey: "2026-03-13" };
+    expect(record.dateKey < cutoff).toBe(true); // 削除される
+  });
+});

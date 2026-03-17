@@ -1,0 +1,70 @@
+{
+  "query": "\nSELECT 'task_states' AS tbl, COUNT(*) AS cnt, MIN(dateKey) AS oldest, MAX(dateKey) AS newest FROM task_states\nUNION ALL\nSELECT 'store_check_states', COUNT(*), MIN(dateKey), MAX(dateKey) FROM store_check_states\nUNION ALL\nSELECT 'handover_items', COUNT(*), MIN(dateKey), MAX(dateKey) FROM handover_items\nUNION ALL\nSELECT 'individual_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM individual_handovers\nUNION ALL\nSELECT 'customer_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM customer_handovers\nUNION ALL\nSELECT 'misoca_status', COUNT(*), NULL, NULL FROM misoca_status\nUNION ALL\nSELECT 'gray_cell_status', COUNT(*), NULL, NULL FROM gray_cell_status\nUNION ALL\nSELECT 'stores_shift_status', COUNT(*), NULL, NULL FROM stores_shift_status\nUNION ALL\nSELECT 'task_categories', COUNT(*), NULL, NULL FROM task_categories\nUNION ALL\nSELECT 'task_definitions', COUNT(*), NULL, NULL FROM task_definitions;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute \nSELECT 'task_states' AS tbl, COUNT(*) AS cnt, MIN(dateKey) AS oldest, MAX(dateKey) AS newest FROM task_states\nUNION ALL\nSELECT 'store_check_states', COUNT(*), MIN(dateKey), MAX(dateKey) FROM store_check_states\nUNION ALL\nSELECT 'handover_items', COUNT(*), MIN(dateKey), MAX(dateKey) FROM handover_items\nUNION ALL\nSELECT 'individual_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM individual_handovers\nUNION ALL\nSELECT 'customer_handovers', COUNT(*), MIN(dateKey), MAX(dateKey) FROM customer_handovers\nUNION ALL\nSELECT 'misoca_status', COUNT(*), NULL, NULL FROM misoca_status\nUNION ALL\nSELECT 'gray_cell_status', COUNT(*), NULL, NULL FROM gray_cell_status\nUNION ALL\nSELECT 'stores_shift_status', COUNT(*), NULL, NULL FROM stores_shift_status\nUNION ALL\nSELECT 'task_categories', COUNT(*), NULL, NULL FROM task_categories\nUNION ALL\nSELECT 'task_definitions', COUNT(*), NULL, NULL FROM task_definitions;\n",
+  "rows": [
+    {
+      "tbl": "store_check_states",
+      "cnt": "54",
+      "oldest": "2026-02-28",
+      "newest": "2026-03-17"
+    },
+    {
+      "tbl": "handover_items",
+      "cnt": "0",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "individual_handovers",
+      "cnt": "4",
+      "oldest": "2026-03-07",
+      "newest": "2026-03-16"
+    },
+    {
+      "tbl": "task_states",
+      "cnt": "349",
+      "oldest": "2026-03-01",
+      "newest": "2026-03-17"
+    },
+    {
+      "tbl": "customer_handovers",
+      "cnt": "22",
+      "oldest": "2026-03-06",
+      "newest": "2026-03-17"
+    },
+    {
+      "tbl": "stores_shift_status",
+      "cnt": "1",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "misoca_status",
+      "cnt": "1",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "task_categories",
+      "cnt": "7",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "gray_cell_status",
+      "cnt": "1",
+      "oldest": "NULL",
+      "newest": "NULL"
+    },
+    {
+      "tbl": "task_definitions",
+      "cnt": "26",
+      "oldest": "NULL",
+      "newest": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tcnt\toldest\tnewest\nstore_check_states\t54\t2026-02-28\t2026-03-17\nhandover_items\t0\tNULL\tNULL\nindividual_handovers\t4\t2026-03-07\t2026-03-16\ntask_states\t349\t2026-03-01\t2026-03-17\ncustomer_handovers\t22\t2026-03-06\t2026-03-17\nstores_shift_status\t1\tNULL\tNULL\nmisoca_status\t1\tNULL\tNULL\ntask_categories\t7\tNULL\tNULL\ngray_cell_status\t1\tNULL\tNULL\ntask_definitions\t26\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1806
+}

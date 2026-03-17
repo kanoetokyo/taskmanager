@@ -90,3 +90,29 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // TODO: add feature queries here as your schema grows.
+
+// ─── Cleanup: 3日超の日付キーレコードを削除 ─────────────────────────────────
+/**
+ * task_states / store_check_states のうち、
+ * 今日から3日以上前の dateKey を持つレコードを削除する。
+ * サーバー起動時・getByDate 呼び出し時に実行する。
+ */
+export async function cleanupOldDateKeyRecords(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // 3日前（当日含まず）の日付文字列 YYYY-MM-DD を計算
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 3);
+  const cutoffKey = cutoff.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+  try {
+    const { taskStates, storeCheckStates } = await import("../drizzle/schema");
+    const { lt } = await import("drizzle-orm");
+    await db.delete(taskStates).where(lt(taskStates.dateKey, cutoffKey));
+    await db.delete(storeCheckStates).where(lt(storeCheckStates.dateKey, cutoffKey));
+    console.log(`[Cleanup] Deleted records older than ${cutoffKey}`);
+  } catch (err) {
+    console.warn("[Cleanup] Failed to delete old records:", err);
+  }
+}
