@@ -117,7 +117,8 @@ interface Task extends TaskDef {
 const STORE_NAMES = ["大井町", "大森南", "天満", "戸越銀座駅前", "大田中央", "川崎新町", "幸塚越"];
 
 interface StoreCheckState {
-  line: string[];   // チェック済み店舗名
+  lineMorning: string[];  // 午前LINEチェック済み店舗名
+  lineAfternoon: string[]; // 午後（退勤前）LINEチェック済み店舗名
   pos: string[];
   raccoon: string[];
 }
@@ -414,7 +415,7 @@ export default function Home() {
   const [customerFilter, setCustomerFilter] = useState<string>("all"); // "all" | ステータス名
   const [customerSort, setCustomerSort] = useState<"added" | "status">("added"); // 追加順 or ステータス順
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
-  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ line: [], pos: [], raccoon: [] });
+  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [prevDayTasks, setPrevDayTasks] = useState<Task[]>([]);
@@ -619,9 +620,11 @@ export default function Home() {
     if (storeCheckData) {
       if (!storeCheckLoadedRef.current) {
         // 初回ロード: DBの値を無条件に反映
-        const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
+        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] };
         for (const row of storeCheckData) {
-          if (row.checkType === "line") newState.line = row.checkedStores as string[];
+          if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
+          else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
+          else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
           else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
           else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
         }
@@ -629,9 +632,11 @@ export default function Home() {
         setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
       } else if (!isSavingStoreCheckRef.current) {
         // ポーリング更新: 保存タイマー動作中でなければDBの値を反映
-        const newState: StoreCheckState = { line: [], pos: [], raccoon: [] };
+        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] };
         for (const row of storeCheckData) {
-          if (row.checkType === "line") newState.line = row.checkedStores as string[];
+          if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
+          else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
+          else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
           else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
           else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
         }
@@ -732,7 +737,7 @@ export default function Home() {
     individualHandoverLoadedRef.current = false;
     customersLoadedRef.current = false;
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
-    setStoreCheck({ line: [], pos: [], raccoon: [] });
+    setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
@@ -777,7 +782,8 @@ export default function Home() {
     storeCheckSaveTimerRef.current = setTimeout(async () => {
       try {
         await Promise.all([
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line", checkedStores: storeCheck.line }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line_morning", checkedStores: storeCheck.lineMorning }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line_afternoon", checkedStores: storeCheck.lineAfternoon }),
           upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "pos", checkedStores: storeCheck.pos }),
           upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "raccoon", checkedStores: storeCheck.raccoon }),
         ]);
@@ -1935,7 +1941,7 @@ export default function Home() {
                   </span>
                   <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
                   <span className="ml-auto text-xs text-gray-400">
-                    {[storeCheck.line.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+                    {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
                   </span>
                 </div>
                 {/* 公式LINE */}
@@ -1943,26 +1949,26 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
                     <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
-                    {storeCheck.line.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+                    {storeCheck.lineAfternoon.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
                   </div>
-                  {storeCheck.line.length < STORE_NAMES.length ? (
+                  {storeCheck.lineAfternoon.length < STORE_NAMES.length ? (
                     <div className="flex flex-wrap gap-1.5 pl-6">
                       {STORE_NAMES.map(store => {
-                        const checked = storeCheck.line.includes(store);
+                        const checked = storeCheck.lineAfternoon.includes(store);
                         return (
-                          <button key={store} onClick={() => toggleStoreCheck("line", store)}
+                          <button key={store} onClick={() => toggleStoreCheck("lineAfternoon", store)}
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"}`}>
                             {checked ? "✓ " : ""}{store}
                           </button>
                         );
                       })}
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white">一括完了</button>
-                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.line.length}/{STORE_NAMES.length}店舗</span>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white">一括完了</button>
+                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.lineAfternoon.length}/{STORE_NAMES.length}店舗</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 pl-6">
                       <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
                     </div>
                   )}
                 </div>
@@ -2074,11 +2080,11 @@ export default function Home() {
                     </div>
                     <div className="flex flex-wrap gap-1.5 pl-6">
                       {STORE_NAMES.map(store => {
-                        const checked = storeCheck.line.includes(store);
+                        const checked = storeCheck.lineMorning.includes(store);
                         return (
                           <button
                             key={store}
-                            onClick={() => toggleStoreCheck("line", store)}
+                            onClick={() => toggleStoreCheck("lineMorning", store)}
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
@@ -2089,25 +2095,25 @@ export default function Home() {
                           </button>
                         );
                       })}
-                      {storeCheck.line.length < STORE_NAMES.length ? (
+                      {storeCheck.lineMorning.length < STORE_NAMES.length ? (
                         <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, line: [...STORE_NAMES] }))}
+                          onClick={() => setStoreCheck(prev => ({ ...prev, lineMorning: [...STORE_NAMES] }))}
                           className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white"
                         >
                           一括完了
                         </button>
                       ) : (
                         <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))}
+                          onClick={() => setStoreCheck(prev => ({ ...prev, lineMorning: [] }))}
                           className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
                         >
                           リセット
                         </button>
                       )}
                       <span className="self-center text-xs text-gray-400 ml-1">
-                        {storeCheck.line.length === STORE_NAMES.length
+                        {storeCheck.lineMorning.length === STORE_NAMES.length
                           ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
-                          : `${storeCheck.line.length}/${STORE_NAMES.length}店舗`
+                          : `${storeCheck.lineMorning.length}/${STORE_NAMES.length}店舗`
                         }
                       </span>
                     </div>
@@ -2460,7 +2466,7 @@ export default function Home() {
             </span>
             <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
             <span className="ml-auto text-xs text-gray-400">
-              {[storeCheck.line.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+              {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
             </span>
           </div>
           {/* 公式LINE */}
@@ -2469,16 +2475,16 @@ export default function Home() {
               <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
               <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
             </div>
-            {storeCheck.line.length < STORE_NAMES.length ? (
+            {storeCheck.lineAfternoon.length < STORE_NAMES.length ? (
               <div className="flex flex-wrap gap-1.5 pl-6">
                 {STORE_NAMES.map(store => {
-                  const checked = storeCheck.line.includes(store);
+                  const checked = storeCheck.lineAfternoon.includes(store);
                   return (
                     <button
                       key={store}
                       onClick={() => setStoreCheck(prev => ({
                         ...prev,
-                        line: checked ? prev.line.filter(s => s !== store) : [...prev.line, store]
+                        line: checked ? prev.lineAfternoon.filter(s => s !== store) : [...prev.lineAfternoon, store]
                       }))}
                       className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
                         checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
@@ -2492,7 +2498,7 @@ export default function Home() {
             ) : (
               <div className="flex items-center gap-2 pl-6">
                 <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                <button onClick={() => setStoreCheck(prev => ({ ...prev, line: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
+                <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
               </div>
             )}
           </div>

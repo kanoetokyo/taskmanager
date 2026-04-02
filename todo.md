@@ -197,3 +197,7 @@
 - [x] client/src/pages/Home.tsxから全体引き継ぎ関連のstate・hooks・handlers・JSXを削除
 - [x] テストファイルからhandover関連テストを削除
 - [x] DBマイグレーション実行（pnpm db:push）
+
+## 午前・午後LINEチェック連動バグ修正 (2026-04-02)
+- [x] 午前と午後のLINEチェックが連動する原因を調査する
+- [x] 午前・午後のLINEチェックを独立して動作するよう修正する
