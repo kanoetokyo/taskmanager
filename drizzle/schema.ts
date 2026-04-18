@@ -1,4 +1,4 @@
-import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -79,6 +79,7 @@ export const customerHandovers = mysqlTable("customer_handovers", {
   status: varchar("status", { length: 32 }).notNull().default("対応中"),
   assignee: varchar("assignee", { length: 64 }).notNull().default(""),
   links: json("links").$type<string[]>(),
+  dueDate: bigint("dueDate", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

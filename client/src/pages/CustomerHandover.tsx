@@ -1,6 +1,8 @@
 /**
  * 顧客引き継ぎ専用ページ（カンバン3列レイアウト）
  * - 「不通・未対応」「調整中・仮予約中」「保留」の3列表示
+ * - 保留カードに期限バッジ（日付選択）を表示
+ * - 期限超過カードの背景を赤に変更
  * - 日付をまたいで継続表示（getActiveで全件取得）
  * - 完了ステータスで自動削除
  * - 削除ボタンで手動削除
@@ -16,6 +18,7 @@ import {
   X,
   Users,
   RefreshCw,
+  CalendarClock,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -87,6 +90,7 @@ interface CustomerRecord {
   memo: string;
   assignee: string;
   links: string[];
+  dueDate: number | null; // UTCミリ秒（保留ステータスのみ使用）
 }
 
 function newCustomerRecord(status: CustomerStatus = "不通・未対応"): CustomerRecord {
@@ -98,12 +102,43 @@ function newCustomerRecord(status: CustomerStatus = "不通・未対応"): Custo
     memo: "",
     assignee: "",
     links: [],
+    dueDate: null,
   };
 }
 
 function todayKey(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** UTCミリ秒 → "YYYY-MM-DD" (input[type=date]用) */
+function msToDateInput(ms: number | null): string {
+  if (!ms) return "";
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DD" → UTCミリ秒（その日の0時JST = UTC-9h） */
+function dateInputToMs(val: string): number | null {
+  if (!val) return null;
+  const [y, m, d] = val.split("-").map(Number);
+  // ローカル日付の0時として解釈
+  return new Date(y, m - 1, d).getTime();
+}
+
+/** 期限超過かどうか（保留ステータスかつdueDate設定済みかつ今日を過ぎている） */
+function isOverdue(c: CustomerRecord): boolean {
+  if (c.status !== "保留" || !c.dueDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return c.dueDate < today.getTime();
+}
+
+/** 期限バッジ表示用テキスト */
+function formatDueDate(ms: number | null): string {
+  if (!ms) return "";
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 // ─── カード コンポーネント ────────────────────────────────────────────────────
@@ -113,12 +148,19 @@ interface CustomerCardProps {
   onUpdate: (id: string, field: keyof CustomerRecord, value: string) => void;
   onDelete: (id: string) => void;
   onLinkChange: (id: string, links: string[]) => void;
+  onDueDateChange: (id: string, dueDate: number | null) => void;
   isEditingRef: React.MutableRefObject<boolean>;
 }
 
-function CustomerCard({ c, onUpdate, onDelete, onLinkChange, isEditingRef }: CustomerCardProps) {
+function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, isEditingRef }: CustomerCardProps) {
+  const overdue = isOverdue(c);
+
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-2">
+    <div className={`rounded-xl border shadow-sm p-3 space-y-2 transition-colors ${
+      overdue
+        ? "bg-red-50 border-red-300"
+        : "bg-white border-gray-100"
+    }`}>
       {/* 行1: 顧客名・担当者・削除 */}
       <div className="flex items-center gap-2">
         <input
@@ -128,7 +170,11 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, isEditingRef }: Cus
           onFocus={() => { isEditingRef.current = true; }}
           onBlur={() => { isEditingRef.current = false; }}
           placeholder="顧客名を入力…"
-          className="flex-1 min-w-0 text-sm font-semibold text-gray-800 border-0 border-b border-dashed border-gray-200 bg-transparent px-1 py-0.5 focus:outline-none focus:border-rose-300 placeholder-gray-300"
+          className={`flex-1 min-w-0 text-sm font-semibold border-0 border-b border-dashed bg-transparent px-1 py-0.5 focus:outline-none placeholder-gray-300 ${
+            overdue
+              ? "text-red-800 border-red-300 focus:border-red-500"
+              : "text-gray-800 border-gray-200 focus:border-rose-300"
+          }`}
         />
         <select
           value={c.assignee}
@@ -147,18 +193,57 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, isEditingRef }: Cus
         </button>
       </div>
 
-      {/* 行2: ステータス変更 */}
+      {/* 行2: ステータス変更 + 保留カードの期限バッジ */}
       <div className="flex items-center gap-2">
         <select
           value={c.status}
           onChange={e => onUpdate(c.id, "status", e.target.value)}
-          className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-rose-300 w-full ${STATUS_STYLE[c.status]}`}
+          className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-rose-300 flex-1 ${STATUS_STYLE[c.status]}`}
         >
           {CUSTOMER_STATUSES_ALL.map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+
+        {/* 保留ステータスのみ期限バッジを表示 */}
+        {c.status === "保留" && (
+          <div className={`flex items-center gap-1 shrink-0 px-2 py-1 rounded-md border text-xs font-medium ${
+            overdue
+              ? "bg-red-100 border-red-400 text-red-700"
+              : c.dueDate
+                ? "bg-orange-50 border-orange-300 text-orange-700"
+                : "bg-gray-50 border-gray-200 text-gray-400"
+          }`}>
+            <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+            <input
+              type="date"
+              value={msToDateInput(c.dueDate)}
+              onChange={e => onDueDateChange(c.id, dateInputToMs(e.target.value))}
+              onFocus={() => { isEditingRef.current = true; }}
+              onBlur={() => { isEditingRef.current = false; }}
+              className="bg-transparent border-0 outline-none text-xs w-[90px] cursor-pointer"
+              title="期限を設定"
+            />
+            {c.dueDate && (
+              <button
+                onClick={() => onDueDateChange(c.id, null)}
+                className="text-gray-400 hover:text-red-400 transition-colors ml-0.5"
+                title="期限をクリア"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* 期限超過バナー */}
+      {overdue && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 font-semibold bg-red-100 border border-red-200 rounded-md px-2 py-1">
+          <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+          期限超過（{formatDueDate(c.dueDate)}）
+        </div>
+      )}
 
       {/* 行3: やりとり + メモ */}
       <div className="flex flex-col gap-1.5">
@@ -271,6 +356,7 @@ export default function CustomerHandoverPage() {
       memo: c.content,
       assignee: c.assignee ?? "",
       links: (c.links as string[]) ?? [],
+      dueDate: c.dueDate ?? null,
     }));
     if (!loadedRef.current) {
       setCustomers(records);
@@ -280,7 +366,7 @@ export default function CustomerHandoverPage() {
     }
   }, [customerData]);
 
-  // テキスト入力の自動保存（0.8秒遅延）
+  // 自動保存（0.8秒遅延）
   useEffect(() => {
     if (!loadedRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -298,6 +384,7 @@ export default function CustomerHandoverPage() {
             status: c.status,
             assignee: c.assignee ?? "",
             links: c.links ?? [],
+            dueDate: c.dueDate ?? null,
           });
         }
         const now = new Date();
@@ -311,7 +398,7 @@ export default function CustomerHandoverPage() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [customers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // フィールド更新
+  // フィールド更新（文字列フィールド）
   const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
     setCustomers(prev => {
       const updated = prev.map(c => c.id !== id ? c : { ...c, [field]: value });
@@ -346,6 +433,7 @@ export default function CustomerHandoverPage() {
           status: value,
           assignee: target.assignee ?? "",
           links: target.links ?? [],
+          dueDate: target.dueDate ?? null,
         })
           .then(() => {
             const now = new Date();
@@ -359,7 +447,40 @@ export default function CustomerHandoverPage() {
         return updated;
       }
 
-      // テキスト入力：遅延保存（useEffectに委ねる）
+      return updated;
+    });
+  };
+
+  // 期限更新（即座にDB送信）
+  const handleDueDateChange = (id: string, dueDate: number | null) => {
+    setCustomers(prev => {
+      const updated = prev.map(c => c.id !== id ? c : { ...c, dueDate });
+      const target = updated.find(c => c.id === id);
+      if (!target) return prev;
+
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      isSavingRef.current = true;
+      upsertCustomer.mutateAsync({
+        id: target.id,
+        dateKey: todayKey(),
+        customerName: target.name,
+        store: target.contact,
+        content: target.memo,
+        status: target.status,
+        assignee: target.assignee ?? "",
+        links: target.links ?? [],
+        dueDate,
+      })
+        .then(() => {
+          const now = new Date();
+          setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+        })
+        .catch(e => {
+          console.error("Customer dueDate update failed:", e);
+          toast.error("期限の保存に失敗しました。");
+        })
+        .finally(() => { isSavingRef.current = false; });
+
       return updated;
     });
   };
@@ -387,6 +508,7 @@ export default function CustomerHandoverPage() {
   };
 
   const totalCount = customers.filter(c => c.status !== "完了").length;
+  const overdueCount = customers.filter(c => isOverdue(c)).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -407,6 +529,12 @@ export default function CustomerHandoverPage() {
             <span className="text-xs text-gray-400 bg-rose-50 px-2 py-0.5 rounded-full font-medium">
               {totalCount}件
             </span>
+            {overdueCount > 0 && (
+              <span className="text-xs text-white bg-red-500 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                <CalendarClock className="w-3 h-3" />
+                期限超過 {overdueCount}件
+              </span>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {lastSaved && (
@@ -448,6 +576,7 @@ export default function CustomerHandoverPage() {
                       onUpdate={updateCustomer}
                       onDelete={handleDelete}
                       onLinkChange={handleLinkChange}
+                      onDueDateChange={handleDueDateChange}
                       isEditingRef={isEditingRef}
                     />
                   ))}
@@ -484,6 +613,7 @@ export default function CustomerHandoverPage() {
                     onUpdate={updateCustomer}
                     onDelete={handleDelete}
                     onLinkChange={handleLinkChange}
+                    onDueDateChange={handleDueDateChange}
                     isEditingRef={isEditingRef}
                   />
                 ))}

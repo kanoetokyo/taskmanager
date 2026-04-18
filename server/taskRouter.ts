@@ -140,6 +140,7 @@ const customerHandoverRouter = router({
       status: z.string(),
       assignee: z.string(),
       links: z.array(z.string()).max(4).optional(),
+      dueDate: z.number().nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -150,10 +151,11 @@ const customerHandoverRouter = router({
         return;
       }
       const links = input.links ?? [];
+      const dueDate = input.dueDate ?? null;
       await db
         .insert(customerHandovers)
-        .values({ ...input, links })
-        .onDuplicateKeyUpdate({ set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links } });
+        .values({ ...input, links, dueDate })
+        .onDuplicateKeyUpdate({ set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links, dueDate } });
     }),
 
   delete: publicProcedure
