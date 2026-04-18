@@ -1356,6 +1356,12 @@ export default function Home() {
                         </button>
                         <div className="flex-1 space-y-1">
                           <textarea
+                            ref={el => {
+                              if (el) {
+                                el.style.height = "auto";
+                                el.style.height = el.scrollHeight + "px";
+                              }
+                            }}
                             value={task.text}
                             onChange={e => {
                               updateIndividualTask(record.id, task.id, "text", e.target.value);
