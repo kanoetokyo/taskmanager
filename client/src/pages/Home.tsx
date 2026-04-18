@@ -1715,6 +1715,12 @@ export default function Home() {
                       ))}
                     </select>
                     <textarea
+                      ref={el => {
+                        if (el) {
+                          el.style.height = "auto";
+                          el.style.height = el.scrollHeight + "px";
+                        }
+                      }}
                       value={c.memo}
                       onChange={e => {
                         updateCustomer(c.id, "memo", e.target.value);
@@ -1723,8 +1729,6 @@ export default function Home() {
                       }}
                       onFocus={e => {
                         isEditingCustomerRef.current = true;
-                        e.target.style.height = "auto";
-                        e.target.style.height = e.target.scrollHeight + "px";
                       }}
                       onBlur={() => { isEditingCustomerRef.current = false; }}
                       placeholder="メモを入力…"
