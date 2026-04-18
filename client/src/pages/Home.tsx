@@ -839,6 +839,8 @@ export default function Home() {
     customerSaveTimerRef.current = setTimeout(async () => {
       try {
         for (const c of customers) {
+          // 「完了」ステータスのレコードはupsertせずスキップ（削除対象）
+          if (c.status === "完了") continue;
           await upsertCustomer.mutateAsync({
             id: c.id,
             dateKey: currentDateKey,
@@ -873,17 +875,20 @@ export default function Home() {
     setCustomers(prev => prev.map(c => {
       if (c.id !== id) return c;
       const updatedRecord = { ...c, [field]: value };
-      // 完了に変更した場合は1秒後に自動削除
+      // 完了に変更した場合は即座にDBから削除
       if (field === "status" && value === "完了") {
-        setTimeout(async () => {
+        // 自動保存タイマーをキャンセルして「完了」がupsertされるのを防ぐ
+        if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
+        // フロントエンドから即座に除去
+        setTimeout(() => {
           setCustomers(p => p.filter(r => r.id !== id));
-          try {
-            await deleteCustomer.mutateAsync({ id });
-          } catch (e) {
-            console.error("Customer delete failed:", e);
-          }
           toast.success("顧客引き継ぎを完了として削除しました");
-        }, 800);
+        }, 600);
+        // DBからも即座に削除（非同期）
+        deleteCustomer.mutateAsync({ id }).catch(e => {
+          console.error("Customer delete failed:", e);
+        });
+        return updatedRecord;
       }
       return updatedRecord;
     }));

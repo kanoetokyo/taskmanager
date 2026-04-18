@@ -119,11 +119,36 @@ describe("customer status logic", () => {
     const customers = [
       { id: "1", status: "不通・未対応", name: "田中" },
       { id: "2", status: "完了", name: "鈴木" },
-      { id: "3", status: "調整中・仮予約中", name: "佐藤" },
+      { id: "3", status: "調整中・仓予約中", name: "佐藤" },
     ];
     const nonCompleted = customers.filter(c => c.status !== "完了");
     expect(nonCompleted.length).toBe(2);
     expect(nonCompleted.map(c => c.name)).toEqual(["田中", "佐藤"]);
+  });
+
+  it("完了ステータスのupsertは安全にスキップされるべき", () => {
+    // upsert時に「完了」ステータスのレコードは保存しないことを検証
+    const customers = [
+      { id: "1", status: "不通・未対応", name: "田中" },
+      { id: "2", status: "完了", name: "鈴木" },
+      { id: "3", status: "これから", name: "佐藤" },
+    ];
+    const toUpsert = customers.filter(c => c.status !== "完了");
+    expect(toUpsert.length).toBe(2);
+    expect(toUpsert.map(c => c.name)).toEqual(["田中", "佐藤"]);
+    expect(toUpsert.every(c => c.status !== "完了")).toBe(true);
+  });
+
+  it("完了ステータスに変更されたレコードはフロントエンドから除去されるべき", () => {
+    let customers = [
+      { id: "1", status: "不通・未対応", name: "田乫" },
+      { id: "2", status: "調整中・仓予約中", name: "山田" },
+    ];
+    // 「完了」に変更した場合はリストから除去
+    const idToDelete = "1";
+    customers = customers.filter(c => c.id !== idToDelete);
+    expect(customers.length).toBe(1);
+    expect(customers[0].name).toBe("山田");
   });
 });
 

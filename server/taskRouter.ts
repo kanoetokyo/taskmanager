@@ -125,7 +125,8 @@ const customerHandoverRouter = router({
   getActive: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    // Return all non-completed customers (carries over day to day)
+    // 「完了」ステータスのレコードをDBから自動削除してから返す
+    await db.delete(customerHandovers).where(eq(customerHandovers.status, "完了"));
     return db.select().from(customerHandovers);
   }),
 
@@ -143,6 +144,11 @@ const customerHandoverRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
+      // 「完了」ステータスのupsertは受け付けず即座に削除する
+      if (input.status === "完了") {
+        await db.delete(customerHandovers).where(eq(customerHandovers.id, input.id));
+        return;
+      }
       const links = input.links ?? [];
       await db
         .insert(customerHandovers)
