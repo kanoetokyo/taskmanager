@@ -332,6 +332,13 @@ export default function CustomerHandoverPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [lastSaved, setLastSaved] = useState<string>("");
 
+  // タブタイトルを「顧客引継ぎ」に設定し、ページ離脱時に元に戻す
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "顧客引継ぎ";
+    return () => { document.title = prev; };
+  }, []);
+
   const loadedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
