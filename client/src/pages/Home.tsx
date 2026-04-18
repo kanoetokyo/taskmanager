@@ -370,7 +370,7 @@ export default function Home() {
   const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
   const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
-  const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
+  const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(true);
   const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
