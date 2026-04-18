@@ -185,17 +185,17 @@ const CAT_CONFIG: Record<string, CatConfig> = {
 // ─── Icon color per task type ─────────────────────────────────────────────────
 
 const ICON_COLOR: Record<string, string> = {
-  "sys-a": "text-green-500",
-  "sys-b": "text-blue-500",
-  "sys-c": "text-indigo-500",
-  "sys-d": "text-red-400",
-  "sys-e": "text-orange-400",
-  "cust":  "text-teal-500",
-  "pay":   "text-amber-500",
-  "line":  "text-cyan-500",
-  "clean": "text-orange-500",
-  "doc":   "text-violet-500",
-  "omori": "text-rose-500",
+  "sys-a": "text-rose-400",
+  "sys-b": "text-rose-400",
+  "sys-c": "text-rose-400",
+  "sys-d": "text-rose-400",
+  "sys-e": "text-rose-400",
+  "cust":  "text-rose-400",
+  "pay":   "text-rose-400",
+  "line":  "text-rose-400",
+  "clean": "text-rose-400",
+  "doc":   "text-rose-400",
+  "omori": "text-rose-400",
 };
 
 function getIconColor(id: string): string {
@@ -253,11 +253,11 @@ const CONTACT_OPTIONS = [
 ];
 
 const STATUS_STYLE: Record<CustomerStatus, string> = {
-  "これから": "bg-blue-100 text-blue-700 border-blue-300",
-  "不通・未対応": "bg-red-100 text-red-700 border-red-300",
-  "調整中・仮予約中": "bg-yellow-100 text-yellow-700 border-yellow-300",
-  "保留": "bg-gray-100 text-gray-600 border-gray-300",
-  "完了": "bg-green-100 text-green-700 border-green-300",
+  "これから": "bg-rose-50 text-rose-600 border-rose-200",
+  "不通・未対応": "bg-red-50 text-red-600 border-red-200",
+  "調整中・仮予約中": "bg-amber-50 text-amber-700 border-amber-200",
+  "保留": "bg-stone-100 text-stone-500 border-stone-200",
+  "完了": "bg-emerald-50 text-emerald-600 border-emerald-200",
 };
 
  interface CustomerRecord {
@@ -1346,7 +1346,7 @@ export default function Home() {
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
-              className="ml-2 p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              className="ml-2 p-1 rounded-md text-gray-400 hover:text-rose-400 hover:bg-blue-50 transition-colors"
               title="最新データに同期"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-500" : ""}`} />
@@ -1362,14 +1362,14 @@ export default function Home() {
             <div className="flex items-center gap-1.5 px-1">
               <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">{dateMain}</span>
               {dateSub && (
-                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{dateSub}</span>
+                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-rose-600 border border-blue-100">{dateSub}</span>
               )}
             </div>
             <button onClick={goToNextDay} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors" title="翌日">
               <ChevronRight className="w-4 h-4" />
             </button>
             {!isToday && (
-              <button onClick={goToToday} className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium">
+              <button onClick={goToToday} className="text-xs px-2.5 py-1 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors font-medium">
                 今日
               </button>
             )}
@@ -1383,7 +1383,7 @@ export default function Home() {
                 style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#16a34a" : "#2563eb" }}
               />
             </div>
-            <span className="text-xs font-semibold text-blue-600 whitespace-nowrap tabular-nums">
+            <span className="text-xs font-semibold text-rose-600 whitespace-nowrap tabular-nums">
               {progressPct}%
             </span>
             <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums">
@@ -1403,14 +1403,14 @@ export default function Home() {
 
         {/* 前日未完了タスクアラート */}
         {prevDayUndoneTasks.length > 0 && (
-          <section className="bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-xl shadow-sm overflow-hidden">
+          <section className="bg-rose-50 border border-rose-200 border-l-4 border-l-rose-400 rounded-xl shadow-sm overflow-hidden">
             {/* ヘッダー（常に表示） */}
             <div className="w-full px-4 py-2.5 flex items-center justify-between border-b border-red-100">
               <button
                 onClick={() => setShowPrevUndone(v => !v)}
                 className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition-opacity"
               >
-                <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
                   <AlertCircle className="w-4 h-4" />
                   前日（{prevDateMain}）の未完了タスク
                 </span>
@@ -1422,10 +1422,10 @@ export default function Home() {
                 >
                   一括完了
                 </button>
-                <span className="text-xs font-semibold text-red-500">{prevDayUndoneTasks.length}件未完了</span>
+                <span className="text-xs font-semibold text-rose-500">{prevDayUndoneTasks.length}件未完了</span>
                 <button
                   onClick={() => setShowPrevUndone(v => !v)}
-                  className="text-red-400 hover:opacity-70 transition-opacity"
+                  className="text-rose-400 hover:opacity-70 transition-opacity"
                 >
                   <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showPrevUndone ? "rotate-180" : ""}`} />
                 </button>
@@ -1436,10 +1436,10 @@ export default function Home() {
               <div className="divide-y divide-red-100">
                 {prevDayUndoneTasks.map(task => (
                   <div key={task.id} className="flex items-center gap-2 px-4 py-2">
-                    <span className="text-red-400 shrink-0">{task.icon}</span>
-                    <span className="flex-1 text-sm text-red-800">{task.label}</span>
+                    <span className="text-rose-400 shrink-0">{task.icon}</span>
+                    <span className="flex-1 text-sm text-rose-800">{task.label}</span>
                     {task.planned && (
-                      <span className="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
+                      <span className="text-xs text-rose-500 bg-rose-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
                     )}
                   </div>
                 ))}
@@ -1454,12 +1454,12 @@ export default function Home() {
             className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
             onClick={() => setIndividualHandoverOpen(v => !v)}
           >
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
               <Send className="w-4 h-4" />
               個別引き継ぎ
             </span>
             {!individualHandoverOpen && individualHandovers.length > 0 && (
-              <span className="text-xs text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-xs text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full font-medium">
                 {individualHandovers.length}件
               </span>
             )}
@@ -1467,7 +1467,7 @@ export default function Home() {
               {individualHandoverOpen && (
                 <button
                   onClick={e => { e.stopPropagation(); addIndividualHandover(); }}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors font-medium"
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-rose-300 text-rose-700 hover:bg-rose-50 transition-colors font-medium"
                 >
                   <span className="text-base leading-none">+</span> 引き継ぎを追加
                 </button>
@@ -1488,7 +1488,7 @@ export default function Home() {
                 <div key={record.id} className="px-4 py-3 space-y-3">
                   {/* 前日引き継ぎバッジ */}
                   {record.inherited && (
-                    <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
+                    <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
                       ↩ 前日から引き継ぎ
                     </span>
                   )}
@@ -1498,7 +1498,7 @@ export default function Home() {
                       value={record.author}
                       onChange={e => updateIndividualHandover(record.id, "author", e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
-                        record.author ? "border-purple-300 text-purple-800 bg-purple-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                        record.author ? "border-rose-300 text-rose-800 bg-rose-50" : "border-gray-200 text-gray-400 bg-gray-50"
                       }`}
                     >
                       <option value="">作成者を選択</option>
@@ -1509,7 +1509,7 @@ export default function Home() {
                       value={record.target}
                       onChange={e => updateIndividualHandover(record.id, "target", e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
-                        record.target ? "border-purple-300 text-purple-800 bg-purple-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                        record.target ? "border-rose-300 text-rose-800 bg-rose-50" : "border-gray-200 text-gray-400 bg-gray-50"
                       }`}
                     >
                       <option value="">対象者を選択</option>
@@ -1571,7 +1571,7 @@ export default function Home() {
                                 task.deadline && !task.done
                                   ? new Date(task.deadline) < new Date()
                                     ? "border-red-300 text-red-600 bg-red-50"
-                                    : "border-purple-200 text-purple-700 bg-purple-50"
+                                    : "border-rose-200 text-rose-700 bg-rose-50"
                                   : "border-gray-200 text-gray-500 bg-gray-50"
                               }`}
                             />
@@ -1598,7 +1598,7 @@ export default function Home() {
                     {/* 項目追加ボタン */}
                     <button
                       onClick={() => addIndividualTask(record.id)}
-                      className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 transition-colors font-medium mt-1"
+                      className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 transition-colors font-medium mt-1"
                     >
                       <span className="text-base leading-none">+</span> 項目を追加
                     </button>
@@ -1617,12 +1617,12 @@ export default function Home() {
             className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
             onClick={() => setCustomerOpen(v => !v)}
           >
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
               <Users className="w-4 h-4" />
               顧客引き継ぎ
             </span>
             {!customerOpen && customers.length > 0 && (
-              <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-xs text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full font-medium">
                 {customers.length}件
               </span>
             )}
@@ -1630,7 +1630,7 @@ export default function Home() {
               {customerOpen && (
                 <button
                   onClick={e => { e.stopPropagation(); addCustomer(); }}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-sm"
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-rose-500 hover:bg-rose-600 text-white font-medium transition-colors shadow-sm"
                 >
                   <span className="text-base leading-none">+</span> 顧客を追加
                 </button>
@@ -1655,8 +1655,8 @@ export default function Home() {
                       onClick={() => setCustomerFilter(s)}
                       className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
                         customerFilter === s
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                          ? "bg-rose-500 text-white border-rose-500"
+                          : "bg-white text-gray-500 border-gray-200 hover:border-rose-300 hover:text-rose-600"
                       }`}
                     >
                       {label} ({count})
@@ -1666,7 +1666,7 @@ export default function Home() {
                 {/* ソートボタン */}
                 <button
                   onClick={() => setCustomerSort(v => v === "added" ? "status" : "added")}
-                  className="ml-auto text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors font-medium flex items-center gap-1"
+                  className="ml-auto text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-rose-300 hover:text-rose-600 transition-colors font-medium flex items-center gap-1"
                 >
                   {customerSort === "added" ? "追加順 ↑" : "ステータス順"}
                 </button>
@@ -1686,7 +1686,7 @@ export default function Home() {
             <div className="divide-y divide-gray-100">
               {sorted.map(c => (
                 <div key={c.id} className={`px-4 py-3 space-y-2 ${
-                  c.status === "これから" ? "bg-blue-50/40" :
+                  c.status === "これから" ? "bg-rose-50/40" :
                   c.status === "不通・未対応" ? "bg-red-50/40" :
                   c.status === "調整中・仮予約中" ? "bg-yellow-50/40" :
                   c.status === "保留" ? "bg-gray-50/60" : ""
@@ -1694,7 +1694,7 @@ export default function Home() {
                   {/* 行1: 顧客名 + ステータス + 削除 */}
                   {c.inherited && (
                     <div className="flex">
-                      <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">
+                      <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
                         ↩ 前日から引き継ぎ
                       </span>
                     </div>
@@ -1707,13 +1707,13 @@ export default function Home() {
                       onFocus={() => { isEditingCustomerRef.current = true; }}
                       onBlur={() => { isEditingCustomerRef.current = false; }}
                       placeholder="顧客名を入力"
-                      className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300"
+                      className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300"
                     />
                     <select
                       value={c.assignee ?? ""}
                       onChange={e => updateCustomer(c.id, "assignee", e.target.value)}
-                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-blue-400 ${
-                        c.assignee ? "border-blue-300 text-blue-800 bg-blue-50" : "border-gray-200 text-gray-400 bg-gray-50"
+                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-rose-300 ${
+                        c.assignee ? "border-rose-300 text-rose-800 bg-rose-50" : "border-gray-200 text-gray-400 bg-gray-50"
                       }`}
                     >
                       <option value="">記入者を選択</option>
@@ -1722,7 +1722,7 @@ export default function Home() {
                     <select
                       value={c.status}
                       onChange={e => updateCustomer(c.id, "status", e.target.value)}
-                      className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 ${STATUS_STYLE[c.status]}`}
+                      className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-rose-300 ${STATUS_STYLE[c.status]}`}
                     >
                       {CUSTOMER_STATUSES_ALL.map(s => (
                         <option key={s} value={s}>{s}</option>
@@ -1741,7 +1741,7 @@ export default function Home() {
                     <select
                       value={c.contact}
                       onChange={e => updateCustomer(c.id, "contact", e.target.value)}
-                      className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 shrink-0"
+                      className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-rose-300 shrink-0"
                     >
                       <option value="">やり取りを選択</option>
                       {CONTACT_OPTIONS.map(o => (
@@ -1767,7 +1767,7 @@ export default function Home() {
                       onBlur={() => { isEditingCustomerRef.current = false; }}
                       placeholder="メモを入力…"
                       rows={1}
-                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white placeholder-gray-300 resize-none overflow-hidden"
+                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300 resize-none overflow-hidden"
                       style={{ minHeight: "34px" }}
                     />
                    </div>
@@ -1787,7 +1787,7 @@ export default function Home() {
                            onFocus={() => { isEditingCustomerRef.current = true; }}
                            onBlur={() => { isEditingCustomerRef.current = false; }}
                            placeholder="URLを入力…"
-                           className="flex-1 text-xs text-blue-600 border-0 border-b border-dashed border-gray-300 bg-transparent px-1 py-0.5 focus:outline-none focus:border-blue-400 placeholder-gray-300"
+                           className="flex-1 text-xs text-rose-600 border-0 border-b border-dashed border-gray-300 bg-transparent px-1 py-0.5 focus:outline-none focus:border-rose-300 placeholder-gray-300"
                          />
                          <button
                            onClick={() => {
@@ -1807,7 +1807,7 @@ export default function Home() {
                            const newLinks = [...(c.links ?? []), ""];
                            setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
                          }}
-                         className="text-xs text-gray-400 hover:text-blue-500 transition-colors flex items-center gap-1 mt-0.5 w-fit"
+                         className="text-xs text-gray-400 hover:text-rose-400 transition-colors flex items-center gap-1 mt-0.5 w-fit"
                        >
                          <Plus className="w-3 h-3" />
                          リンクを追加
@@ -2028,12 +2028,12 @@ export default function Home() {
                         const checked = storeCheck.pos.includes(store);
                         return (
                           <button key={store} onClick={() => toggleStoreCheck("pos", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-700"}`}>
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"}`}>
                             {checked ? "✓ " : ""}{store}
                           </button>
                         );
                       })}
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white">一括完了</button>
+                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-rose-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white">一括完了</button>
                       <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.pos.length}/{STORE_NAMES.length}店舗</span>
                     </div>
                   ) : (
@@ -2056,7 +2056,7 @@ export default function Home() {
                         const checked = storeCheck.raccoon.includes(store);
                         return (
                           <button key={store} onClick={() => toggleStoreCheck("raccoon", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-700"}`}>
+                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"}`}>
                             {checked ? "✓ " : ""}{store}
                           </button>
                         );
@@ -2097,7 +2097,7 @@ export default function Home() {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
                         setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
                     >
                       一括完了
                     </button>
@@ -2177,7 +2177,7 @@ export default function Home() {
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
-                                : "bg-white border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-700"
+                                : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"
                             }`}
                           >
                             {checked ? "✓ " : ""}{store}
@@ -2187,7 +2187,7 @@ export default function Home() {
                       {storeCheck.pos.length < STORE_NAMES.length ? (
                         <button
                           onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white"
+                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-rose-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white"
                         >
                           一括完了
                         </button>
@@ -2223,7 +2223,7 @@ export default function Home() {
                             className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
                               checked
                                 ? "bg-green-500 border-green-500 text-white shadow-sm"
-                                : "bg-white border-gray-200 text-gray-500 hover:border-indigo-300 hover:text-indigo-700"
+                                : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"
                             }`}
                           >
                             {checked ? "✓ " : ""}{store}
@@ -2415,7 +2415,7 @@ export default function Home() {
                           task.done
                             ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
                             : task.planned === "当日事務担当"
-                              ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
+                              ? "border-blue-200 bg-blue-50 text-rose-700 font-medium"
                               : task.planned === "当日現場責任者"
                                 ? "border-amber-200 bg-amber-50 text-amber-700 font-medium"
                                 : "border-gray-200 bg-white text-gray-600"
@@ -2642,7 +2642,7 @@ export default function Home() {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
                         setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium transition-colors"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
                     >
                       一括完了
                     </button>
@@ -2902,7 +2902,7 @@ export default function Home() {
             title="元に戻す"
             className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
               undoHistory.length > 0
-                ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                ? "border-blue-200 bg-blue-50 text-rose-600 hover:bg-blue-100"
                 : "border-gray-100 text-gray-300 cursor-not-allowed"
             }`}
           >
