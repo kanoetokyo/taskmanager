@@ -569,7 +569,19 @@ export default function CustomerHandoverPage() {
                       案件なし
                     </div>
                   )}
-                  {colCards.map(c => (
+                  {(col.status === "保留"
+                    ? [...colCards].sort((a, b) => {
+                        const today = new Date(); today.setHours(0, 0, 0, 0);
+                        const aOver = a.dueDate !== null && a.dueDate < today.getTime();
+                        const bOver = b.dueDate !== null && b.dueDate < today.getTime();
+                        if (aOver !== bOver) return aOver ? -1 : 1;
+                        if (a.dueDate !== null && b.dueDate !== null) return a.dueDate - b.dueDate;
+                        if (a.dueDate !== null) return -1;
+                        if (b.dueDate !== null) return 1;
+                        return 0;
+                      })
+                    : colCards
+                  ).map(c => (
                     <CustomerCard
                       key={c.id}
                       c={c}
