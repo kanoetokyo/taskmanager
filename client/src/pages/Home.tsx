@@ -1441,6 +1441,8 @@ export default function Home() {
             </span>
             <a
               href="/customers"
+              target="_blank"
+              rel="noopener noreferrer"
               className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
             >
               顧客引き継ぎページへ →
