@@ -137,6 +137,7 @@ export const taskDefinitions = mysqlTable("task_definitions", {
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   legacyId: varchar("legacyId", { length: 128 }), // 既存BASE_TASKS文字列IDとの互換性維持用
+  showOnDays: varchar("showOnDays", { length: 128 }).notNull().default(""), // 表示日制限（例: "15,30" = 毎月15日・30日のみ。空文字列 = 常時表示）
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

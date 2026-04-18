@@ -475,6 +475,7 @@ export default function Home() {
   const [editingLabel, setEditingLabel] = useState("");
   const [editingDefaultPlanned, setEditingDefaultPlanned] = useState("");
   const [editingDeadline, setEditingDeadline] = useState("");
+  const [editingShowOnDays, setEditingShowOnDays] = useState(""); // 例: "15,30" = 毎月15日・30日のみ
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [addTaskCategory, setAddTaskCategory] = useState("");
   const [addTaskLabel, setAddTaskLabel] = useState("");
@@ -499,9 +500,16 @@ export default function Home() {
   // taskDefinitionDataがロード済みならDBデータを使用、未ロード中はBASE_TASKSをフォールバック
   const activeTasks: TaskDef[] = useMemo(() => {
     if (!taskDefinitionData || taskDefinitionData.length === 0) return BASE_TASKS;
+    // 現在表示中の日付の「日」を取得（showOnDaysフィルタリング用）
+    const currentDay = keyToDate(currentDateKey).getDate();
     const result: TaskDef[] = [];
     for (const cat of taskDefinitionData) {
       for (const def of cat.tasks) {
+        // showOnDaysが設定されている場合、指定日のみ表示
+        if (def.showOnDays && def.showOnDays.trim() !== "") {
+          const allowedDays = def.showOnDays.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+          if (!allowedDays.includes(currentDay)) continue;
+        }
         const taskId = def.legacyId ?? `def-${def.id}`;
         const baseTask = BASE_TASKS.find(t => t.id === def.legacyId);
         const catConfig = CAT_CONFIG[cat.name];
@@ -517,7 +525,7 @@ export default function Home() {
       }
     }
     return result;
-  }, [taskDefinitionData]);
+  }, [taskDefinitionData, currentDateKey]);
 
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
@@ -944,14 +952,14 @@ export default function Home() {
 
   // ─── 編集モード Handlers ─────────────────────────────────────────────────────
 
-  // タスク編集開始
-  const startEditTask = (defId: number, label: string, defaultPlanned: string, deadline: string) => {
+   // タスク編集開始
+  const startEditTask = (defId: number, label: string, defaultPlanned: string, deadline: string, showOnDays?: string) => {
     setEditingTaskId(defId);
     setEditingLabel(label);
     setEditingDefaultPlanned(defaultPlanned || "当日事務担当");
     setEditingDeadline(deadline || "");
+    setEditingShowOnDays(showOnDays || "");
   };
-
   // タスク編集保存
   const saveEditTask = async () => {
     if (!editingTaskId || !editingLabel.trim()) return;
@@ -961,6 +969,7 @@ export default function Home() {
         label: editingLabel.trim(),
         defaultPlanned: editingDefaultPlanned,
         deadline: editingDeadline,
+        showOnDays: editingShowOnDays.trim(),
       });
       await utils.taskDefinition.getAll.invalidate();
       setEditingTaskId(null);
@@ -1904,9 +1913,11 @@ export default function Home() {
                 {catTasks.filter(task => !(hideDone && task.done)).map(task => {
                   const taskNum = taskNumberMap.get(task.id);
                   // 編集モード用: DBのidを取得
-                  const defId = taskDefinitionData
+                  const defRow = taskDefinitionData
                     ?.find(c => c.name === cat)
-                    ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id)?.id ?? null;
+                    ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id) ?? null;
+                  const defId = defRow?.id ?? null;
+                  const defShowOnDays = defRow?.showOnDays ?? "";
                   const isThisEditing = editingTaskId !== null && editingTaskId === defId;
                   const sortableId = defId ? `def-${defId}` : task.id;
                   return (
@@ -1940,7 +1951,7 @@ export default function Home() {
                           className="w-full text-sm border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
                           autoFocus
                         />
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] text-gray-400">デフォルト担当:</span>
                           <select
                             value={editingDefaultPlanned}
@@ -1956,6 +1967,15 @@ export default function Home() {
                             onChange={e => setEditingDeadline(e.target.value)}
                             placeholder="例: 17:00まで"
                             className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-24 focus:outline-none"
+                          />
+                          <span className="text-[10px] text-gray-400">表示日:</span>
+                          <input
+                            type="text"
+                            value={editingShowOnDays}
+                            onChange={e => setEditingShowOnDays(e.target.value)}
+                            placeholder="例: 15,30（空=常時）"
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-28 focus:outline-none"
+                            title="毎月15日・30日のみ表示する場合は 15,30 と入力。空の場合は常時表示。"
                           />
                         </div>
                         <div className="flex gap-2">
@@ -2077,7 +2097,7 @@ export default function Home() {
                     {isEditMode && !isThisEditing && defId !== null && (
                       <div className="mt-2 flex gap-2">
                         <button
-                          onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "")}
+                          onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "", defShowOnDays)}
                           className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
                         >
                           <FileText className="w-3 h-3" />編集
@@ -2297,14 +2317,16 @@ export default function Home() {
                 {catTasks.map((task) => {
                   const taskNum = taskNumberMap.get(task.id);
                   // DBタスク定義IDを取得（legacyIdから逆引き）
-                  const defId = (() => {
+                  const mobileDefRow = (() => {
                     if (!taskDefinitionData) return null;
                     for (const c of taskDefinitionData) {
                       const found = c.tasks.find(d => (d.legacyId ?? `def-${d.id}`) === task.id);
-                      if (found) return found.id;
+                      if (found) return found;
                     }
                     return null;
                   })();
+                  const defId = mobileDefRow?.id ?? null;
+                  const defShowOnDays = mobileDefRow?.showOnDays ?? "";
                   const isThisEditing = editingTaskId !== null && editingTaskId === defId;
                   const sortableId2 = defId ? `def-${defId}` : task.id;
                   return (
@@ -2350,6 +2372,17 @@ export default function Home() {
                                 onChange={e => setEditingDeadline(e.target.value)}
                                 placeholder="例: 17:00まで"
                                 className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-gray-400">表示日</label>
+                              <input
+                                type="text"
+                                value={editingShowOnDays}
+                                onChange={e => setEditingShowOnDays(e.target.value)}
+                                placeholder="例: 15,30（空=常時）"
+                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
+                                title="毎月15日・30日のみ表示する場合は 15,30 と入力。空の場合は常時表示。"
                               />
                             </div>
                           </div>
@@ -2414,7 +2447,7 @@ export default function Home() {
                           {isEditMode && defId !== null && (
                             <div className="mt-2 flex gap-2">
                               <button
-                                onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "")}
+                                onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "", defShowOnDays)}
                                 className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
                               >
                                 <FileText className="w-3 h-3" />編集

@@ -172,6 +172,7 @@ export const taskDefinitionRouter = router({
         label: z.string().min(1).max(512).optional(),
         defaultPlanned: z.string().max(64).optional(),
         deadline: z.string().max(64).optional(),
+        showOnDays: z.string().max(128).optional(), // 例: "15,30" = 毎月15日・30日のみ。空文字列 = 常時表示
       })
     )
     .mutation(async ({ input }) => {

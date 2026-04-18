@@ -1,0 +1,1 @@
+ALTER TABLE `task_definitions` ADD `showOnDays` varchar(128) DEFAULT '' NOT NULL;

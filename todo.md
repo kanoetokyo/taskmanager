@@ -245,3 +245,9 @@
 - [x] tRPCのupsert/getActiveにdueDateを追加
 - [x] 保留カードに日付選択の期限バッジを表示する
 - [x] 期限超過カードの背景色を赤にする
+
+## タスク表示日制限（showOnDays）機能 (2026-04-18)
+- [x] DBスキーマのtaskDefinitionsにshowOnDaysフィールドを追加してマイグレーション
+- [x] taskDefinitionRouterのupdateTaskにshowOnDaysを追加
+- [x] Home.tsxのactiveTasksでshowOnDaysフィルタリングを実装
+- [x] デスクトップ・モバイル両方の編集フォームに表示日入力欄を追加
