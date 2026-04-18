@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SakuraPetals from "./components/SakuraPetals";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import CustomerHandover from "./pages/CustomerHandover";
 import Home from "./pages/Home";
 
 function Router() {
@@ -12,6 +13,7 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/customers"} component={CustomerHandover} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

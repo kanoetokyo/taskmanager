@@ -235,46 +235,6 @@ function formatDateLabel(key: string): { main: string; sub: string } {
 
 const MEMBER_LIST = ["前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "ベーさん", "篠原", "野村"];
 
-// ─── Customer Handover ─────────────────────────────────────────────────────
-
-const CUSTOMER_STATUSES = ["これから", "不通・未対応", "調整中・仮予約中", "保留"] as const;
-const CUSTOMER_STATUSES_ALL = [...CUSTOMER_STATUSES, "完了"] as const;
-type CustomerStatus = typeof CUSTOMER_STATUSES_ALL[number];
-
-const STORE_NAMES_FULL = ["大井町店", "大森南店", "天満店", "戸越銀座駅前店", "大田中央店", "川崎新町店", "幸塚越店"];
-const CONTACT_OPTIONS = [
-  "作業時追加",
-  ...STORE_NAMES_FULL.map(s => `POS(${s})`),
-  ...STORE_NAMES_FULL.map(s => `ラクーン(${s})`),
-  ...STORE_NAMES_FULL.map(s => `LINE(${s})`),
-  "フリーダイヤル",
-  "来店",
-  "SMS",
-];
-
-const STATUS_STYLE: Record<CustomerStatus, string> = {
-  "これから": "bg-rose-50 text-rose-600 border-rose-200",
-  "不通・未対応": "bg-red-50 text-red-600 border-red-200",
-  "調整中・仮予約中": "bg-amber-50 text-amber-700 border-amber-200",
-  "保留": "bg-stone-100 text-stone-500 border-stone-200",
-  "完了": "bg-emerald-50 text-emerald-600 border-emerald-200",
-};
-
- interface CustomerRecord {
-  id: string;
-  name: string;
-  status: CustomerStatus;
-  contact: string;
-  memo: string;
-  assignee: string; // 記入者
-  links: string[]; // URLリンク（最大4件）
-  inherited?: boolean; // 前日から引き継ぎされたか
-}
-
-function newCustomerRecord(): CustomerRecord {
-  return { id: crypto.randomUUID(), name: "", status: "不通・未対応", contact: "", memo: "", assignee: "", links: [] };
-}
-
 // ─── MISOCA Status ───────────────────────────────────────────────────────────
 
 interface MisocaStatus {
@@ -407,13 +367,9 @@ export default function Home() {
   const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
   const [completedCategories, setCompletedCategories] = useState<Set<string>>(new Set());
   const [flashCategories, setFlashCategories] = useState<Set<string>>(new Set());
-  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [misoca, setMisoca] = useState<MisocaStatus>({ completedUntil: "" });
   const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
-  const [customerOpen, setCustomerOpen] = useState<boolean>(false);
-  const [customerFilter, setCustomerFilter] = useState<string>("all"); // "all" | ステータス名
-  const [customerSort, setCustomerSort] = useState<"added" | "status">("added"); // 追加順 or ステータス順
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(false);
   const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
@@ -424,18 +380,15 @@ export default function Home() {
   const tasksLoadedRef = useRef(false);
   const storeCheckLoadedRef = useRef(false);
   const individualHandoverLoadedRef = useRef(false);
-  const customersLoadedRef = useRef(false);
 
 
   // 各セクション自動保存中フラグ（保存完了前にポーリングで上書きされないよう保護）
   const isSavingTasksRef = useRef(false);
   const isSavingStoreCheckRef = useRef(false);
   const isSavingIndividualRef = useRef(false);
-  const isSavingCustomerRef = useRef(false);
 
   // 入力フォーカス中はポーリングで上書きしないためのフラグ
   const isEditingIndividualRef = useRef(false);
-  const isEditingCustomerRef = useRef(false);
 
   // stale closure防止: tasksとcurrentDateKeyの最新値をRefで保持
   const tasksRef = useRef<Task[]>(tasks);
@@ -469,11 +422,6 @@ export default function Home() {
     { refetchInterval: 30000 }
   );
 
-  // Customer handovers (active)
-  const { data: customerData, refetch: refetchCustomer } = trpc.task.customerHandover.getActive.useQuery(
-    undefined,
-    { refetchInterval: 30000 }
-  );
 
   // MISOCA status
   const { data: misocaData, refetch: refetchMisoca } = trpc.task.misoca.get.useQuery(
@@ -507,8 +455,6 @@ export default function Home() {
   const upsertStoreCheck = trpc.task.storeCheck.upsert.useMutation();
   const upsertIndividualHandover = trpc.task.individualHandover.upsert.useMutation();
   const deleteIndividualHandover = trpc.task.individualHandover.delete.useMutation();
-  const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
-  const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
   const upsertMisoca = trpc.task.misoca.upsert.useMutation();
   const upsertGrayCell = trpc.task.grayCell.upsert.useMutation();
   const upsertStoresShift = trpc.task.storesShift.upsert.useMutation();
@@ -669,27 +615,6 @@ export default function Home() {
     }
   }, [individualHandoverData, currentDateKey]);
 
-  // Load customer handovers from DB
-  useEffect(() => {
-    if (customerData !== undefined) {
-      if (isEditingCustomerRef.current) return; // 入力中は上書きしない
-      if (isSavingCustomerRef.current) return; // 保存中は上書きしない
-      const records: CustomerRecord[] = customerData.map(c => ({
-        id: c.id,
-        name: c.customerName,
-        status: c.status as CustomerStatus,
-        contact: c.store,
-        memo: c.content,
-        assignee: c.assignee ?? "",
-        links: Array.isArray(c.links) ? (c.links as string[]) : [],
-        inherited: c.dateKey !== currentDateKey,
-      }));
-      setCustomers(records);
-      if (!customersLoadedRef.current) {
-        setTimeout(() => { customersLoadedRef.current = true; }, 0);
-      }
-    }
-  }, [customerData, currentDateKey]);
 
   // Load MISOCA status from DB
   useEffect(() => {
@@ -735,7 +660,6 @@ export default function Home() {
     tasksLoadedRef.current = false;
     storeCheckLoadedRef.current = false;
     individualHandoverLoadedRef.current = false;
-    customersLoadedRef.current = false;
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
     setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
     setLastSaved(null);
@@ -830,112 +754,6 @@ export default function Home() {
     return () => { if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current); };
   }, [individualHandovers, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 顧客引き継ぎ自動保存
-  const customerSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!customersLoadedRef.current) return; // DB読み込み中は保存しない
-    if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
-    isSavingCustomerRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
-    customerSaveTimerRef.current = setTimeout(async () => {
-      try {
-        for (const c of customers) {
-          // 「完了」ステータスのレコードはupsertせずスキップ（削除対象）
-          if (c.status === "完了") continue;
-          await upsertCustomer.mutateAsync({
-            id: c.id,
-            dateKey: currentDateKey,
-            customerName: c.name,
-            store: c.contact,
-            content: c.memo,
-            status: c.status,
-            assignee: c.assignee ?? "",
-            links: c.links ?? [],
-          });
-        }
-        const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
-      } catch (e) {
-        console.error("Customer save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
-      } finally {
-        isSavingCustomerRef.current = false; // 保存完了後にフラグを解除
-      }
-    }, 800);
-    return () => { if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current); };
-  }, [customers, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── Customer Handlers ─────────────────────────────────────────────────────
-
-  const addCustomer = () => {
-    const newRecord = newCustomerRecord();
-    setCustomers(prev => [...prev, newRecord]);
-  };
-
-  const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
-    setCustomers(prev => {
-      const updated = prev.map(c => {
-        if (c.id !== id) return c;
-        return { ...c, [field]: value };
-      });
-      const target = updated.find(c => c.id === id);
-      if (!target) return prev;
-
-      // 「完了」への変更：自動保存タイマーをキャンセルし、DB削除成功後にリストから除去
-      if (field === "status" && value === "完了") {
-        if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
-        deleteCustomer.mutateAsync({ id })
-          .then(() => {
-            setCustomers(p => p.filter(r => r.id !== id));
-            toast.success("顧客引き継ぎを完了として削除しました");
-          })
-          .catch(e => {
-            console.error("Customer delete failed:", e);
-            toast.error("削除に失敗しました。再試行してください。");
-            // 失敗時はステータスを元に戻す
-            setCustomers(p => p.map(r => r.id === id ? { ...r, status: r.status } : r));
-          });
-        return updated;
-      }
-
-      // ステータス変更（完了以外）：即座にDBへ送信（遅延なし）
-      if (field === "status") {
-        if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
-        isSavingCustomerRef.current = true;
-        upsertCustomer.mutateAsync({
-          id: target.id,
-          dateKey: currentDateKey,
-          customerName: target.name,
-          store: target.contact,
-          content: target.memo,
-          status: value,
-          assignee: target.assignee ?? "",
-          links: target.links ?? [],
-        })
-          .then(() => {
-            const now = new Date();
-            setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
-          })
-          .catch(e => {
-            console.error("Customer status update failed:", e);
-            toast.error("ステータスの保存に失敗しました。", { id: "save-error", duration: 4000 });
-          })
-          .finally(() => { isSavingCustomerRef.current = false; });
-        return updated;
-      }
-
-      // テキスト入力（名前・備考・やり取り・担当者）：遅延保存（useEffectのタイマーに委ねる）
-      return updated;
-    });
-  };
-
-  const handleDeleteCustomer = async (id: string) => {
-    setCustomers(prev => prev.filter(c => c.id !== id));
-    try {
-      await deleteCustomer.mutateAsync({ id });
-    } catch (e) {
-      console.error("Customer delete failed:", e);
-    }
-  };
 
   // ─── Handover Handlers ─────────────────────────────────────────────────────
 
@@ -1113,7 +931,6 @@ export default function Home() {
         refetchTaskStates(),
         refetchStoreCheck(),
         refetchIndividualHandover(),
-        refetchCustomer(),
         refetchMisoca(),
         refetchGrayCell(),
       ]);
@@ -1609,217 +1426,20 @@ export default function Home() {
           </div>
           )}
         </section>
-
-        {/* 顧客引き継ぎダッシュボード */}
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-slate-300">
-          {/* ヘッダー（アコーディオン） */}
-          <div
-            className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
-            onClick={() => setCustomerOpen(v => !v)}
-          >
+        {/* 顧客引き継ぎ専用ページへのリンク */}
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-rose-300">
+          <div className="px-4 py-3 flex items-center gap-3">
             <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
               <Users className="w-4 h-4" />
               顧客引き継ぎ
             </span>
-            {!customerOpen && customers.length > 0 && (
-              <span className="text-xs text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full font-medium">
-                {customers.length}件
-              </span>
-            )}
-            <div className="ml-auto flex items-center gap-2">
-              {customerOpen && (
-                <button
-                  onClick={e => { e.stopPropagation(); addCustomer(); }}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-rose-500 hover:bg-rose-600 text-white font-medium transition-colors shadow-sm"
-                >
-                  <span className="text-base leading-none">+</span> 顧客を追加
-                </button>
-              )}
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${customerOpen ? "rotate-180" : ""}`} />
-            </div>
+            <a
+              href="/customers"
+              className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
+            >
+              顧客引き継ぎページへ →
+            </a>
           </div>
-
-          {/* 顧客一覧（アコーディオン本体） */}
-          {customerOpen && (
-          <div className="border-t border-gray-100">
-            {/* フィルター・ソートバー */}
-            {customers.length > 0 && (
-              <div className="px-4 py-2 flex flex-wrap items-center gap-1.5 border-b border-gray-100 bg-gray-50/60">
-                {/* フィルターボタン */}
-                {(["all", ...(CUSTOMER_STATUSES as readonly string[])] as string[]).map(s => {
-                  const count = s === "all" ? customers.length : customers.filter(c => c.status === s).length;
-                  const label = s === "all" ? "すべて" : s === "不通・未対応" ? "不通" : s === "調整中・仮予約中" ? "調整中" : s;
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => setCustomerFilter(s)}
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                        customerFilter === s
-                          ? "bg-rose-500 text-white border-rose-500"
-                          : "bg-white text-gray-500 border-gray-200 hover:border-rose-300 hover:text-rose-600"
-                      }`}
-                    >
-                      {label} ({count})
-                    </button>
-                  );
-                })}
-                {/* ソートボタン */}
-                <button
-                  onClick={() => setCustomerSort(v => v === "added" ? "status" : "added")}
-                  className="ml-auto text-xs px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-rose-300 hover:text-rose-600 transition-colors font-medium flex items-center gap-1"
-                >
-                  {customerSort === "added" ? "追加順 ↑" : "ステータス順"}
-                </button>
-              </div>
-            )}
-            {(() => {
-              const STATUS_ORDER: Record<string, number> = { "これから": 0, "不通・未対応": 1, "調整中・仮予約中": 2, "保留": 3 };
-              const filtered = customerFilter === "all" ? customers : customers.filter(c => c.status === customerFilter);
-              const sorted = customerSort === "status"
-                ? [...filtered].sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99))
-                : filtered;
-              return sorted.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-gray-400">
-                  {customers.length === 0 ? "引き継ぎが必要な顧客を追加してください" : "該当する顧客はいません"}
-                </div>
-              ) : (
-            <div className="divide-y divide-gray-100">
-              {sorted.map(c => (
-                <div key={c.id} className={`px-4 py-3 space-y-2 ${
-                  c.status === "これから" ? "bg-rose-50/40" :
-                  c.status === "不通・未対応" ? "bg-red-50/40" :
-                  c.status === "調整中・仮予約中" ? "bg-yellow-50/40" :
-                  c.status === "保留" ? "bg-gray-50/60" : ""
-                }`}>
-                  {/* 行1: 顧客名 + ステータス + 削除 */}
-                  {c.inherited && (
-                    <div className="flex">
-                      <span className="flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
-                        ↩ 前日から引き継ぎ
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <input
-                      type="text"
-                      value={c.name}
-                      onChange={e => updateCustomer(c.id, "name", e.target.value)}
-                      onFocus={() => { isEditingCustomerRef.current = true; }}
-                      onBlur={() => { isEditingCustomerRef.current = false; }}
-                      placeholder="顧客名を入力"
-                      className="flex-1 min-w-[120px] text-sm font-medium text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300"
-                    />
-                    <select
-                      value={c.assignee ?? ""}
-                      onChange={e => updateCustomer(c.id, "assignee", e.target.value)}
-                      className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-rose-300 ${
-                        c.assignee ? "border-rose-300 text-rose-800 bg-rose-50" : "border-gray-200 text-gray-400 bg-gray-50"
-                      }`}
-                    >
-                      <option value="">記入者を選択</option>
-                      {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <select
-                      value={c.status}
-                      onChange={e => updateCustomer(c.id, "status", e.target.value)}
-                      className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-rose-300 ${STATUS_STYLE[c.status]}`}
-                    >
-                      {CUSTOMER_STATUSES_ALL.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => handleDeleteCustomer(c.id)}
-                      className="p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors ml-auto"
-                      title="削除"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  {/* 行2: やりとり + メモ */}
-                  <div className="flex items-start gap-2 flex-wrap">
-                    <select
-                      value={c.contact}
-                      onChange={e => updateCustomer(c.id, "contact", e.target.value)}
-                      className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-rose-300 shrink-0"
-                    >
-                      <option value="">やり取りを選択</option>
-                      {CONTACT_OPTIONS.map(o => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                    <textarea
-                      ref={el => {
-                        if (el) {
-                          el.style.height = "auto";
-                          el.style.height = el.scrollHeight + "px";
-                        }
-                      }}
-                      value={c.memo}
-                      onChange={e => {
-                        updateCustomer(c.id, "memo", e.target.value);
-                        e.target.style.height = "auto";
-                        e.target.style.height = e.target.scrollHeight + "px";
-                      }}
-                      onFocus={e => {
-                        isEditingCustomerRef.current = true;
-                      }}
-                      onBlur={() => { isEditingCustomerRef.current = false; }}
-                      placeholder="メモを入力…"
-                      rows={1}
-                      className="flex-1 min-w-[160px] text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300 resize-none overflow-hidden"
-                      style={{ minHeight: "34px" }}
-                    />
-                   </div>
-                   {/* 行3: URLリンク（最大4件） */}
-                   <div className="flex flex-col gap-1 mt-0.5">
-                     {(c.links ?? []).map((link, idx) => (
-                       <div key={idx} className="flex items-center gap-1.5">
-                         <span className="text-xs text-gray-400 shrink-0">🔗</span>
-                         <input
-                           type="url"
-                           value={link}
-                           onChange={e => {
-                             const newLinks = [...(c.links ?? [])];
-                             newLinks[idx] = e.target.value;
-                             setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
-                           }}
-                           onFocus={() => { isEditingCustomerRef.current = true; }}
-                           onBlur={() => { isEditingCustomerRef.current = false; }}
-                           placeholder="URLを入力…"
-                           className="flex-1 text-xs text-rose-600 border-0 border-b border-dashed border-gray-300 bg-transparent px-1 py-0.5 focus:outline-none focus:border-rose-300 placeholder-gray-300"
-                         />
-                         <button
-                           onClick={() => {
-                             const newLinks = (c.links ?? []).filter((_, i) => i !== idx);
-                             setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
-                           }}
-                           className="text-gray-300 hover:text-red-400 transition-colors p-0.5"
-                           title="リンクを削除"
-                         >
-                           <X className="w-3 h-3" />
-                         </button>
-                       </div>
-                     ))}
-                     {(c.links ?? []).length < 4 && (
-                       <button
-                         onClick={() => {
-                           const newLinks = [...(c.links ?? []), ""];
-                           setCustomers(prev => prev.map(r => r.id === c.id ? { ...r, links: newLinks } : r));
-                         }}
-                         className="text-xs text-gray-400 hover:text-rose-400 transition-colors flex items-center gap-1 mt-0.5 w-fit"
-                       >
-                         <Plus className="w-3 h-3" />
-                         リンクを追加
-                       </button>
-                     )}
-                   </div>
-                 </div>              ))}
-            </div>
-            );
-            })()}
-          </div>
-          )}
         </section>
         {/* MISOCA / グレーセル / STORESシフト 統合ステータスセクション */}
         {(() => {
