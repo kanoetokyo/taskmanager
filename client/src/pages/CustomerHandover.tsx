@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  ArrowDownUp,
   Plus,
   Trash2,
   X,
@@ -41,6 +42,15 @@ const CONTACT_OPTIONS = [
 ];
 
 const CUSTOMER_STATUSES = ["これから", "不通・未対応", "調整中・仮予約中", "保留"] as const;
+
+// ステータスの優先度順（数値が小さいほど上位）
+const STATUS_ORDER: Record<string, number> = {
+  "これから": 0,
+  "不通・未対応": 1,
+  "調整中・仮予約中": 2,
+  "保留": 3,
+  "完了": 4,
+};
 const CUSTOMER_STATUSES_ALL = [...CUSTOMER_STATUSES, "完了"] as const;
 type CustomerStatus = typeof CUSTOMER_STATUSES_ALL[number];
 
@@ -86,7 +96,7 @@ function todayKey(): string {
 export default function CustomerHandoverPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [filter, setFilter] = useState<string>("all");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortMode, setSortMode] = useState<"added" | "status">("added");
   const [lastSaved, setLastSaved] = useState<string>("");
 
   const loadedRef = useRef(false);
@@ -226,7 +236,13 @@ export default function CustomerHandoverPage() {
   // フィルター・ソート
   const filtered = (filter === "all" ? customers : customers.filter(c => c.status === filter))
     .slice()
-    .sort((a, b) => sortOrder === "asc" ? 0 : 0); // 追加順を維持
+    .sort((a, b) => {
+      if (sortMode === "status") {
+        const diff = (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
+        return diff !== 0 ? diff : 0; // 同ステータス内は追加順を維持
+      }
+      return 0; // 追加順（配列の元の順序を維持）
+    });
 
   const countByStatus = (s: string) =>
     s === "all" ? customers.length : customers.filter(c => c.status === s).length;
@@ -289,7 +305,30 @@ export default function CustomerHandoverPage() {
               </button>
             );
           })}
-          <span className="ml-auto text-xs text-gray-400">追加順</span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => setSortMode("added")}
+              className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
+                sortMode === "added"
+                  ? "bg-rose-500 text-white border-rose-500 shadow-sm"
+                  : "bg-white text-gray-500 border-gray-200 hover:border-rose-300 hover:text-rose-500"
+              }`}
+            >
+              <ArrowDownUp className="w-3 h-3" />
+              追加順
+            </button>
+            <button
+              onClick={() => setSortMode("status")}
+              className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-colors border ${
+                sortMode === "status"
+                  ? "bg-rose-500 text-white border-rose-500 shadow-sm"
+                  : "bg-white text-gray-500 border-gray-200 hover:border-rose-300 hover:text-rose-500"
+              }`}
+            >
+              <ArrowDownUp className="w-3 h-3" />
+              ステータス順
+            </button>
+          </div>
         </div>
       </div>
 
