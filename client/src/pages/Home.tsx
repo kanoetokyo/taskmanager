@@ -872,26 +872,60 @@ export default function Home() {
   };
 
   const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
-    setCustomers(prev => prev.map(c => {
-      if (c.id !== id) return c;
-      const updatedRecord = { ...c, [field]: value };
-      // 完了に変更した場合は即座にDBから削除
+    setCustomers(prev => {
+      const updated = prev.map(c => {
+        if (c.id !== id) return c;
+        return { ...c, [field]: value };
+      });
+      const target = updated.find(c => c.id === id);
+      if (!target) return prev;
+
+      // 「完了」への変更：自動保存タイマーをキャンセルし、DB削除成功後にリストから除去
       if (field === "status" && value === "完了") {
-        // 自動保存タイマーをキャンセルして「完了」がupsertされるのを防ぐ
         if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
-        // フロントエンドから即座に除去
-        setTimeout(() => {
-          setCustomers(p => p.filter(r => r.id !== id));
-          toast.success("顧客引き継ぎを完了として削除しました");
-        }, 600);
-        // DBからも即座に削除（非同期）
-        deleteCustomer.mutateAsync({ id }).catch(e => {
-          console.error("Customer delete failed:", e);
-        });
-        return updatedRecord;
+        deleteCustomer.mutateAsync({ id })
+          .then(() => {
+            setCustomers(p => p.filter(r => r.id !== id));
+            toast.success("顧客引き継ぎを完了として削除しました");
+          })
+          .catch(e => {
+            console.error("Customer delete failed:", e);
+            toast.error("削除に失敗しました。再試行してください。");
+            // 失敗時はステータスを元に戻す
+            setCustomers(p => p.map(r => r.id === id ? { ...r, status: r.status } : r));
+          });
+        return updated;
       }
-      return updatedRecord;
-    }));
+
+      // ステータス変更（完了以外）：即座にDBへ送信（遅延なし）
+      if (field === "status") {
+        if (customerSaveTimerRef.current) clearTimeout(customerSaveTimerRef.current);
+        isSavingCustomerRef.current = true;
+        upsertCustomer.mutateAsync({
+          id: target.id,
+          dateKey: currentDateKey,
+          customerName: target.name,
+          store: target.contact,
+          content: target.memo,
+          status: value,
+          assignee: target.assignee ?? "",
+          links: target.links ?? [],
+        })
+          .then(() => {
+            const now = new Date();
+            setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
+          })
+          .catch(e => {
+            console.error("Customer status update failed:", e);
+            toast.error("ステータスの保存に失敗しました。", { id: "save-error", duration: 4000 });
+          })
+          .finally(() => { isSavingCustomerRef.current = false; });
+        return updated;
+      }
+
+      // テキスト入力（名前・備考・やり取り・担当者）：遅延保存（useEffectのタイマーに委ねる）
+      return updated;
+    });
   };
 
   const handleDeleteCustomer = async (id: string) => {
