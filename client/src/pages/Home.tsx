@@ -501,14 +501,21 @@ export default function Home() {
   const activeTasks: TaskDef[] = useMemo(() => {
     if (!taskDefinitionData || taskDefinitionData.length === 0) return BASE_TASKS;
     // 現在表示中の日付の「日」を取得（showOnDaysフィルタリング用）
-    const currentDay = keyToDate(currentDateKey).getDate();
+    const currentDate = keyToDate(currentDateKey);
+    const currentDay = currentDate.getDate();
+    // 当月の最終日を取得（月末補完用）
+    const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
     const result: TaskDef[] = [];
     for (const cat of taskDefinitionData) {
       for (const def of cat.tasks) {
         // showOnDaysが設定されている場合、指定日のみ表示
         if (def.showOnDays && def.showOnDays.trim() !== "") {
           const allowedDays = def.showOnDays.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-          if (!allowedDays.includes(currentDay)) continue;
+          // 月末補完：指定日が当月に存在しない場合、当月最終日に表示
+          // 例：31設定で当月が30日まで → 30日に表示
+          //     30設定で2月(28日まで) → 28日に表示
+          const effectiveDays = allowedDays.map(d => d > lastDayOfMonth ? lastDayOfMonth : d);
+          if (!effectiveDays.includes(currentDay)) continue;
         }
         const taskId = def.legacyId ?? `def-${def.id}`;
         const baseTask = BASE_TASKS.find(t => t.id === def.legacyId);

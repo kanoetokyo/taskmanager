@@ -251,3 +251,6 @@
 - [x] taskDefinitionRouterのupdateTaskにshowOnDaysを追加
 - [x] Home.tsxのactiveTasksでshowOnDaysフィルタリングを実装
 - [x] デスクトップ・モバイル両方の編集フォームに表示日入力欄を追加
+
+## showOnDays 月末自動補完 (2026-04-19)
+- [x] showOnDaysフィルタリングに月末自動補完ロジックを追加する（例：31設定時に31日がない月は月末最終日に表示）
