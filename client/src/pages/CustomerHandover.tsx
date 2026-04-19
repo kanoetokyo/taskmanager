@@ -360,6 +360,9 @@ export default function CustomerHandoverPage() {
   }, [customers]);
 
   // DBデータをstateに反映
+  // 【重要】初回ロードのみ全件上書き。
+  // 以降のポーリング更新では「DBにあるがstateにないレコード（他端末追加分）」のみ追加する。
+  // stateにあるレコードはDB側の値で上書きしない（ユーザーが編集中の値を保護するため）。
   useEffect(() => {
     if (customerData === undefined) return;
     const records: CustomerRecord[] = customerData.map(c => ({
@@ -373,10 +376,23 @@ export default function CustomerHandoverPage() {
       dueDate: c.dueDate ?? null,
     }));
     if (!loadedRef.current) {
+      // 初回ロード：DBの全データをそのまま反映
       setCustomers(records);
       setTimeout(() => { loadedRef.current = true; }, 0);
-    } else if (!isSavingRef.current && !isEditingRef.current) {
-      setCustomers(records);
+    } else {
+      // 2回目以降：下記の2点のみ反映する
+      // (1) DBにあるがstateにないレコードを追加（他端末での追加を反映）
+      // (2) stateにあるがDBにないレコードを削除（他端末での削除を反映）
+      // 【重要】stateにあるレコードはDB側の値で上書きしない（編集中データを保護）
+      setCustomers(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        const dbIds = new Set(records.map(r => r.id));
+        const newRecords = records.filter(r => !existingIds.has(r.id));
+        // stateにあるがDBにないレコードは、保存中でなければ削除
+        const filtered = prev.filter(c => dbIds.has(c.id) || isSavingRef.current);
+        if (newRecords.length === 0 && filtered.length === prev.length) return prev; // 変化なし
+        return [...filtered, ...newRecords];
+      });
     }
   }, [customerData]);
 
