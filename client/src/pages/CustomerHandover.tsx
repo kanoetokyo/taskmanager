@@ -343,6 +343,8 @@ export default function CustomerHandoverPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
   const isEditingRef = useRef(false);
+  // 最新のcustomers stateを常に保持する（非同期コールバック内で最新値を参照するため）
+  const customersRef = useRef<CustomerRecord[]>([]);
 
   const { data: customerData } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
@@ -351,6 +353,11 @@ export default function CustomerHandoverPage() {
 
   const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
+
+  // customersが変わるたびにrefを同期
+  useEffect(() => {
+    customersRef.current = customers;
+  }, [customers]);
 
   // DBデータをstateに反映
   useEffect(() => {
@@ -459,37 +466,46 @@ export default function CustomerHandoverPage() {
   };
 
   // 期限更新（即座にDB送信）
+  // customersRefを使って最新stateを参照することで、
+  // setCustomersコールバック内の非同期処理によるタイミングずれを防ぐ。
   const handleDueDateChange = (id: string, dueDate: number | null) => {
-    setCustomers(prev => {
-      const updated = prev.map(c => c.id !== id ? c : { ...c, dueDate });
-      const target = updated.find(c => c.id === id);
-      if (!target) return prev;
+    // 自動保存タイマーをキャンセルしてポーリング上書きを防ぐ
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    isSavingRef.current = true;
 
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      isSavingRef.current = true;
-      upsertCustomer.mutateAsync({
-        id: target.id,
-        dateKey: todayKey(),
-        customerName: target.name,
-        store: target.contact,
-        content: target.memo,
-        status: target.status,
-        assignee: target.assignee ?? "",
-        links: target.links ?? [],
-        dueDate,
+    // stateを先に更新（customersRefも同時に更新される）
+    const updatedRecord = customersRef.current.find(c => c.id === id);
+    if (!updatedRecord) {
+      isSavingRef.current = false;
+      return;
+    }
+    const target = { ...updatedRecord, dueDate };
+    setCustomers(prev => prev.map(c => c.id !== id ? c : target));
+
+    // customersRefを即座に手動更新（useEffectの非同期遅延を待たずに最新値を保持）
+    customersRef.current = customersRef.current.map(c => c.id !== id ? c : target);
+
+    // 最新のtargetを直接使ってDB送信
+    upsertCustomer.mutateAsync({
+      id: target.id,
+      dateKey: todayKey(),
+      customerName: target.name,
+      store: target.contact,
+      content: target.memo,
+      status: target.status,
+      assignee: target.assignee ?? "",
+      links: target.links ?? [],
+      dueDate: target.dueDate ?? null,
+    })
+      .then(() => {
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
       })
-        .then(() => {
-          const now = new Date();
-          setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-        })
-        .catch(e => {
-          console.error("Customer dueDate update failed:", e);
-          toast.error("期限の保存に失敗しました。");
-        })
-        .finally(() => { isSavingRef.current = false; });
-
-      return updated;
-    });
+      .catch(e => {
+        console.error("Customer dueDate update failed:", e);
+        toast.error("期限の保存に失敗しました。");
+      })
+      .finally(() => { isSavingRef.current = false; });
   };
 
   // リンク更新
