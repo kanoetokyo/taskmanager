@@ -6,6 +6,13 @@
  * - 日付をまたいで継続表示（getActiveで全件取得）
  * - 完了ステータスで自動削除
  * - 削除ボタンで手動削除
+ *
+ * 【設計方針】
+ * - DBポーリング（30秒）は「初回ロードのみ全件反映」する
+ * - 2回目以降のポーリングは一切stateを変更しない（編集中データを保護）
+ * - 削除はUI即時反映 + DB非同期削除（ポーリングに依存しない）
+ * - 期限変更は即時DB送信（遅延保存タイマーとは独立）
+ * - 自動保存（0.8秒遅延）は変更フィールドのみ対象
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -118,11 +125,10 @@ function msToDateInput(ms: number | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** "YYYY-MM-DD" → UTCミリ秒（その日の0時JST = UTC-9h） */
+/** "YYYY-MM-DD" → UTCミリ秒（ローカル日付の0時として解釈） */
 function dateInputToMs(val: string): number | null {
   if (!val) return null;
   const [y, m, d] = val.split("-").map(Number);
-  // ローカル日付の0時として解釈
   return new Date(y, m - 1, d).getTime();
 }
 
@@ -341,7 +347,6 @@ export default function CustomerHandoverPage() {
 
   const loadedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isSavingRef = useRef(false);
   const isEditingRef = useRef(false);
   // 最新のcustomers stateを常に保持する（非同期コールバック内で最新値を参照するため）
   const customersRef = useRef<CustomerRecord[]>([]);
@@ -360,11 +365,12 @@ export default function CustomerHandoverPage() {
   }, [customers]);
 
   // DBデータをstateに反映
-  // 【重要】初回ロードのみ全件上書き。
-  // 以降のポーリング更新では「DBにあるがstateにないレコード（他端末追加分）」のみ追加する。
-  // stateにあるレコードはDB側の値で上書きしない（ユーザーが編集中の値を保護するため）。
+  // 【重要】初回ロードのみ全件上書き。2回目以降のポーリングはstateを変更しない。
+  // 削除はUI即時反映（handleDelete）に依存し、ポーリングには依存しない。
   useEffect(() => {
     if (customerData === undefined) return;
+    if (loadedRef.current) return; // 2回目以降は無視
+
     const records: CustomerRecord[] = customerData.map(c => ({
       id: c.id,
       name: c.customerName,
@@ -375,35 +381,19 @@ export default function CustomerHandoverPage() {
       links: (c.links as string[]) ?? [],
       dueDate: c.dueDate ?? null,
     }));
-    if (!loadedRef.current) {
-      // 初回ロード：DBの全データをそのまま反映
-      setCustomers(records);
-      setTimeout(() => { loadedRef.current = true; }, 0);
-    } else {
-      // 2回目以降：下記の2点のみ反映する
-      // (1) DBにあるがstateにないレコードを追加（他端末での追加を反映）
-      // (2) stateにあるがDBにないレコードを削除（他端末での削除を反映）
-      // 【重要】stateにあるレコードはDB側の値で上書きしない（編集中データを保護）
-      setCustomers(prev => {
-        const existingIds = new Set(prev.map(c => c.id));
-        const dbIds = new Set(records.map(r => r.id));
-        const newRecords = records.filter(r => !existingIds.has(r.id));
-        // stateにあるがDBにないレコードは、保存中でなければ削除
-        const filtered = prev.filter(c => dbIds.has(c.id) || isSavingRef.current);
-        if (newRecords.length === 0 && filtered.length === prev.length) return prev; // 変化なし
-        return [...filtered, ...newRecords];
-      });
-    }
+    setCustomers(records);
+    setTimeout(() => { loadedRef.current = true; }, 0);
   }, [customerData]);
 
   // 自動保存（0.8秒遅延）
+  // customersRefのスナップショットを使って最新stateを保存する
   useEffect(() => {
     if (!loadedRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      isSavingRef.current = true;
+      const snapshot = [...customersRef.current];
       try {
-        for (const c of customers) {
+        for (const c of snapshot) {
           if (c.status === "完了") continue;
           await upsertCustomer.mutateAsync({
             id: c.id,
@@ -421,8 +411,6 @@ export default function CustomerHandoverPage() {
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
       } catch (e) {
         console.error("Customer autosave failed:", e);
-      } finally {
-        isSavingRef.current = false;
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
@@ -435,25 +423,24 @@ export default function CustomerHandoverPage() {
       const target = updated.find(c => c.id === id);
       if (!target) return prev;
 
-      // 「完了」への変更：即座にDB削除
+      // 「完了」への変更：即座にUI削除 + DB削除
       if (field === "status" && value === "完了") {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         deleteCustomer.mutateAsync({ id })
           .then(() => {
-            setCustomers(p => p.filter(r => r.id !== id));
             toast.success("完了として削除しました");
           })
           .catch(e => {
             console.error("Customer delete failed:", e);
             toast.error("削除に失敗しました。再試行してください。");
           });
-        return updated;
+        // UIからは即座に除去
+        return prev.filter(c => c.id !== id);
       }
 
       // ステータス変更（完了以外）：即座にDB送信
       if (field === "status") {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        isSavingRef.current = true;
         upsertCustomer.mutateAsync({
           id: target.id,
           dateKey: todayKey(),
@@ -472,8 +459,7 @@ export default function CustomerHandoverPage() {
           .catch(e => {
             console.error("Customer status update failed:", e);
             toast.error("ステータスの保存に失敗しました。");
-          })
-          .finally(() => { isSavingRef.current = false; });
+          });
         return updated;
       }
 
@@ -481,27 +467,17 @@ export default function CustomerHandoverPage() {
     });
   };
 
-  // 期限更新（即座にDB送信）
-  // customersRefを使って最新stateを参照することで、
-  // setCustomersコールバック内の非同期処理によるタイミングずれを防ぐ。
+  // 期限更新（即時DB送信・自動保存タイマーとは独立）
   const handleDueDateChange = (id: string, dueDate: number | null) => {
-    // 自動保存タイマーをキャンセルしてポーリング上書きを防ぐ
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    isSavingRef.current = true;
+    // stateを先に更新
+    setCustomers(prev => prev.map(c => c.id !== id ? c : { ...c, dueDate }));
+    // customersRefも即座に手動更新
+    customersRef.current = customersRef.current.map(c => c.id !== id ? c : { ...c, dueDate });
 
-    // stateを先に更新（customersRefも同時に更新される）
-    const updatedRecord = customersRef.current.find(c => c.id === id);
-    if (!updatedRecord) {
-      isSavingRef.current = false;
-      return;
-    }
-    const target = { ...updatedRecord, dueDate };
-    setCustomers(prev => prev.map(c => c.id !== id ? c : target));
+    // 最新のtargetを直接使ってDB送信（自動保存タイマーとは独立して即時送信）
+    const target = customersRef.current.find(c => c.id === id);
+    if (!target) return;
 
-    // customersRefを即座に手動更新（useEffectの非同期遅延を待たずに最新値を保持）
-    customersRef.current = customersRef.current.map(c => c.id !== id ? c : target);
-
-    // 最新のtargetを直接使ってDB送信
     upsertCustomer.mutateAsync({
       id: target.id,
       dateKey: todayKey(),
@@ -511,7 +487,7 @@ export default function CustomerHandoverPage() {
       status: target.status,
       assignee: target.assignee ?? "",
       links: target.links ?? [],
-      dueDate: target.dueDate ?? null,
+      dueDate: dueDate,
     })
       .then(() => {
         const now = new Date();
@@ -520,8 +496,7 @@ export default function CustomerHandoverPage() {
       .catch(e => {
         console.error("Customer dueDate update failed:", e);
         toast.error("期限の保存に失敗しました。");
-      })
-      .finally(() => { isSavingRef.current = false; });
+      });
   };
 
   // リンク更新
@@ -529,15 +504,23 @@ export default function CustomerHandoverPage() {
     setCustomers(prev => prev.map(c => c.id === id ? { ...c, links } : c));
   };
 
-  // 手動削除
-  const handleDelete = async (id: string) => {
+  // 手動削除：UIから即座に除去 + DB非同期削除
+  const handleDelete = (id: string) => {
+    // 自動保存タイマーをキャンセル（削除済みカードが保存されないように）
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    // UIから即座に除去
     setCustomers(prev => prev.filter(c => c.id !== id));
-    try {
-      await deleteCustomer.mutateAsync({ id });
-    } catch (e) {
-      console.error("Customer delete failed:", e);
-      toast.error("削除に失敗しました。");
-    }
+    customersRef.current = customersRef.current.filter(c => c.id !== id);
+    // DB非同期削除
+    deleteCustomer.mutateAsync({ id })
+      .then(() => {
+        const now = new Date();
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+      })
+      .catch(e => {
+        console.error("Customer delete failed:", e);
+        toast.error("削除に失敗しました。");
+      });
   };
 
   // 列ごとに追加
