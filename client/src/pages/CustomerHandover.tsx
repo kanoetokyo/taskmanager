@@ -7,15 +7,17 @@
  * - 完了ステータスで自動削除
  * - 削除ボタンで手動削除
  *
- * 【設計方針】
- * - DBポーリング（30秒）は「初回ロードのみ全件反映」する
- * - 2回目以降のポーリングは一切stateを変更しない（編集中データを保護）
- * - 削除はUI即時反映 + DB非同期削除（ポーリングに依存しない）
- * - 期限変更は即時DB送信（遅延保存タイマーとは独立）
- * - 自動保存（0.8秒遅延）は変更フィールドのみ対象
+ * 【設計方針 v4】
+ * - 自動保存useEffectを廃止。各フィールド変更時に直接DB送信する。
+ * - テキスト入力（name/memo/link）のみ300msデバウンスでDB送信。
+ * - select変更（status/contact/assignee）は即時DB送信。
+ * - 期限変更は即時DB送信。
+ * - DBポーリング（30秒）は「初回ロードのみ全件反映」する。
+ * - 2回目以降のポーリングは一切stateを変更しない（編集中データを保護）。
+ * - 削除はUI即時反映 + DB非同期削除（ポーリングに依存しない）。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import {
@@ -97,7 +99,7 @@ interface CustomerRecord {
   memo: string;
   assignee: string;
   links: string[];
-  dueDate: number | null; // UTCミリ秒（保留ステータスのみ使用）
+  dueDate: number | null;
 }
 
 function newCustomerRecord(status: CustomerStatus = "不通・未対応"): CustomerRecord {
@@ -118,21 +120,18 @@ function todayKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** UTCミリ秒 → "YYYY-MM-DD" (input[type=date]用) */
 function msToDateInput(ms: number | null): string {
   if (!ms) return "";
   const d = new Date(ms);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** "YYYY-MM-DD" → UTCミリ秒（ローカル日付の0時として解釈） */
 function dateInputToMs(val: string): number | null {
   if (!val) return null;
   const [y, m, d] = val.split("-").map(Number);
   return new Date(y, m - 1, d).getTime();
 }
 
-/** 期限超過かどうか（保留ステータスかつdueDate設定済みかつ今日を過ぎている） */
 function isOverdue(c: CustomerRecord): boolean {
   if (c.status !== "保留" || !c.dueDate) return false;
   const today = new Date();
@@ -140,7 +139,6 @@ function isOverdue(c: CustomerRecord): boolean {
   return c.dueDate < today.getTime();
 }
 
-/** 期限バッジ表示用テキスト */
 function formatDueDate(ms: number | null): string {
   if (!ms) return "";
   const d = new Date(ms);
@@ -155,10 +153,9 @@ interface CustomerCardProps {
   onDelete: (id: string) => void;
   onLinkChange: (id: string, links: string[]) => void;
   onDueDateChange: (id: string, dueDate: number | null) => void;
-  isEditingRef: React.MutableRefObject<boolean>;
 }
 
-function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, isEditingRef }: CustomerCardProps) {
+function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange }: CustomerCardProps) {
   const overdue = isOverdue(c);
 
   return (
@@ -173,8 +170,6 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
           type="text"
           value={c.name}
           onChange={e => onUpdate(c.id, "name", e.target.value)}
-          onFocus={() => { isEditingRef.current = true; }}
-          onBlur={() => { isEditingRef.current = false; }}
           placeholder="顧客名を入力…"
           className={`flex-1 min-w-0 text-sm font-semibold border-0 border-b border-dashed bg-transparent px-1 py-0.5 focus:outline-none placeholder-gray-300 ${
             overdue
@@ -225,8 +220,6 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
               type="date"
               value={msToDateInput(c.dueDate)}
               onChange={e => onDueDateChange(c.id, dateInputToMs(e.target.value))}
-              onFocus={() => { isEditingRef.current = true; }}
-              onBlur={() => { isEditingRef.current = false; }}
               className="bg-transparent border-0 outline-none text-xs w-[90px] cursor-pointer"
               title="期限を設定"
             />
@@ -276,8 +269,6 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
             e.target.style.height = "auto";
             e.target.style.height = e.target.scrollHeight + "px";
           }}
-          onFocus={() => { isEditingRef.current = true; }}
-          onBlur={() => { isEditingRef.current = false; }}
           placeholder="メモを入力…"
           rows={1}
           className="text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300 resize-none overflow-hidden w-full"
@@ -298,18 +289,15 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
                 newLinks[idx] = e.target.value;
                 onLinkChange(c.id, newLinks);
               }}
-              onFocus={() => { isEditingRef.current = true; }}
-              onBlur={() => { isEditingRef.current = false; }}
               placeholder="URLを入力…"
-              className="flex-1 min-w-0 text-xs text-rose-600 border-0 border-b border-dashed border-gray-300 bg-transparent px-1 py-0.5 focus:outline-none focus:border-rose-300 placeholder-gray-300"
+              className="flex-1 min-w-0 text-xs text-blue-500 border-0 border-b border-dashed border-gray-200 bg-transparent px-1 py-0.5 focus:outline-none focus:border-rose-300 placeholder-gray-300"
             />
             <button
               onClick={() => {
                 const newLinks = (c.links ?? []).filter((_, i) => i !== idx);
                 onLinkChange(c.id, newLinks);
               }}
-              className="text-gray-300 hover:text-red-400 transition-colors p-0.5 shrink-0"
-              title="リンクを削除"
+              className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
             >
               <X className="w-3 h-3" />
             </button>
@@ -317,14 +305,10 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
         ))}
         {(c.links ?? []).length < 4 && (
           <button
-            onClick={() => {
-              const newLinks = [...(c.links ?? []), ""];
-              onLinkChange(c.id, newLinks);
-            }}
-            className="text-xs text-gray-400 hover:text-rose-400 transition-colors flex items-center gap-1 mt-0.5 w-fit"
+            onClick={() => onLinkChange(c.id, [...(c.links ?? []), ""])}
+            className="text-xs text-gray-400 hover:text-rose-400 transition-colors text-left mt-0.5"
           >
-            <Plus className="w-3 h-3" />
-            リンクを追加
+            + リンクを追加
           </button>
         )}
       </div>
@@ -332,9 +316,9 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange, is
   );
 }
 
-// ─── メインコンポーネント ─────────────────────────────────────────────────────
+// ─── メインコンポーネント ────────────────────────────────────────────────────
 
-export default function CustomerHandoverPage() {
+export default function CustomerHandover() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [lastSaved, setLastSaved] = useState<string>("");
 
@@ -346,10 +330,10 @@ export default function CustomerHandoverPage() {
   }, []);
 
   const loadedRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isEditingRef = useRef(false);
   // 最新のcustomers stateを常に保持する（非同期コールバック内で最新値を参照するため）
   const customersRef = useRef<CustomerRecord[]>([]);
+  // テキスト入力のデバウンスタイマー（カードIDごとに管理）
+  const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const { data: customerData } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
@@ -366,7 +350,6 @@ export default function CustomerHandoverPage() {
 
   // DBデータをstateに反映
   // 【重要】初回ロードのみ全件上書き。2回目以降のポーリングはstateを変更しない。
-  // 削除はUI即時反映（handleDelete）に依存し、ポーリングには依存しない。
   useEffect(() => {
     if (customerData === undefined) return;
     if (loadedRef.current) return; // 2回目以降は無視
@@ -385,132 +368,115 @@ export default function CustomerHandoverPage() {
     setTimeout(() => { loadedRef.current = true; }, 0);
   }, [customerData]);
 
-  // 自動保存（0.8秒遅延）
-  // customersRefのスナップショットを使って最新stateを保存する
-  useEffect(() => {
-    if (!loadedRef.current) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const snapshot = [...customersRef.current];
-      try {
-        for (const c of snapshot) {
-          if (c.status === "完了") continue;
-          await upsertCustomer.mutateAsync({
-            id: c.id,
-            dateKey: todayKey(),
-            customerName: c.name,
-            store: c.contact,
-            content: c.memo,
-            status: c.status,
-            assignee: c.assignee ?? "",
-            links: c.links ?? [],
-            dueDate: c.dueDate ?? null,
-          });
-        }
-        const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-      } catch (e) {
-        console.error("Customer autosave failed:", e);
-      }
-    }, 800);
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [customers]); // eslint-disable-line react-hooks/exhaustive-deps
+  // DB送信ヘルパー（customersRefから最新データを取得して送信）
+  const saveToDb = useCallback(async (id: string) => {
+    const c = customersRef.current.find(r => r.id === id);
+    if (!c) return;
+    if (c.status === "完了") return;
+    try {
+      await upsertCustomer.mutateAsync({
+        id: c.id,
+        dateKey: todayKey(),
+        customerName: c.name,
+        store: c.contact,
+        content: c.memo,
+        status: c.status,
+        assignee: c.assignee ?? "",
+        links: c.links ?? [],
+        dueDate: c.dueDate ?? null,
+      });
+      const now = new Date();
+      setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+    } catch (e) {
+      console.error("Customer save failed:", e);
+      toast.error("保存に失敗しました。再試行してください。");
+    }
+  }, [upsertCustomer]);
 
-  // フィールド更新（文字列フィールド）
-  const updateCustomer = (id: string, field: keyof CustomerRecord, value: string) => {
+  // テキストフィールド用デバウンス送信（300ms）
+  const saveToDbDebounced = useCallback((id: string) => {
+    const existing = debounceTimers.current.get(id);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      debounceTimers.current.delete(id);
+      saveToDb(id);
+    }, 300);
+    debounceTimers.current.set(id, timer);
+  }, [saveToDb]);
+
+  // フィールド更新
+  const updateCustomer = useCallback((id: string, field: keyof CustomerRecord, value: string) => {
     setCustomers(prev => {
       const updated = prev.map(c => c.id !== id ? c : { ...c, [field]: value });
+      // refも即座に更新（非同期コールバックで最新値を参照するため）
+      customersRef.current = updated;
+
       const target = updated.find(c => c.id === id);
       if (!target) return prev;
 
       // 「完了」への変更：即座にUI削除 + DB削除
       if (field === "status" && value === "完了") {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        // 進行中のデバウンスタイマーをキャンセル
+        const existing = debounceTimers.current.get(id);
+        if (existing) { clearTimeout(existing); debounceTimers.current.delete(id); }
         deleteCustomer.mutateAsync({ id })
-          .then(() => {
-            toast.success("完了として削除しました");
-          })
-          .catch(e => {
-            console.error("Customer delete failed:", e);
-            toast.error("削除に失敗しました。再試行してください。");
-          });
-        // UIからは即座に除去
-        return prev.filter(c => c.id !== id);
+          .then(() => { toast.success("完了として削除しました"); })
+          .catch(e => { console.error("Customer delete failed:", e); toast.error("削除に失敗しました。"); });
+        const filtered = prev.filter(c => c.id !== id);
+        customersRef.current = filtered;
+        return filtered;
       }
 
-      // ステータス変更（完了以外）：即座にDB送信
-      if (field === "status") {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        upsertCustomer.mutateAsync({
-          id: target.id,
-          dateKey: todayKey(),
-          customerName: target.name,
-          store: target.contact,
-          content: target.memo,
-          status: value,
-          assignee: target.assignee ?? "",
-          links: target.links ?? [],
-          dueDate: target.dueDate ?? null,
-        })
-          .then(() => {
-            const now = new Date();
-            setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-          })
-          .catch(e => {
-            console.error("Customer status update failed:", e);
-            toast.error("ステータスの保存に失敗しました。");
-          });
+      // select系（status/contact/assignee）は即時DB送信
+      if (field === "status" || field === "contact" || field === "assignee") {
+        // 進行中のデバウンスタイマーをキャンセルして即時送信
+        const existing = debounceTimers.current.get(id);
+        if (existing) { clearTimeout(existing); debounceTimers.current.delete(id); }
+        // refが更新された後に送信するためsetTimeoutで1tick遅らせる
+        setTimeout(() => saveToDb(id), 0);
         return updated;
       }
 
+      // テキスト系（name/memo）はデバウンス送信
+      setTimeout(() => saveToDbDebounced(id), 0);
       return updated;
     });
-  };
+  }, [saveToDb, saveToDbDebounced, deleteCustomer]);
 
-  // 期限更新（即時DB送信・自動保存タイマーとは独立）
-  const handleDueDateChange = (id: string, dueDate: number | null) => {
-    // stateを先に更新
-    setCustomers(prev => prev.map(c => c.id !== id ? c : { ...c, dueDate }));
-    // customersRefも即座に手動更新
-    customersRef.current = customersRef.current.map(c => c.id !== id ? c : { ...c, dueDate });
+  // 期限更新（即時DB送信）
+  const handleDueDateChange = useCallback((id: string, dueDate: number | null) => {
+    setCustomers(prev => {
+      const updated = prev.map(c => c.id !== id ? c : { ...c, dueDate });
+      customersRef.current = updated;
+      // 進行中のデバウンスタイマーをキャンセルして即時送信
+      const existing = debounceTimers.current.get(id);
+      if (existing) { clearTimeout(existing); debounceTimers.current.delete(id); }
+      setTimeout(() => saveToDb(id), 0);
+      return updated;
+    });
+  }, [saveToDb]);
 
-    // 最新のtargetを直接使ってDB送信（自動保存タイマーとは独立して即時送信）
-    const target = customersRef.current.find(c => c.id === id);
-    if (!target) return;
-
-    upsertCustomer.mutateAsync({
-      id: target.id,
-      dateKey: todayKey(),
-      customerName: target.name,
-      store: target.contact,
-      content: target.memo,
-      status: target.status,
-      assignee: target.assignee ?? "",
-      links: target.links ?? [],
-      dueDate: dueDate,
-    })
-      .then(() => {
-        const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-      })
-      .catch(e => {
-        console.error("Customer dueDate update failed:", e);
-        toast.error("期限の保存に失敗しました。");
-      });
-  };
-
-  // リンク更新
-  const handleLinkChange = (id: string, links: string[]) => {
-    setCustomers(prev => prev.map(c => c.id === id ? { ...c, links } : c));
-  };
+  // リンク更新（デバウンス送信）
+  const handleLinkChange = useCallback((id: string, links: string[]) => {
+    setCustomers(prev => {
+      const updated = prev.map(c => c.id === id ? { ...c, links } : c);
+      customersRef.current = updated;
+      setTimeout(() => saveToDbDebounced(id), 0);
+      return updated;
+    });
+  }, [saveToDbDebounced]);
 
   // 手動削除：UIから即座に除去 + DB非同期削除
-  const handleDelete = (id: string) => {
-    // 自動保存タイマーをキャンセル（削除済みカードが保存されないように）
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  const handleDelete = useCallback((id: string) => {
+    // 進行中のデバウンスタイマーをキャンセル
+    const existing = debounceTimers.current.get(id);
+    if (existing) { clearTimeout(existing); debounceTimers.current.delete(id); }
     // UIから即座に除去
-    setCustomers(prev => prev.filter(c => c.id !== id));
-    customersRef.current = customersRef.current.filter(c => c.id !== id);
+    setCustomers(prev => {
+      const filtered = prev.filter(c => c.id !== id);
+      customersRef.current = filtered;
+      return filtered;
+    });
     // DB非同期削除
     deleteCustomer.mutateAsync({ id })
       .then(() => {
@@ -521,13 +487,19 @@ export default function CustomerHandoverPage() {
         console.error("Customer delete failed:", e);
         toast.error("削除に失敗しました。");
       });
-  };
+  }, [deleteCustomer]);
 
   // 列ごとに追加
-  const handleAddToColumn = (status: CustomerStatus) => {
+  const handleAddToColumn = useCallback((status: CustomerStatus) => {
     const rec = newCustomerRecord(status);
-    setCustomers(prev => [...prev, rec]);
-  };
+    setCustomers(prev => {
+      const updated = [...prev, rec];
+      customersRef.current = updated;
+      return updated;
+    });
+    // 新規カードをDBに即時保存
+    setTimeout(() => saveToDb(rec.id), 0);
+  }, [saveToDb]);
 
   const totalCount = customers.filter(c => c.status !== "完了").length;
   const overdueCount = customers.filter(c => isOverdue(c)).length;
@@ -611,7 +583,6 @@ export default function CustomerHandoverPage() {
                       onDelete={handleDelete}
                       onLinkChange={handleLinkChange}
                       onDueDateChange={handleDueDateChange}
-                      isEditingRef={isEditingRef}
                     />
                   ))}
                 </div>
@@ -648,7 +619,6 @@ export default function CustomerHandoverPage() {
                     onDelete={handleDelete}
                     onLinkChange={handleLinkChange}
                     onDueDateChange={handleDueDateChange}
-                    isEditingRef={isEditingRef}
                   />
                 ))}
               </div>
