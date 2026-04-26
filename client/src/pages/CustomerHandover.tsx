@@ -157,12 +157,15 @@ interface CustomerCardProps {
 
 function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange }: CustomerCardProps) {
   const overdue = isOverdue(c);
+  const isKorekara = c.status === "これから";
 
   return (
     <div className={`rounded-xl border shadow-sm p-3 space-y-2 transition-colors ${
       overdue
         ? "bg-red-50 border-red-300"
-        : "bg-white border-gray-100"
+        : isKorekara
+          ? "bg-sky-50 border-sky-200"
+          : "bg-white border-gray-100"
     }`}>
       {/* 行1: 顧客名・担当者・削除 */}
       <div className="flex items-center gap-2">
@@ -174,7 +177,9 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange }: 
           className={`flex-1 min-w-0 text-sm font-semibold border-0 border-b border-dashed bg-transparent px-1 py-0.5 focus:outline-none placeholder-gray-300 ${
             overdue
               ? "text-red-800 border-red-300 focus:border-red-500"
-              : "text-gray-800 border-gray-200 focus:border-rose-300"
+              : isKorekara
+                ? "text-sky-800 border-sky-200 focus:border-sky-400"
+                : "text-gray-800 border-gray-200 focus:border-rose-300"
           }`}
         />
         <select
@@ -199,7 +204,9 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange }: 
         <select
           value={c.status}
           onChange={e => onUpdate(c.id, "status", e.target.value)}
-          className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 focus:ring-rose-300 flex-1 ${STATUS_STYLE[c.status]}`}
+          className={`text-xs px-2 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-1 ${
+            isKorekara ? "focus:ring-sky-300" : "focus:ring-rose-300"
+          } flex-1 ${STATUS_STYLE[c.status]}`}
         >
           {CUSTOMER_STATUSES_ALL.map(s => (
             <option key={s} value={s}>{s}</option>
@@ -271,7 +278,11 @@ function CustomerCard({ c, onUpdate, onDelete, onLinkChange, onDueDateChange }: 
           }}
           placeholder="メモを入力…"
           rows={1}
-          className="text-sm text-gray-700 border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-300 bg-white placeholder-gray-300 resize-none overflow-hidden w-full"
+          className={`text-sm text-gray-700 border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 bg-white placeholder-gray-300 resize-none overflow-hidden w-full ${
+            isKorekara
+              ? "border-sky-200 focus:ring-sky-300"
+              : "border-gray-200 focus:ring-rose-300"
+          }`}
           style={{ minHeight: "34px" }}
         />
       </div>
@@ -545,26 +556,36 @@ export default function CustomerHandover() {
       <div className="max-w-7xl mx-auto px-4 py-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {KANBAN_COLUMNS.map(col => {
-            const colCards = customers.filter(c => c.status === col.status);
+            // 「不通・未対応」列は「これから」ステータスも含める
+            const colCards = col.status === "不通・未対応"
+              ? customers.filter(c => c.status === "これから" || c.status === "不通・未対応")
+              : customers.filter(c => c.status === col.status);
+            // 「これから」を上部に、「不通・未対応」を下部に表示
+            const sortedCards = col.status === "不通・未対応"
+              ? [
+                  ...colCards.filter(c => c.status === "これから"),
+                  ...colCards.filter(c => c.status === "不通・未対応"),
+                ]
+              : colCards;
             return (
               <div key={col.status} className="flex flex-col gap-2">
                 {/* 列ヘッダー */}
                 <div className={`flex items-center justify-between px-3 py-2 rounded-lg border ${col.headerClass}`}>
                   <span className="text-sm font-semibold text-gray-700">{col.label}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${col.badgeClass}`}>
-                    {colCards.length}件
+                    {sortedCards.length}件
                   </span>
                 </div>
 
                 {/* カード一覧 */}
                 <div className="flex flex-col gap-2 min-h-[80px]">
-                  {colCards.length === 0 && (
+                  {sortedCards.length === 0 && (
                     <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
                       案件なし
                     </div>
                   )}
                   {(col.status === "保留"
-                    ? [...colCards].sort((a, b) => {
+                    ? [...sortedCards].sort((a, b) => {
                         const today = new Date(); today.setHours(0, 0, 0, 0);
                         const aOver = a.dueDate !== null && a.dueDate < today.getTime();
                         const bOver = b.dueDate !== null && b.dueDate < today.getTime();
@@ -574,7 +595,7 @@ export default function CustomerHandover() {
                         if (b.dueDate !== null) return 1;
                         return 0;
                       })
-                    : colCards
+                    : sortedCards
                   ).map(c => (
                     <CustomerCard
                       key={c.id}
@@ -600,31 +621,7 @@ export default function CustomerHandover() {
           })}
         </div>
 
-        {/* 「これから」ステータスのカード（列外に表示） */}
-        {(() => {
-          const korekara = customers.filter(c => c.status === "これから");
-          if (korekara.length === 0) return null;
-          return (
-            <div className="mt-6">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-semibold text-sky-600">これから</span>
-                <span className="text-xs bg-sky-100 text-sky-600 px-2 py-0.5 rounded-full font-medium">{korekara.length}件</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {korekara.map(c => (
-                  <CustomerCard
-                    key={c.id}
-                    c={c}
-                    onUpdate={updateCustomer}
-                    onDelete={handleDelete}
-                    onLinkChange={handleLinkChange}
-                    onDueDateChange={handleDueDateChange}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })()}
+
       </div>
     </div>
   );
