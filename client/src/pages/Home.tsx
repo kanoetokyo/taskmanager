@@ -102,6 +102,7 @@ interface TaskDef {
   icon: React.ReactNode;
   defaultPlanned?: string;  // デフォルト担当者（未指定時は「当日事務担当」）
   deadline?: string;        // 期限表示（例: "17:00まで"）
+  isOverdue?: boolean;      // 期限超過かつ未完了で継続表示中
 }
 
 interface Task extends TaskDef {
@@ -523,7 +524,20 @@ export default function Home() {
             const isDone = taskStatesData?.find(s => s.taskId === taskId)?.done ?? false;
             // 現在日が期限日を超えていて、かつ未完了の場合のみ継続表示
             if (currentDay > maxEffectiveDay && !isDone) {
-              // 継続表示（以下のpushに進む）
+              // 期限超過フラグを立てて継続表示（以下のpushに進む）
+              const baseTask2 = BASE_TASKS.find(t => t.id === def.legacyId);
+              const catConfig2 = CAT_CONFIG[cat.name];
+              const icon2 = baseTask2?.icon ?? catConfig2?.icon ?? <ClipboardList className="w-4 h-4 shrink-0" />;
+              result.push({
+                id: taskId,
+                category: cat.name,
+                label: def.label,
+                icon: icon2,
+                defaultPlanned: def.defaultPlanned || undefined,
+                deadline: def.deadline || undefined,
+                isOverdue: true,
+              });
+              continue;
             } else {
               continue; // 表示しない
             }
@@ -540,6 +554,7 @@ export default function Home() {
           icon,
           defaultPlanned: def.defaultPlanned || undefined,
           deadline: def.deadline || undefined,
+          isOverdue: false,
         });
       }
     }
@@ -1951,11 +1966,13 @@ export default function Home() {
                           ? "opacity-0 scale-95 pointer-events-none"
                           : task.done
                             ? "opacity-60 bg-gray-50/60"
-                            : task.help
-                              ? "bg-red-50"
-                              : task.deadline
-                                ? "bg-amber-50/50"
-                                : "hover:bg-gray-50/80"
+                            : task.isOverdue
+                              ? "bg-red-50 border-l-2 border-red-400"
+                              : task.help
+                                ? "bg-red-50"
+                                : task.deadline
+                                  ? "bg-amber-50/50"
+                                  : "hover:bg-gray-50/80"
                     }`}
                     style={{ transform: !isEditMode && completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
                   >
@@ -2056,14 +2073,21 @@ export default function Home() {
                       <span className={`flex-1 text-sm leading-snug min-w-0 ${
                         task.done
                           ? "text-gray-400 line-through"
-                          : task.help
-                            ? "text-red-700 font-medium"
-                            : task.deadline
-                              ? "text-amber-900"
-                              : "text-gray-700"
+                          : task.isOverdue
+                            ? "text-red-700 font-semibold"
+                            : task.help
+                              ? "text-red-700 font-medium"
+                              : task.deadline
+                                ? "text-amber-900"
+                                : "text-gray-700"
                       }`}>
                         {task.label}
-                        {task.deadline && !task.done && (
+                        {task.isOverdue && !task.done && (
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                            ⚠ 期限超過
+                          </span>
+                        )}
+                        {task.deadline && !task.done && !task.isOverdue && (
                           <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
                             ⏰ {task.deadline}
                           </span>
@@ -2359,6 +2383,8 @@ export default function Home() {
                         hideDone && task.done ? "hidden" : ""
                       } ${
                         isEditMode ? "bg-amber-50/30 pl-8" : ""
+                      } ${
+                        !isEditMode && !task.done && task.isOverdue ? "bg-red-50 border-l-2 border-red-400" : ""
                       }`}
                     >
                       {isEditMode && isThisEditing ? (
@@ -2443,9 +2469,20 @@ export default function Home() {
                               }`}>HELP</span>
                             </label>
                             <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
-                            <span className={`flex-1 text-sm leading-snug ${ task.done ? "line-through text-gray-400" : "text-gray-800" }`}>
+                            <span className={`flex-1 text-sm leading-snug ${
+                              task.done
+                                ? "line-through text-gray-400"
+                                : task.isOverdue
+                                  ? "text-red-700 font-semibold"
+                                  : "text-gray-800"
+                            }`}>
                               {task.label}
-                              {task.deadline && !task.done && (
+                              {task.isOverdue && !task.done && (
+                                <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                                  ⚠ 期限超過
+                                </span>
+                              )}
+                              {task.deadline && !task.done && !task.isOverdue && (
                                 <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
                                   ⏰ {task.deadline}
                                 </span>
