@@ -515,7 +515,19 @@ export default function Home() {
           // 例：31設定で当月が30日まで → 30日に表示
           //     30設定で2月(28日まで) → 28日に表示
           const effectiveDays = allowedDays.map(d => d > lastDayOfMonth ? lastDayOfMonth : d);
-          if (!effectiveDays.includes(currentDay)) continue;
+          if (!effectiveDays.includes(currentDay)) {
+            // 表示日外でも「期限超過かつ未完了」なら継続表示
+            // 期限日 = showOnDaysの最大値（月末補完後）
+            const maxEffectiveDay = Math.max(...effectiveDays);
+            const taskId = def.legacyId ?? `def-${def.id}`;
+            const isDone = taskStatesData?.find(s => s.taskId === taskId)?.done ?? false;
+            // 現在日が期限日を超えていて、かつ未完了の場合のみ継続表示
+            if (currentDay > maxEffectiveDay && !isDone) {
+              // 継続表示（以下のpushに進む）
+            } else {
+              continue; // 表示しない
+            }
+          }
         }
         const taskId = def.legacyId ?? `def-${def.id}`;
         const baseTask = BASE_TASKS.find(t => t.id === def.legacyId);
@@ -532,7 +544,7 @@ export default function Home() {
       }
     }
     return result;
-  }, [taskDefinitionData, currentDateKey]);
+  }, [taskDefinitionData, currentDateKey, taskStatesData]);
 
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
