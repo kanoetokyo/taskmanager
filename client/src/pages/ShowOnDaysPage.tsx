@@ -1,0 +1,531 @@
+/**
+ * 表示日制限タスク一覧・設定ページ
+ * - showOnDaysが設定されているタスクを一覧表示
+ * - 各タスクのshowOnDays・deadlineをインライン編集可能
+ * - 今日の日付でプレビュー確認（表示される/されない）
+ * - カテゴリ別グループ表示
+ */
+
+import { useEffect, useState, useCallback } from "react";
+import { Link } from "wouter";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Edit2,
+  Check,
+  X,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  Calendar,
+  RefreshCw,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { trpc } from "@/lib/trpc";
+
+// ─── 型定義 ────────────────────────────────────────────────────────────────────
+
+interface TaskDefRow {
+  id: number;
+  label: string;
+  showOnDays: string;
+  deadline: string;
+  defaultPlanned: string;
+  categoryId: number;
+  sortOrder: number;
+}
+
+interface CategoryRow {
+  id: number;
+  name: string;
+  tasks: TaskDefRow[];
+}
+
+// ─── ヘルパー ──────────────────────────────────────────────────────────────────
+
+/** showOnDays文字列を日付番号の配列に変換 */
+function parseShowOnDays(s: string): number[] {
+  if (!s || s.trim() === "") return [];
+  return s.split(",").map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 31);
+}
+
+/** 日付番号の配列を表示用文字列に変換 */
+function formatDayRange(days: number[]): string {
+  if (days.length === 0) return "毎日";
+  const sorted = [...days].sort((a, b) => a - b);
+  // 連続する範囲をまとめる
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let end = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) {
+      end = sorted[i];
+    } else {
+      ranges.push(start === end ? `${start}日` : `${start}〜${end}日`);
+      start = sorted[i];
+      end = sorted[i];
+    }
+  }
+  ranges.push(start === end ? `${start}日` : `${start}〜${end}日`);
+  return "毎月 " + ranges.join("・");
+}
+
+/** 今日の日付でタスクが表示されるか判定 */
+function isVisibleToday(showOnDays: string): boolean {
+  const days = parseShowOnDays(showOnDays);
+  if (days.length === 0) return true; // 制限なし = 毎日
+  const today = new Date().getDate();
+  const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const effective = days.map(d => d > lastDay ? lastDay : d);
+  return effective.includes(today);
+}
+
+/** 今日が期限を超えているか判定（showOnDaysの最大値を期限日とする） */
+function isOverdueToday(showOnDays: string): boolean {
+  const days = parseShowOnDays(showOnDays);
+  if (days.length === 0) return false;
+  const today = new Date().getDate();
+  const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const effective = days.map(d => d > lastDay ? lastDay : d);
+  const maxDay = Math.max(...effective);
+  return today > maxDay;
+}
+
+// ─── 月カレンダープレビュー ───────────────────────────────────────────────────
+
+function MonthPreview({ showOnDays }: { showOnDays: string }) {
+  const days = parseShowOnDays(showOnDays);
+  const today = new Date().getDate();
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const effective = days.map(d => d > daysInMonth ? daysInMonth : d);
+
+  return (
+    <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+      <p className="text-[10px] text-gray-400 font-medium mb-1.5">今月の表示日プレビュー</p>
+      <div className="flex flex-wrap gap-0.5">
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+          const isActive = effective.length === 0 || effective.includes(d);
+          const isToday = d === today;
+          return (
+            <span
+              key={d}
+              className={`inline-flex items-center justify-center w-6 h-6 text-[10px] rounded font-medium transition-colors ${
+                isToday
+                  ? isActive
+                    ? "bg-blue-500 text-white ring-2 ring-blue-300"
+                    : "bg-gray-200 text-gray-400 ring-2 ring-gray-300"
+                  : isActive
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-300"
+              }`}
+            >
+              {d}
+            </span>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-gray-400 mt-1.5">
+        <span className="inline-block w-3 h-3 bg-blue-100 rounded mr-1 align-middle" />表示日
+        <span className="inline-block w-3 h-3 bg-gray-100 rounded mx-1 ml-2 align-middle" />非表示日
+        <span className="inline-block w-3 h-3 bg-blue-500 rounded mx-1 ml-2 align-middle" />今日
+      </p>
+    </div>
+  );
+}
+
+// ─── タスク行コンポーネント ────────────────────────────────────────────────────
+
+interface TaskRowProps {
+  task: TaskDefRow;
+  onSave: (id: number, showOnDays: string, deadline: string) => void;
+}
+
+function TaskRow({ task, onSave }: TaskRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [showOnDaysInput, setShowOnDaysInput] = useState(task.showOnDays ?? "");
+  const [deadlineInput, setDeadlineInput] = useState(task.deadline ?? "");
+  const [showPreview, setShowPreview] = useState(false);
+
+  const visible = isVisibleToday(task.showOnDays ?? "");
+  const overdue = isOverdueToday(task.showOnDays ?? "");
+  const hasLimit = (task.showOnDays ?? "").trim() !== "";
+
+  const handleSave = () => {
+    onSave(task.id, showOnDaysInput, deadlineInput);
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setShowOnDaysInput(task.showOnDays ?? "");
+    setDeadlineInput(task.deadline ?? "");
+    setEditing(false);
+  };
+
+  return (
+    <div className={`border rounded-lg p-3 transition-all ${
+      overdue && !visible
+        ? "border-red-200 bg-red-50"
+        : visible && hasLimit
+          ? "border-blue-200 bg-blue-50"
+          : hasLimit
+            ? "border-gray-200 bg-white"
+            : "border-gray-100 bg-gray-50"
+    }`}>
+      {/* タスク名 + 状態バッジ */}
+      <div className="flex items-start gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium leading-snug ${
+            overdue && !visible ? "text-red-700" : "text-gray-800"
+          }`}>
+            {task.label}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* 今日の表示状態バッジ */}
+          {hasLimit ? (
+            visible ? (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white">
+                <Eye className="w-2.5 h-2.5" />
+                今日表示中
+              </span>
+            ) : overdue ? (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                期限超過
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-600">
+                <EyeOff className="w-2.5 h-2.5" />
+                今日は非表示
+              </span>
+            )
+          ) : (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+              毎日表示
+            </span>
+          )}
+          {/* 編集ボタン */}
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="p-1 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              title="編集"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 現在の設定値（表示モード） */}
+      {!editing && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="flex items-center gap-1 text-gray-600">
+            <Calendar className="w-3 h-3 text-blue-400" />
+            {formatDayRange(parseShowOnDays(task.showOnDays ?? ""))}
+          </span>
+          {task.deadline && (
+            <span className="flex items-center gap-1 text-amber-600">
+              <AlertTriangle className="w-3 h-3" />
+              {task.deadline}
+            </span>
+          )}
+          {hasLimit && (
+            <button
+              onClick={() => setShowPreview(p => !p)}
+              className="flex items-center gap-1 text-blue-500 hover:text-blue-700 transition-colors ml-auto"
+            >
+              <CalendarDays className="w-3 h-3" />
+              {showPreview ? "プレビューを閉じる" : "月カレンダーで確認"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* カレンダープレビュー */}
+      {!editing && showPreview && hasLimit && (
+        <MonthPreview showOnDays={task.showOnDays ?? ""} />
+      )}
+
+      {/* 編集フォーム */}
+      {editing && (
+        <div className="space-y-2 mt-1">
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium block mb-0.5">
+              表示日（カンマ区切りで日付番号を入力）
+            </label>
+            <input
+              type="text"
+              value={showOnDaysInput}
+              onChange={e => setShowOnDaysInput(e.target.value)}
+              placeholder="例: 1,2,3,4,5 または 15,16,17,18,19,20 （空欄=毎日）"
+              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+            />
+            {showOnDaysInput.trim() !== "" && (
+              <p className="text-[10px] text-blue-600 mt-0.5">
+                → {formatDayRange(parseShowOnDays(showOnDaysInput))}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium block mb-0.5">
+              期限ラベル（表示用テキスト）
+            </label>
+            <input
+              type="text"
+              value={deadlineInput}
+              onChange={e => setDeadlineInput(e.target.value)}
+              placeholder="例: 毎月5日まで"
+              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+            />
+          </div>
+          {showOnDaysInput.trim() !== "" && (
+            <MonthPreview showOnDays={showOnDaysInput} />
+          )}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" />
+              保存
+            </button>
+            <button
+              onClick={handleCancel}
+              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              キャンセル
+            </button>
+            {showOnDaysInput.trim() !== "" && (
+              <button
+                onClick={() => setShowOnDaysInput("")}
+                className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors ml-auto"
+                title="表示日制限を解除して毎日表示に戻す"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                制限を解除
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── メインコンポーネント ──────────────────────────────────────────────────────
+
+export default function ShowOnDaysPage() {
+  const [lastSaved, setLastSaved] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "limited">("limited");
+
+  // タブタイトルを設定
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "表示日制限設定";
+    return () => { document.title = prev; };
+  }, []);
+
+  const { data: taskDefinitionData, refetch } = trpc.taskDefinition.getAll.useQuery(
+    undefined,
+    { staleTime: 0 }
+  );
+
+  const updateTask = trpc.taskDefinition.updateTask.useMutation({
+    onSuccess: () => {
+      const now = new Date();
+      setLastSaved(`保存済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+      refetch();
+    },
+    onError: () => {
+      toast.error("保存に失敗しました。");
+    },
+  });
+
+  const handleSave = useCallback((id: number, showOnDays: string, deadline: string) => {
+    updateTask.mutate({ id, showOnDays, deadline });
+    toast.success("設定を保存しました。");
+  }, [updateTask]);
+
+  // カテゴリ一覧を整形
+  const categories: CategoryRow[] = (taskDefinitionData ?? []).map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    tasks: (cat.tasks ?? []).map((t: any) => ({
+      id: t.id,
+      label: t.label,
+      showOnDays: t.showOnDays ?? "",
+      deadline: t.deadline ?? "",
+      defaultPlanned: t.defaultPlanned ?? "",
+      categoryId: cat.id,
+      sortOrder: t.sortOrder ?? 0,
+    })),
+  }));
+
+  // フィルタリング
+  const filteredCategories = categories.map(cat => ({
+    ...cat,
+    tasks: filterMode === "limited"
+      ? cat.tasks.filter(t => (t.showOnDays ?? "").trim() !== "")
+      : cat.tasks,
+  })).filter(cat => cat.tasks.length > 0);
+
+  // 統計
+  const totalTasks = categories.reduce((sum, cat) => sum + cat.tasks.length, 0);
+  const limitedTasks = categories.reduce((sum, cat) =>
+    sum + cat.tasks.filter(t => (t.showOnDays ?? "").trim() !== "").length, 0);
+  const overdueToday = categories.reduce((sum, cat) =>
+    sum + cat.tasks.filter(t => {
+      const s = t.showOnDays ?? "";
+      return s.trim() !== "" && isOverdueToday(s) && !isVisibleToday(s);
+    }).length, 0);
+
+  const today = new Date();
+  const todayStr = `${today.getMonth() + 1}月${today.getDate()}日（${"日月火水木金土"[today.getDay()]}）`;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-blue-100 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+          <Link href="/">
+            <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-500 transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              タスク管理へ戻る
+            </button>
+          </Link>
+          <div className="flex items-center gap-2 ml-2">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-blue-700">
+              <CalendarDays className="w-4 h-4" />
+              表示日制限設定
+            </span>
+            <span className="text-xs text-gray-400 bg-blue-50 px-2 py-0.5 rounded-full font-medium">
+              {limitedTasks}件設定中
+            </span>
+            {overdueToday > 0 && (
+              <span className="text-xs text-white bg-red-500 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                期限超過 {overdueToday}件
+              </span>
+            )}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {lastSaved && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" />
+                {lastSaved}
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
+
+        {/* 今日の状況サマリー */}
+        <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar className="w-4 h-4 text-blue-500" />
+            <h2 className="text-sm font-bold text-gray-700">今日の状況 — {todayStr}</h2>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center p-3 bg-gray-50 rounded-lg">
+              <p className="text-2xl font-bold text-gray-700">{totalTasks}</p>
+              <p className="text-xs text-gray-400 mt-0.5">総タスク数</p>
+            </div>
+            <div className="text-center p-3 bg-blue-50 rounded-lg">
+              <p className="text-2xl font-bold text-blue-600">{limitedTasks}</p>
+              <p className="text-xs text-blue-400 mt-0.5">表示日制限あり</p>
+            </div>
+            <div className={`text-center p-3 rounded-lg ${overdueToday > 0 ? "bg-red-50" : "bg-green-50"}`}>
+              <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-600" : "text-green-600"}`}>
+                {overdueToday}
+              </p>
+              <p className={`text-xs mt-0.5 ${overdueToday > 0 ? "text-red-400" : "text-green-400"}`}>
+                期限超過中
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* フィルター切り替え */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilterMode("limited")}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+              filterMode === "limited"
+                ? "bg-blue-500 text-white"
+                : "bg-white border border-gray-200 text-gray-500 hover:border-blue-300"
+            }`}
+          >
+            <span className="flex items-center gap-1">
+              <CalendarDays className="w-3 h-3" />
+              制限設定済みのみ ({limitedTasks}件)
+            </span>
+          </button>
+          <button
+            onClick={() => setFilterMode("all")}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+              filterMode === "all"
+                ? "bg-gray-600 text-white"
+                : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400"
+            }`}
+          >
+            <span className="flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              全タスク表示 ({totalTasks}件)
+            </span>
+          </button>
+        </div>
+
+        {/* カテゴリ別タスク一覧 */}
+        {filteredCategories.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+            <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-400 font-medium">表示日制限が設定されたタスクはありません</p>
+            <p className="text-xs text-gray-300 mt-1">
+              「全タスク表示」に切り替えて、制限を設定したいタスクの編集ボタンをクリックしてください
+            </p>
+          </div>
+        ) : (
+          filteredCategories.map(cat => (
+            <div key={cat.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              {/* カテゴリヘッダー */}
+              <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50 to-white border-b border-blue-100 flex items-center gap-2">
+                <span className="text-xs font-bold text-blue-700">{cat.name}</span>
+                <span className="text-[10px] text-blue-400 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                  {cat.tasks.length}件
+                </span>
+              </div>
+              {/* タスク一覧 */}
+              <div className="p-3 space-y-2">
+                {cat.tasks.map(task => (
+                  <TaskRow key={task.id} task={task} onSave={handleSave} />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+
+        {/* 使い方ガイド */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <h3 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5 text-blue-400" />
+            表示日の設定方法
+          </h3>
+          <div className="space-y-1.5 text-xs text-gray-500">
+            <p>• <strong>毎月1〜5日のみ表示：</strong> <code className="bg-gray-100 px-1 rounded">1,2,3,4,5</code></p>
+            <p>• <strong>毎月15〜20日のみ表示：</strong> <code className="bg-gray-100 px-1 rounded">15,16,17,18,19,20</code></p>
+            <p>• <strong>毎月25日のみ表示：</strong> <code className="bg-gray-100 px-1 rounded">25</code></p>
+            <p>• <strong>毎月15日と30日のみ表示：</strong> <code className="bg-gray-100 px-1 rounded">15,30</code></p>
+            <p>• <strong>毎日表示（制限なし）：</strong> 空欄のまま保存</p>
+            <p className="text-gray-400 mt-2">※ 期限日（showOnDaysの最大値）を過ぎても未完了の場合は、完了するまで継続表示されます。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -46,6 +46,7 @@ import {
   FolderOpen,
   GripVertical,
   Pencil,
+  CalendarDays,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -1482,14 +1483,25 @@ export default function Home() {
               <Users className="w-4 h-4" />
               顧客引き継ぎ
             </span>
-            <a
-              href="/customers"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
-            >
-              顧客引き継ぎページへ →
-            </a>
+            <div className="ml-auto flex items-center gap-2">
+              <a
+                href="/show-on-days"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors shadow-sm"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                表示日制限設定
+              </a>
+              <a
+                href="/customers"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
+              >
+                顧客引き継ぎページへ →
+              </a>
+            </div>
           </div>
         </section>
         {/* MISOCA / グレーセル / STORESシフト 統合ステータスセクション */}
