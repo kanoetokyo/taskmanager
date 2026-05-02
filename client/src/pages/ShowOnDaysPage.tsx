@@ -427,7 +427,7 @@ export default function ShowOnDaysPage() {
     sum + cat.tasks.filter(t => {
       const s = t.showOnDays ?? "";
       if (s.trim() === "") return false;
-      const state = taskStateMap.get(String(t.id));
+      const state = taskStateMap.get(`def-${t.id}`);
       return !!state?.done;
     }).length, 0);
 
@@ -555,7 +555,7 @@ export default function ShowOnDaysPage() {
               {/* タスク一覧 */}
               <div className="p-3 space-y-2">
                 {cat.tasks.map(task => (
-                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(String(task.id))} onSave={handleSave} />
+                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(`def-${task.id}`)} onSave={handleSave} />
                 ))}
               </div>
             </div>
