@@ -6,7 +6,7 @@
  * - カテゴリ別グループ表示
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import {
@@ -137,12 +137,20 @@ function MonthPreview({ showOnDays }: { showOnDays: string }) {
 
 // ─── タスク行コンポーネント ────────────────────────────────────────────────────
 
+interface TaskState {
+  taskId: string;
+  done: boolean;
+  help: boolean;
+  note: string;
+}
+
 interface TaskRowProps {
   task: TaskDefRow;
+  taskState?: TaskState;
   onSave: (id: number, showOnDays: string, deadline: string) => void;
 }
 
-function TaskRow({ task, onSave }: TaskRowProps) {
+function TaskRow({ task, taskState, onSave }: TaskRowProps) {
   const [editing, setEditing] = useState(false);
   const [showOnDaysInput, setShowOnDaysInput] = useState(task.showOnDays ?? "");
   const [deadlineInput, setDeadlineInput] = useState(task.deadline ?? "");
@@ -183,6 +191,17 @@ function TaskRow({ task, onSave }: TaskRowProps) {
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* 完了状態バッジ */}
+          {taskState?.done ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white">
+              <Check className="w-2.5 h-2.5" />
+              完了済み
+            </span>
+          ) : taskState !== undefined ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
+              未完了
+            </span>
+          ) : null}
           {/* 今日の表示状態バッジ */}
           {hasLimit ? (
             visible ? (
@@ -329,10 +348,31 @@ export default function ShowOnDaysPage() {
     return () => { document.title = prev; };
   }, []);
 
+  // 今日の日付キー（YYYY-MM-DD）
+  const todayDateKey = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
   const { data: taskDefinitionData, refetch } = trpc.taskDefinition.getAll.useQuery(
     undefined,
     { staleTime: 0 }
   );
+
+  // 今日のタスク完了状態を取得
+  const { data: todayTaskStates } = trpc.task.taskStates.getByDate.useQuery(
+    { dateKey: todayDateKey },
+    { refetchInterval: 30000 }
+  );
+
+  // taskId → TaskState のマップ
+  const taskStateMap = useMemo(() => {
+    const map = new Map<string, TaskState>();
+    (todayTaskStates ?? []).forEach((s: any) => {
+      map.set(String(s.taskId), { taskId: String(s.taskId), done: !!s.done, help: !!s.help, note: s.note ?? "" });
+    });
+    return map;
+  }, [todayTaskStates]);
 
   const updateTask = trpc.taskDefinition.updateTask.useMutation({
     onSuccess: () => {
@@ -381,6 +421,14 @@ export default function ShowOnDaysPage() {
     sum + cat.tasks.filter(t => {
       const s = t.showOnDays ?? "";
       return s.trim() !== "" && isOverdueToday(s) && !isVisibleToday(s);
+    }).length, 0);
+  // 今日の制限タスクのうち完了済み件数
+  const completedLimitedToday = categories.reduce((sum, cat) =>
+    sum + cat.tasks.filter(t => {
+      const s = t.showOnDays ?? "";
+      if (s.trim() === "") return false;
+      const state = taskStateMap.get(String(t.id));
+      return !!state?.done;
     }).length, 0);
 
   const today = new Date();
@@ -431,7 +479,7 @@ export default function ShowOnDaysPage() {
             <Calendar className="w-4 h-4 text-blue-500" />
             <h2 className="text-sm font-bold text-gray-700">今日の状況 — {todayStr}</h2>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <p className="text-2xl font-bold text-gray-700">{totalTasks}</p>
               <p className="text-xs text-gray-400 mt-0.5">総タスク数</p>
@@ -440,11 +488,15 @@ export default function ShowOnDaysPage() {
               <p className="text-2xl font-bold text-blue-600">{limitedTasks}</p>
               <p className="text-xs text-blue-400 mt-0.5">表示日制限あり</p>
             </div>
-            <div className={`text-center p-3 rounded-lg ${overdueToday > 0 ? "bg-red-50" : "bg-green-50"}`}>
-              <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-600" : "text-green-600"}`}>
+            <div className="text-center p-3 bg-green-50 rounded-lg">
+              <p className="text-2xl font-bold text-green-600">{completedLimitedToday}</p>
+              <p className="text-xs text-green-400 mt-0.5">制限タスク完了済み</p>
+            </div>
+            <div className={`text-center p-3 rounded-lg ${overdueToday > 0 ? "bg-red-50" : "bg-gray-50"}`}>
+              <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-600" : "text-gray-400"}`}>
                 {overdueToday}
               </p>
-              <p className={`text-xs mt-0.5 ${overdueToday > 0 ? "text-red-400" : "text-green-400"}`}>
+              <p className={`text-xs mt-0.5 ${overdueToday > 0 ? "text-red-400" : "text-gray-300"}`}>
                 期限超過中
               </p>
             </div>
@@ -503,7 +555,7 @@ export default function ShowOnDaysPage() {
               {/* タスク一覧 */}
               <div className="p-3 space-y-2">
                 {cat.tasks.map(task => (
-                  <TaskRow key={task.id} task={task} onSave={handleSave} />
+                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(String(task.id))} onSave={handleSave} />
                 ))}
               </div>
             </div>
