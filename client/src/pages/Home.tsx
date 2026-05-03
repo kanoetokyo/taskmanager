@@ -1822,7 +1822,11 @@ export default function Home() {
                   )}
                 </div>
                 {/* AI留守電チェック */}
-                <div className="px-4 py-3 space-y-2">
+                <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-500 shrink-0"><Phone className="w-4 h-4" /></span>
+                    <span className="text-sm text-gray-700 font-medium flex-1">AI留守電対応確認</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={toggleAiVoicemail}
@@ -1834,8 +1838,8 @@ export default function Home() {
                     >
                       {storeCheck.aiVoicemail && <span className="text-xs font-bold leading-none">✓</span>}
                     </button>
-                    <span className={`text-sm font-medium flex-1 ${
-                      storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-700"
+                    <span className={`text-sm flex-1 ${
+                      storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-600"
                     }`}>
                       18時以降にAI留守電に来てるもので、対応した電話は翌日の事務グループに対応済みと引継ぎを残す
                     </span>
@@ -2420,7 +2424,11 @@ export default function Home() {
             )}
           </div>
           {/* AI留守電チェック */}
-          <div className="px-4 py-3 space-y-2">
+          <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 shrink-0"><Phone className="w-4 h-4" /></span>
+              <span className="text-sm text-gray-700 font-medium flex-1">AI留守電対応確認</span>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleAiVoicemail}
@@ -2432,8 +2440,8 @@ export default function Home() {
               >
                 {storeCheck.aiVoicemail && <span className="text-xs font-bold leading-none">✓</span>}
               </button>
-              <span className={`text-sm font-medium flex-1 ${
-                storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-700"
+              <span className={`text-sm flex-1 ${
+                storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-600"
               }`}>
                 18時以降にAI留守電に来てるもので、対応した電話は翌日の事務グループに対応済みと引継ぎを残す
               </span>
