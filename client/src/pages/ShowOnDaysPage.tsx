@@ -496,6 +496,39 @@ export default function ShowOnDaysPage() {
       : cat.tasks,
   })).filter(cat => cat.tasks.length > 0);
 
+  // 制限設定済みタスクを日付順・3グループに整形
+  const limitedTasksGrouped = useMemo(() => {
+    if (filterMode !== "limited") return null;
+    // 全カテゴリから制限設定済みタスクをフラット化
+    const allLimited: (TaskDefRow & { categoryName: string })[] = [];
+    categories.forEach(cat => {
+      cat.tasks.forEach(t => {
+        if ((t.showOnDays ?? "").trim() !== "") {
+          allLimited.push({ ...t, categoryName: cat.name });
+        }
+      });
+    });
+    // showOnDaysの最小値（最初の表示日）でソート
+    allLimited.sort((a, b) => {
+      const aMin = Math.min(...parseShowOnDays(a.showOnDays ?? ""));
+      const bMin = Math.min(...parseShowOnDays(b.showOnDays ?? ""));
+      return aMin - bMin;
+    });
+    // 月初(1-10)・中旬(11-20)・月末(21-31) に分類
+    const groups = [
+      { label: "月初（1〜10日）", range: [1, 10], tasks: [] as (TaskDefRow & { categoryName: string })[] },
+      { label: "中旬（11〜20日）", range: [11, 20], tasks: [] as (TaskDefRow & { categoryName: string })[] },
+      { label: "月末（21〜31日）", range: [21, 31], tasks: [] as (TaskDefRow & { categoryName: string })[] },
+    ];
+    allLimited.forEach(t => {
+      const minDay = Math.min(...parseShowOnDays(t.showOnDays ?? ""));
+      if (minDay <= 10) groups[0].tasks.push(t);
+      else if (minDay <= 20) groups[1].tasks.push(t);
+      else groups[2].tasks.push(t);
+    });
+    return groups.filter(g => g.tasks.length > 0);
+  }, [filterMode, categories]);
+
   // 統計
   const totalTasks = categories.reduce((sum, cat) => sum + cat.tasks.length, 0);
   const limitedTasks = categories.reduce((sum, cat) =>
@@ -616,33 +649,71 @@ export default function ShowOnDaysPage() {
           </button>
         </div>
 
-        {/* カテゴリ別タスク一覧 */}
-        {filteredCategories.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
-            <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-400 font-medium">表示日制限が設定されたタスクはありません</p>
-            <p className="text-xs text-gray-300 mt-1">
-              「全タスク表示」に切り替えて、制限を設定したいタスクの編集ボタンをクリックしてください
-            </p>
-          </div>
-        ) : (
-          filteredCategories.map(cat => (
-            <div key={cat.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              {/* カテゴリヘッダー */}
-              <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50 to-white border-b border-blue-100 flex items-center gap-2">
-                <span className="text-xs font-bold text-blue-700">{cat.name}</span>
-                <span className="text-[10px] text-blue-400 bg-blue-100 px-1.5 py-0.5 rounded-full">
-                  {cat.tasks.length}件
-                </span>
-              </div>
-              {/* タスク一覧 */}
-              <div className="p-3 space-y-2">
-                {cat.tasks.map(task => (
-                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
-                ))}
-              </div>
+        {/* タスク一覧：制限設定済みは日付順グループ、全表示はカテゴリ別 */}
+        {filterMode === "limited" ? (
+          !limitedTasksGrouped || limitedTasksGrouped.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+              <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-400 font-medium">表示日制限が設定されたタスクはありません</p>
+              <p className="text-xs text-gray-300 mt-1">
+                「全タスク表示」に切り替えて、制限を設定したいタスクの編集ボタンをクリックしてください
+              </p>
             </div>
-          ))
+          ) : (
+            <div className="space-y-4">
+              {limitedTasksGrouped.map(group => (
+                <div key={group.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  {/* グループヘッダー */}
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-white border-b border-indigo-100 flex items-center gap-2">
+                    <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="text-xs font-bold text-indigo-700">{group.label}</span>
+                    <span className="text-[10px] text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                      {group.tasks.length}件
+                    </span>
+                  </div>
+                  {/* タスク一覧 */}
+                  <div className="p-3 space-y-2">
+                    {group.tasks.map(task => (
+                      <div key={task.id}>
+                        {/* カテゴリ名バッジ */}
+                        <div className="mb-1">
+                          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                            {task.categoryName}
+                          </span>
+                        </div>
+                        <TaskRow task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          filteredCategories.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+              <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-400 font-medium">タスクがありません</p>
+            </div>
+          ) : (
+            filteredCategories.map(cat => (
+              <div key={cat.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* カテゴリヘッダー */}
+                <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50 to-white border-b border-blue-100 flex items-center gap-2">
+                  <span className="text-xs font-bold text-blue-700">{cat.name}</span>
+                  <span className="text-[10px] text-blue-400 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                    {cat.tasks.length}件
+                  </span>
+                </div>
+                {/* タスク一覧 */}
+                <div className="p-3 space-y-2">
+                  {cat.tasks.map(task => (
+                    <TaskRow key={task.id} task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
+                  ))}
+                </div>
+              </div>
+            ))
+          )
         )}
 
         {/* 使い方ガイド */}
