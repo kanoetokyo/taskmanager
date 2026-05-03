@@ -310,3 +310,11 @@
 ## showOnDaysタスクの完了日表示機能 (2026-05-03)
 - [x] getByDateWithMonthlyのレスポンスにdateKeyが含まれているか確認する
 - [x] Home.tsxのshowOnDaysタスク行に「○月○日に完了済み」バッジを追加する
+
+## 完了日バッジ拡張・完了者記録機能 (2026-05-03)
+- [x] 現在のShowOnDaysPage.tsxとHome.tsxの完了日バッジ実装を確認する
+- [x] Home.tsxのTask型にcompletedByフィールドを追加する（DBスキーマ変更なし：noteフィールドの__completedByタグで管理）
+- [x] extractCompletedBy()ヘルパー関数をHome.tsxに追加する
+- [x] DB読み込み時に__completedByタグを抽出・クリーン化する（初回ロード・ポーリング更新両方）
+- [x] Home.tsxの完了日バッジをクリック可能なボタンに変更し完了者選択ダイアログを実装（PC・モバイル両方）
+- [x] ShowOnDaysPage.tsxをgetByDateWithMonthlyに切り替えて完了日・完了者バッジを反映する

@@ -142,6 +142,8 @@ interface TaskState {
   done: boolean;
   help: boolean;
   note: string;
+  completedDateKey?: string;
+  completedBy?: string;
 }
 
 interface TaskRowProps {
@@ -193,10 +195,20 @@ function TaskRow({ task, taskState, onSave }: TaskRowProps) {
         <div className="flex items-center gap-1 shrink-0">
           {/* 完了状態バッジ */}
           {taskState?.done ? (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white">
-              <Check className="w-2.5 h-2.5" />
-              完了済み
-            </span>
+            taskState.completedDateKey ? (() => {
+              const [, m, d] = taskState.completedDateKey.split("-");
+              return (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
+                  <Check className="w-2.5 h-2.5" />
+                  {parseInt(m)}月{parseInt(d)}日完了{taskState.completedBy ? ` / ${taskState.completedBy}` : ""}
+                </span>
+              );
+            })() : (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white">
+                <Check className="w-2.5 h-2.5" />
+                完了済み
+              </span>
+            )
           ) : taskState !== undefined ? (
             <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
               未完了
@@ -359,8 +371,8 @@ export default function ShowOnDaysPage() {
     { staleTime: 0 }
   );
 
-  // 今日のタスク完了状態を取得
-  const { data: todayTaskStates } = trpc.task.taskStates.getByDate.useQuery(
+  // 今日のタスク完了状態を取得（当月完了日・完了者も取得）
+  const { data: todayTaskStates } = trpc.task.taskStates.getByDateWithMonthly.useQuery(
     { dateKey: todayDateKey },
     { refetchInterval: 30000 }
   );
@@ -369,7 +381,18 @@ export default function ShowOnDaysPage() {
   const taskStateMap = useMemo(() => {
     const map = new Map<string, TaskState>();
     (todayTaskStates ?? []).forEach((s: any) => {
-      map.set(String(s.taskId), { taskId: String(s.taskId), done: !!s.done, help: !!s.help, note: s.note ?? "" });
+      // noteから__completedDate・__completedByタグを抽出
+      const rawNote: string = s.note ?? "";
+      const completedDateMatch = rawNote.match(/__completedDate:(\d{4}-\d{2}-\d{2})/);
+      const completedByMatch = rawNote.match(/__completedBy:([^\n]+)/);
+      map.set(String(s.taskId), {
+        taskId: String(s.taskId),
+        done: !!s.done,
+        help: !!s.help,
+        note: rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim(),
+        completedDateKey: completedDateMatch ? completedDateMatch[1] : undefined,
+        completedBy: completedByMatch ? completedByMatch[1].trim() : undefined,
+      });
     });
     return map;
   }, [todayTaskStates]);

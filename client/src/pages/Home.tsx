@@ -113,6 +113,7 @@ interface Task extends TaskDef {
   help: boolean;
   note: string; // 備考欄（pay-aとomori-dのみ表示）
   completedDateKey?: string; // showOnDaysタスクの完了日（当月保持時）
+  completedBy?: string; // showOnDaysタスクの完了者
 }
 
 // ─── Store Check (LINE / POS / Raccoon) ─────────────────────────────────────
@@ -493,6 +494,10 @@ export default function Home() {
   const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: number; name: string; taskCount: number } | null>(null);
   const [categoryDragOrder, setCategoryDragOrder] = useState<number[]>([]);
 
+  // ─── 完了者記録ダイアログ State ───────────────────────────────────────────
+  const [completedByDialog, setCompletedByDialog] = useState<{ taskId: string; label: string; completedDateKey: string; currentCompletedBy?: string } | null>(null);
+  const [completedByInput, setCompletedByInput] = useState("");
+
   // dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -572,6 +577,13 @@ export default function Home() {
     return match ? match[1] : undefined;
   };
 
+  // noteから__completedByタグを抽出するヘルパー
+  const extractCompletedBy = (note: string | null | undefined): string | undefined => {
+    if (!note) return undefined;
+    const match = note.match(/__completedBy:([^\n]+)/);
+    return match ? match[1].trim() : undefined;
+  };
+
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData) {
@@ -583,8 +595,12 @@ export default function Home() {
             const existing = prev.find(p => p.id === t.id);
             const rawNote = dbState?.note ?? "";
             const completedDateKey = extractCompletedDate(rawNote);
-            // __completedDateタグをnoteから除去して表示用にクリーン化
-            const cleanNote = rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").trim();
+            const completedBy = extractCompletedBy(rawNote);
+            // __completedDate・__completedByタグをnoteから除去して表示用にクリーン化
+            const cleanNote = rawNote
+              .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+              .replace(/\n?__completedBy:[^\n]+/g, "")
+              .trim();
             return {
               ...t,
               planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
@@ -593,6 +609,7 @@ export default function Home() {
               help: dbState?.help ?? false,
               note: cleanNote,
               completedDateKey,
+              completedBy,
             };
           });
         });
@@ -606,13 +623,18 @@ export default function Home() {
               if (!dbState) return t;
               const rawNote = dbState.note ?? t.note;
               const completedDateKey = extractCompletedDate(rawNote);
-              const cleanNote = rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").trim();
+              const completedBy = extractCompletedBy(rawNote);
+              const cleanNote = rawNote
+                .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+                .replace(/\n?__completedBy:[^\n]+/g, "")
+                .trim();
               return {
                 ...t,
                 done: dbState.done ?? t.done,
                 help: dbState.help ?? t.help,
                 note: cleanNote,
                 completedDateKey,
+                completedBy,
               };
             });
           });
@@ -2120,15 +2142,24 @@ export default function Home() {
                           <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
                             ⏰ {task.deadline}
                           </span>
-                        )}
-                        {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
+                        )}                        {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
                           const [, m, d] = task.completedDateKey.split("-");
                           return (
-                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
-                              ✓ {parseInt(m)}月{parseInt(d)}日完了
-                            </span>
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setCompletedByInput(task.completedBy ?? "");
+                                setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
+                              }}
+                              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
+                              title="完了者を記録"
+                            >
+                              ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : ""}
+                            </button>
                           );
-                        })()}
+                        })()
+}
                       </span>
                     </div>
 
@@ -2527,9 +2558,18 @@ export default function Home() {
                               {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
                                 const [, m, d] = task.completedDateKey.split("-");
                                 return (
-                                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
-                                    ✓ {parseInt(m)}月{parseInt(d)}日完了
-                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setCompletedByInput(task.completedBy ?? "");
+                                      setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
+                                    }}
+                                    className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
+                                    title="完了者を記録"
+                                  >
+                                    ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : ""}
+                                  </button>
                                 );
                               })()}
                             </span>
@@ -2841,6 +2881,81 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setDeleteCategoryConfirm(null)}
+                className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 完了者記録ダイアログ */}
+      {completedByDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCompletedByDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-gray-800">完了者を記録</h2>
+              <button onClick={() => setCompletedByDialog(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-1 leading-relaxed">{completedByDialog.label}</p>
+            {(() => {
+              const [, m, d] = completedByDialog.completedDateKey.split("-");
+              return <p className="text-xs text-green-600 font-medium mb-4">✓ {parseInt(m)}月{parseInt(d)}日完了</p>;
+            })()}
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 font-medium block mb-1">完了者</label>
+              <select
+                value={completedByInput}
+                onChange={e => setCompletedByInput(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">― 未選択 ―</option>
+                {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!completedByInput) { toast.error("完了者を選択してください"); return; }
+                  try {
+                    // 完了日の実際のdateKeyでupsert（当月保持レコードに__completedByタグを付加）
+                    const targetDateKey = completedByDialog.completedDateKey;
+                    // 完了日のdateKeyの既存noteを取得するため、現在のtask.noteを使用
+                    const task = tasks.find(t => t.id === completedByDialog.taskId);
+                    const baseNote = task?.note ?? "";
+                    // __completedByタグを更新または追加
+                    const noteWithoutBy = baseNote.replace(/\n?__completedBy:[^\n]+/g, "").trim();
+                    const newNote = noteWithoutBy
+                      ? `${noteWithoutBy}\n__completedBy:${completedByInput}`
+                      : `__completedBy:${completedByInput}`;
+                    await upsertTaskState.mutateAsync({
+                      dateKey: targetDateKey,
+                      taskId: completedByDialog.taskId,
+                      done: true,
+                      help: task?.help ?? false,
+                      note: newNote,
+                    });
+                    // ローカルstateも更新
+                    setTasks(prev => prev.map(t => t.id === completedByDialog.taskId
+                      ? { ...t, completedBy: completedByInput }
+                      : t
+                    ));
+                    toast.success(`完了者を「${completedByInput}」として記録しました`);
+                    setCompletedByDialog(null);
+                  } catch (e) {
+                    console.error(e);
+                    toast.error("完了者の保存に失敗しました");
+                  }
+                }}
+                className="flex-1 text-sm py-2 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors"
+              >
+                記録する
+              </button>
+              <button
+                onClick={() => setCompletedByDialog(null)}
                 className="flex-1 text-sm py-2 rounded-xl bg-gray-100 text-gray-600 font-semibold hover:bg-gray-200 transition-colors"
               >
                 キャンセル
