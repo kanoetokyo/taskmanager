@@ -112,6 +112,7 @@ interface Task extends TaskDef {
   done: boolean;
   help: boolean;
   note: string; // 備考欄（pay-aとomori-dのみ表示）
+  completedDateKey?: string; // showOnDaysタスクの完了日（当月保持時）
 }
 
 // ─── Store Check (LINE / POS / Raccoon) ─────────────────────────────────────
@@ -564,6 +565,13 @@ export default function Home() {
 
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
+  // noteから__completedDateタグを抽出するヘルパー
+  const extractCompletedDate = (note: string | null | undefined): string | undefined => {
+    if (!note) return undefined;
+    const match = note.match(/__completedDate:(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : undefined;
+  };
+
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData) {
@@ -573,13 +581,18 @@ export default function Home() {
           return activeTasks.map(t => {
             const dbState = taskStatesData.find(s => s.taskId === t.id);
             const existing = prev.find(p => p.id === t.id);
+            const rawNote = dbState?.note ?? "";
+            const completedDateKey = extractCompletedDate(rawNote);
+            // __completedDateタグをnoteから除去して表示用にクリーン化
+            const cleanNote = rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").trim();
             return {
               ...t,
               planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
               actual: existing?.actual ?? "",
               done: dbState?.done ?? false,
               help: dbState?.help ?? false,
-              note: dbState?.note ?? "",
+              note: cleanNote,
+              completedDateKey,
             };
           });
         });
@@ -591,11 +604,15 @@ export default function Home() {
             return prev.map(t => {
               const dbState = taskStatesData.find(s => s.taskId === t.id);
               if (!dbState) return t;
+              const rawNote = dbState.note ?? t.note;
+              const completedDateKey = extractCompletedDate(rawNote);
+              const cleanNote = rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").trim();
               return {
                 ...t,
                 done: dbState.done ?? t.done,
                 help: dbState.help ?? t.help,
-                note: dbState.note ?? t.note,
+                note: cleanNote,
+                completedDateKey,
               };
             });
           });
@@ -2104,6 +2121,14 @@ export default function Home() {
                             ⏰ {task.deadline}
                           </span>
                         )}
+                        {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
+                          const [, m, d] = task.completedDateKey.split("-");
+                          return (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
+                              ✓ {parseInt(m)}月{parseInt(d)}日完了
+                            </span>
+                          );
+                        })()}
                       </span>
                     </div>
 
@@ -2499,6 +2524,14 @@ export default function Home() {
                                   ⏰ {task.deadline}
                                 </span>
                               )}
+                              {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
+                                const [, m, d] = task.completedDateKey.split("-");
+                                return (
+                                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
+                                    ✓ {parseInt(m)}月{parseInt(d)}日完了
+                                  </span>
+                                );
+                              })()}
                             </span>
                           </div>
                           <div className="mt-2 flex items-center justify-end gap-1.5">

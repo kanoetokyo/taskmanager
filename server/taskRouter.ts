@@ -71,10 +71,20 @@ const taskStatesRouter = router({
           .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
         if (monthlyCompleted.length > 0) {
-          // 当月完了済みとして今日の状態に追加（dateKeyは今日に変換）
+          const original = monthlyCompleted[0];
+          // 当月完了済みとして今日の状態に追加
+          // noteフィールドに元の完了日を "__completedDate:YYYY-MM-DD" 形式で埋め込む
+          const completedDateTag = `__completedDate:${original.dateKey}`;
+          const existingNote = original.note ?? "";
+          const noteWithDate = existingNote.includes("__completedDate:")
+            ? existingNote
+            : existingNote
+              ? `${existingNote}\n${completedDateTag}`
+              : completedDateTag;
           result.push({
-            ...monthlyCompleted[0],
+            ...original,
             dateKey: input.dateKey,
+            note: noteWithDate,
           });
         }
       }
