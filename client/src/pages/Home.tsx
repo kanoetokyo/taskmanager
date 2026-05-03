@@ -407,7 +407,7 @@ export default function Home() {
   );
 
   // Task states for current date
-  const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDate.useQuery(
+  const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDateWithMonthly.useQuery(
     { dateKey: currentDateKey },
     { refetchInterval: 30000 } // 30秒ごとにポーリング
   );

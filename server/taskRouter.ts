@@ -1,4 +1,4 @@
-import { and, eq, lt, ne, or } from "drizzle-orm";
+import { and, eq, gte, lt, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   customerHandovers,
@@ -7,6 +7,7 @@ import {
   misocaStatus,
   storeCheckStates,
   storesShiftStatus,
+  taskDefinitions,
   taskStates,
 } from "../drizzle/schema";
 import { cleanupOldDateKeyRecords, getDb } from "./db";
@@ -23,6 +24,62 @@ const taskStatesRouter = router({
       // 3日超の古いデータをクリーンアップ（非同期・エラーは無視）
       cleanupOldDateKeyRecords().catch(() => {});
       return db.select().from(taskStates).where(eq(taskStates.dateKey, input.dateKey));
+    }),
+
+  // Get task states for a date, with monthly persistence for showOnDays tasks
+  // showOnDays設定タスクは当月中に完了済みであれば、今日のdateKeyで未完了でも完了として返す
+  getByDateWithMonthly: publicProcedure
+    .input(z.object({ dateKey: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      cleanupOldDateKeyRecords().catch(() => {});
+
+      // 今日のタスク状態を取得
+      const todayStates = await db.select().from(taskStates).where(eq(taskStates.dateKey, input.dateKey));
+
+      // showOnDays設定タスクのIDリストを取得
+      const showOnDaysTasks = await db
+        .select({ id: taskDefinitions.id })
+        .from(taskDefinitions)
+        .where(and(eq(taskDefinitions.isActive, true), gte(taskDefinitions.showOnDays, "1")));
+
+      if (showOnDaysTasks.length === 0) return todayStates;
+
+      const showOnDaysTaskIds = new Set(showOnDaysTasks.map(t => `def-${t.id}`));
+
+      // 当月の開始日を計算（YYYY-MM-01）
+      const monthStart = input.dateKey.slice(0, 7) + "-01";
+
+      // 当月中の全タスク状態を取得
+      const monthlyStates = await db
+        .select()
+        .from(taskStates)
+        .where(and(gte(taskStates.dateKey, monthStart), lt(taskStates.dateKey, input.dateKey)));
+
+      // 今日の状態をベースに、showOnDaysタスクの当月完了状態でマージ
+      const result = [...todayStates];
+      const todayStateMap = new Map(todayStates.map(s => [s.taskId, s]));
+
+      for (const taskId of Array.from(showOnDaysTaskIds)) {
+        // 今日すでに状態があればスキップ
+        if (todayStateMap.has(taskId)) continue;
+
+        // 当月中の完了済みレコードを探す（最新日付優先）
+        const monthlyCompleted = monthlyStates
+          .filter(s => s.taskId === taskId && s.done)
+          .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+        if (monthlyCompleted.length > 0) {
+          // 当月完了済みとして今日の状態に追加（dateKeyは今日に変換）
+          result.push({
+            ...monthlyCompleted[0],
+            dateKey: input.dateKey,
+          });
+        }
+      }
+
+      return result;
     }),
 
   // Upsert a task state
