@@ -198,8 +198,8 @@ function TaskRow({ task, taskState, todayDateKey, onSave, onSaveCompletedDate }:
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {/* 完了状態バッジ */}
-          {taskState?.done ? (() => {
+          {/* 完了状態バッジ（showOnDays設定があるタスクのみ表示） */}
+          {taskState?.done && hasLimit ? (() => {
             // completedDateKeyがあればその日付、なければpropsのtodayDateKeyを使用
             const dateKey = taskState.completedDateKey ?? todayDateKey;
             const [, m, d] = dateKey.split("-");
