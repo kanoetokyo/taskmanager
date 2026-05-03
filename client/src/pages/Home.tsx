@@ -2162,7 +2162,7 @@ export default function Home() {
                           <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
                             ⏰ {task.deadline}
                           </span>
-                        )}                        {task.done && task.completedDateKey && (() => {
+                        )}                        {task.done && task.completedDateKey && defShowOnDays.trim() !== "" && (() => {
                           const [, m, d] = task.completedDateKey.split("-");
                           return (
                             <button
@@ -2575,7 +2575,7 @@ export default function Home() {
                                   ⏰ {task.deadline}
                                 </span>
                               )}
-                              {task.done && task.completedDateKey && (() => {
+                              {task.done && task.completedDateKey && defShowOnDays.trim() !== "" && (() => {
                                 const [, m, d] = task.completedDateKey.split("-");
                                 return (
                                   <button
