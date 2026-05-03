@@ -125,6 +125,7 @@ interface StoreCheckState {
   lineAfternoon: string[]; // 午後（退勤前）LINEチェック済み店舗名
   pos: string[];
   raccoon: string[];
+  aiVoicemail: boolean;   // AI留守電チェック（退勤前）
 }
 
 // ─── Task Definitions ────────────────────────────────────────────────────────
@@ -375,7 +376,7 @@ export default function Home() {
   const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(true);
-  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
+  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [prevDayTasks, setPrevDayTasks] = useState<Task[]>([]);
@@ -654,25 +655,27 @@ export default function Home() {
     if (storeCheckData) {
       if (!storeCheckLoadedRef.current) {
         // 初回ロード: DBの値を無条件に反映
-        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] };
+        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
         for (const row of storeCheckData) {
           if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
           else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
           else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
           else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
           else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+          else if (row.checkType === "ai_voicemail") newState.aiVoicemail = (row.checkedStores as string[]).length > 0;
         }
         setStoreCheck(newState);
         setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
       } else if (!isSavingStoreCheckRef.current) {
         // ポーリング更新: 保存タイマー動作中でなければDBの値を反映
-        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] };
+        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
         for (const row of storeCheckData) {
           if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
           else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
           else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
           else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
           else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
+          else if (row.checkType === "ai_voicemail") newState.aiVoicemail = (row.checkedStores as string[]).length > 0;
         }
         setStoreCheck(newState);
       }
@@ -749,7 +752,7 @@ export default function Home() {
     storeCheckLoadedRef.current = false;
     individualHandoverLoadedRef.current = false;
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
-    setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [] });
+    setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
@@ -798,6 +801,7 @@ export default function Home() {
           upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line_afternoon", checkedStores: storeCheck.lineAfternoon }),
           upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "pos", checkedStores: storeCheck.pos }),
           upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "raccoon", checkedStores: storeCheck.raccoon }),
+          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "ai_voicemail", checkedStores: storeCheck.aiVoicemail ? ["done"] : [] }),
         ]);
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
@@ -981,14 +985,18 @@ export default function Home() {
 
   // ─── Store Check Handlers ──────────────────────────────────────────────────
 
-  const toggleStoreCheck = (type: keyof StoreCheckState, store: string) => {
+  const toggleStoreCheck = (type: Exclude<keyof StoreCheckState, 'aiVoicemail'>, store: string) => {
     setStoreCheck(prev => {
-      const checked = prev[type].includes(store);
+      const checked = (prev[type] as string[]).includes(store);
       return {
         ...prev,
-        [type]: checked ? prev[type].filter(s => s !== store) : [...prev[type], store],
+        [type]: checked ? (prev[type] as string[]).filter(s => s !== store) : [...(prev[type] as string[]), store],
       };
     });
+  };
+
+  const toggleAiVoicemail = () => {
+    setStoreCheck(prev => ({ ...prev, aiVoicemail: !prev.aiVoicemail }));
   };
 
    // ─── MISOCA Handler ──────────────────────────────────────────────────────
@@ -1726,7 +1734,7 @@ export default function Home() {
                   </span>
                   <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
                   <span className="ml-auto text-xs text-gray-400">
-                    {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+                    {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
                   </span>
                 </div>
                 {/* 公式LINE */}
@@ -1812,6 +1820,27 @@ export default function Home() {
                       <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
                     </div>
                   )}
+                </div>
+                {/* AI留守電チェック */}
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={toggleAiVoicemail}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        storeCheck.aiVoicemail
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "bg-white border-gray-300 hover:border-green-400"
+                      }`}
+                    >
+                      {storeCheck.aiVoicemail && <span className="text-xs font-bold leading-none">✓</span>}
+                    </button>
+                    <span className={`text-sm font-medium flex-1 ${
+                      storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-700"
+                    }`}>
+                      18時以降にAI留守電に来てるもので、対応した電話は翌日の事務グループに対応済みと引継ぎを残す
+                    </span>
+                    {storeCheck.aiVoicemail && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+                  </div>
                 </div>
               </section>
             )}
@@ -2288,7 +2317,7 @@ export default function Home() {
             </span>
             <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
             <span className="ml-auto text-xs text-gray-400">
-              {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length].filter(Boolean).length}/3項目完了
+              {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
             </span>
           </div>
           {/* 公式LINE */}
@@ -2389,6 +2418,27 @@ export default function Home() {
                 <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
               </div>
             )}
+          </div>
+          {/* AI留守電チェック */}
+          <div className="px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleAiVoicemail}
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  storeCheck.aiVoicemail
+                    ? "bg-green-500 border-green-500 text-white"
+                    : "bg-white border-gray-300 hover:border-green-400"
+                }`}
+              >
+                {storeCheck.aiVoicemail && <span className="text-xs font-bold leading-none">✓</span>}
+              </button>
+              <span className={`text-sm font-medium flex-1 ${
+                storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-700"
+              }`}>
+                18時以降にAI留守電に来てるもので、対応した電話は翌日の事務グループに対応済みと引継ぎを残す
+              </span>
+              {storeCheck.aiVoicemail && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
+            </div>
           </div>
         </section>
 
