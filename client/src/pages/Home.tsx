@@ -601,14 +601,17 @@ export default function Home() {
               .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
               .replace(/\n?__completedBy:[^\n]+/g, "")
               .trim();
+            const isDone = dbState?.done ?? false;
+            // done=trueなのにcompletedDateKeyがない場合は今日の日付をフォールバック
+            const resolvedCompletedDateKey = completedDateKey ?? (isDone ? currentDateKeyRef.current : undefined);
             return {
               ...t,
               planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
               actual: existing?.actual ?? "",
-              done: dbState?.done ?? false,
+              done: isDone,
               help: dbState?.help ?? false,
               note: cleanNote,
-              completedDateKey,
+              completedDateKey: resolvedCompletedDateKey,
               completedBy,
             };
           });
@@ -628,12 +631,15 @@ export default function Home() {
                 .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
                 .replace(/\n?__completedBy:[^\n]+/g, "")
                 .trim();
+              const isDone = dbState.done ?? t.done;
+              // done=trueなのにcompletedDateKeyがない場合は今日の日付をフォールバック
+              const resolvedCompletedDateKey = completedDateKey ?? (isDone ? currentDateKeyRef.current : undefined);
               return {
                 ...t,
-                done: dbState.done ?? t.done,
+                done: isDone,
                 help: dbState.help ?? t.help,
                 note: cleanNote,
-                completedDateKey,
+                completedDateKey: resolvedCompletedDateKey,
                 completedBy,
               };
             });
@@ -910,13 +916,27 @@ export default function Home() {
       setCompletingTasks(prev => new Set(prev).add(id));
       setTimeout(() => {
         setUndoHistory(h => [...h.slice(-9), tasks]);
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
+        // 完了時に__completedDateタグをnoteに自動付加
+        const completedDateTag = `__completedDate:${currentDateKeyRef.current}`;
+        setTasks(prev => prev.map(t => {
+          if (t.id !== id) return t;
+          const baseNote = (t.note ?? "").replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").trim();
+          const newNote = baseNote ? `${baseNote}\n${completedDateTag}` : completedDateTag;
+          return { ...t, done: true, completedDateKey: currentDateKeyRef.current, note: newNote };
+        }));
         setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
       }, 400);
     } else {
-      // 完了解除は即座に戻す
+      // 完了解除は即座に戻す（__completedDate・__completedByタグも削除）
       setUndoHistory(h => [...h.slice(-9), tasks]);
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: false } : t));
+      setTasks(prev => prev.map(t => {
+        if (t.id !== id) return t;
+        const cleanNote = (t.note ?? "")
+          .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+          .replace(/\n?__completedBy:[^\n]+/g, "")
+          .trim();
+        return { ...t, done: false, completedDateKey: undefined, completedBy: undefined, note: cleanNote };
+      }));
     }
   };
 
@@ -2142,7 +2162,7 @@ export default function Home() {
                           <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
                             ⏰ {task.deadline}
                           </span>
-                        )}                        {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
+                        )}                        {task.done && task.completedDateKey && (() => {
                           const [, m, d] = task.completedDateKey.split("-");
                           return (
                             <button
@@ -2153,9 +2173,9 @@ export default function Home() {
                                 setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
                               }}
                               className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
-                              title="完了者を記録"
+                              title="完了者を記録（クリックで編集）"
                             >
-                              ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : ""}
+                              ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : " / 完了者を記録"}
                             </button>
                           );
                         })()
@@ -2555,7 +2575,7 @@ export default function Home() {
                                   ⏰ {task.deadline}
                                 </span>
                               )}
-                              {task.done && task.completedDateKey && task.completedDateKey !== currentDateKey && (() => {
+                              {task.done && task.completedDateKey && (() => {
                                 const [, m, d] = task.completedDateKey.split("-");
                                 return (
                                   <button
@@ -2566,9 +2586,9 @@ export default function Home() {
                                       setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
                                     }}
                                     className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
-                                    title="完了者を記録"
+                                    title="完了者を記録（クリックで編集）"
                                   >
-                                    ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : ""}
+                                    ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : " / 完了者を記録"}
                                   </button>
                                 );
                               })()}
@@ -2906,41 +2926,51 @@ export default function Home() {
               return <p className="text-xs text-green-600 font-medium mb-4">✓ {parseInt(m)}月{parseInt(d)}日完了</p>;
             })()}
             <div className="mb-4">
-              <label className="text-xs text-gray-500 font-medium block mb-1">完了者</label>
-              <select
-                value={completedByInput}
-                onChange={e => setCompletedByInput(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
-              >
-                <option value="">― 未選択 ―</option>
-                {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <label className="text-xs text-gray-500 font-medium block mb-2">完了者を選択</label>
+              <div className="flex flex-wrap gap-1.5">
+                {PLANNED_MEMBERS.map(member => (
+                  <button
+                    key={member}
+                    type="button"
+                    onClick={() => setCompletedByInput(member)}
+                    className={`text-xs px-2.5 py-1.5 rounded-full border font-medium transition-colors ${
+                      completedByInput === member
+                        ? "bg-green-500 text-white border-green-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-green-400 hover:text-green-600"
+                    }`}
+                  >
+                    {member}
+                  </button>
+                ))}
+              </div>
+              {completedByInput && (
+                <p className="text-xs text-green-600 font-medium mt-2">✓ {completedByInput}を選択中</p>
+              )}
             </div>
             <div className="flex gap-2">
               <button
                 onClick={async () => {
                   if (!completedByInput) { toast.error("完了者を選択してください"); return; }
                   try {
-                    // 完了日の実際のdateKeyでupsert（当月保持レコードに__completedByタグを付加）
-                    const targetDateKey = completedByDialog.completedDateKey;
-                    // 完了日のdateKeyの既存noteを取得するため、現在のtask.noteを使用
                     const task = tasks.find(t => t.id === completedByDialog.taskId);
-                    const baseNote = task?.note ?? "";
-                    // __completedByタグを更新または追加
-                    const noteWithoutBy = baseNote.replace(/\n?__completedBy:[^\n]+/g, "").trim();
-                    const newNote = noteWithoutBy
-                      ? `${noteWithoutBy}\n__completedBy:${completedByInput}`
-                      : `__completedBy:${completedByInput}`;
+                    // task.noteはクリーン化済み（タグなし）なので、タグを再構築する
+                    const cleanNote = (task?.note ?? "").replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim();
+                    const completedDateTag = `__completedDate:${completedByDialog.completedDateKey}`;
+                    const completedByTag = `__completedBy:${completedByInput}`;
+                    const newNote = cleanNote
+                      ? `${cleanNote}\n${completedDateTag}\n${completedByTag}`
+                      : `${completedDateTag}\n${completedByTag}`;
+                    // currentDateKeyでupsert（今日のレコードを更新）
                     await upsertTaskState.mutateAsync({
-                      dateKey: targetDateKey,
+                      dateKey: currentDateKey,
                       taskId: completedByDialog.taskId,
                       done: true,
                       help: task?.help ?? false,
                       note: newNote,
                     });
-                    // ローカルstateも更新
+                    // ローカルstateも更新（noteにタグを含めて保存、completedByを反映）
                     setTasks(prev => prev.map(t => t.id === completedByDialog.taskId
-                      ? { ...t, completedBy: completedByInput }
+                      ? { ...t, completedBy: completedByInput, note: newNote }
                       : t
                     ));
                     toast.success(`完了者を「${completedByInput}」として記録しました`);

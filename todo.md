@@ -318,3 +318,9 @@
 - [x] DB読み込み時に__completedByタグを抽出・クリーン化する（初回ロード・ポーリング更新両方）
 - [x] Home.tsxの完了日バッジをクリック可能なボタンに変更し完了者選択ダイアログを実装（PC・モバイル両方）
 - [x] ShowOnDaysPage.tsxをgetByDateWithMonthlyに切り替えて完了日・完了者バッジを反映する
+
+## 表示日制限ページ 完了日選択バッジ (2026-05-03)
+- [x] ShowOnDaysPage.tsxのTaskRowに完了日選択バッジを実装（日付ピッカー形式）
+- [x] 完了済みタスクに「✓ ○月○日完了」バッジを表示（今日完了も含む）
+- [x] バッジクリックでインライン日付ピッカーを表示して完了日を変更できる
+- [x] handleSaveCompletedDate関数でDBにnote（__completedDateタグ）を保存する

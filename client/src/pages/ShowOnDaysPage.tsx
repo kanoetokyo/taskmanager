@@ -146,17 +146,22 @@ interface TaskState {
   completedBy?: string;
 }
 
+const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
+
 interface TaskRowProps {
   task: TaskDefRow;
   taskState?: TaskState;
+  todayDateKey: string;
   onSave: (id: number, showOnDays: string, deadline: string) => void;
+  onSaveCompletedDate: (taskId: string, dateKey: string) => void;
 }
 
-function TaskRow({ task, taskState, onSave }: TaskRowProps) {
+function TaskRow({ task, taskState, todayDateKey, onSave, onSaveCompletedDate }: TaskRowProps) {
   const [editing, setEditing] = useState(false);
   const [showOnDaysInput, setShowOnDaysInput] = useState(task.showOnDays ?? "");
   const [deadlineInput, setDeadlineInput] = useState(task.deadline ?? "");
   const [showPreview, setShowPreview] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const visible = isVisibleToday(task.showOnDays ?? "");
   const overdue = isOverdueToday(task.showOnDays ?? "");
@@ -194,22 +199,24 @@ function TaskRow({ task, taskState, onSave }: TaskRowProps) {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {/* 完了状態バッジ */}
-          {taskState?.done ? (
-            taskState.completedDateKey ? (() => {
-              const [, m, d] = taskState.completedDateKey.split("-");
-              return (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300">
-                  <Check className="w-2.5 h-2.5" />
-                  {parseInt(m)}月{parseInt(d)}日完了{taskState.completedBy ? ` / ${taskState.completedBy}` : ""}
-                </span>
-              );
-            })() : (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white">
+          {taskState?.done ? (() => {
+            // completedDateKeyがあればその日付、なければpropsのtodayDateKeyを使用
+            const dateKey = taskState.completedDateKey ?? todayDateKey;
+            const [, m, d] = dateKey.split("-");
+            return (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDatePicker(p => !p);
+                }}
+                className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 transition-colors cursor-pointer"
+                title="完了日を変更（クリックで編集）"
+              >
                 <Check className="w-2.5 h-2.5" />
-                完了済み
-              </span>
-            )
-          ) : taskState !== undefined ? (
+                {parseInt(m)}月{parseInt(d)}日完了
+              </button>
+            );
+          })() : taskState !== undefined ? (
             <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
               未完了
             </span>
@@ -278,6 +285,33 @@ function TaskRow({ task, taskState, onSave }: TaskRowProps) {
       {/* カレンダープレビュー */}
       {!editing && showPreview && hasLimit && (
         <MonthPreview showOnDays={task.showOnDays ?? ""} />
+      )}
+
+      {/* 完了日変更ピッカー（インライン表示） */}
+      {showDatePicker && taskState?.done && (
+        <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
+          <p className="text-[11px] text-green-700 font-medium mb-1.5">完了日を変更</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              defaultValue={taskState.completedDateKey ?? todayDateKey}
+              max={todayDateKey}
+              onChange={e => {
+                if (e.target.value) {
+                  onSaveCompletedDate(`def-${task.id}`, e.target.value);
+                  setShowDatePicker(false);
+                }
+              }}
+              className="text-xs border border-green-300 rounded px-2 py-1 focus:outline-none focus:border-green-500 bg-white"
+            />
+            <button
+              onClick={() => setShowDatePicker(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* 編集フォーム */}
@@ -412,6 +446,32 @@ export default function ShowOnDaysPage() {
     updateTask.mutate({ id, showOnDays, deadline });
     toast.success("設定を保存しました。");
   }, [updateTask]);
+
+  // 完了者を記録する mutation
+  const upsertTaskState = trpc.task.taskStates.upsert.useMutation({
+    onSuccess: () => {
+      refetch();
+      toast.success("完了者を記録しました。");
+    },
+    onError: () => {
+      toast.error("保存に失敗しました。");
+    },
+  });
+
+  const handleSaveCompletedDate = useCallback((taskId: string, newDateKey: string) => {
+    const state = taskStateMap.get(taskId);
+    if (!state) return;
+    // noteに__completedDateタグを更新して保存
+    const cleanNote = state.note;
+    const newNote = `${cleanNote}\n__completedDate:${newDateKey}`.trim();
+    upsertTaskState.mutate({
+      dateKey: todayDateKey,
+      taskId,
+      done: true,
+      help: state.help,
+      note: newNote,
+    });
+  }, [taskStateMap, todayDateKey, upsertTaskState]);
 
   // カテゴリ一覧を整形
   const categories: CategoryRow[] = (taskDefinitionData ?? []).map(cat => ({
@@ -578,7 +638,7 @@ export default function ShowOnDaysPage() {
               {/* タスク一覧 */}
               <div className="p-3 space-y-2">
                 {cat.tasks.map(task => (
-                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(`def-${task.id}`)} onSave={handleSave} />
+                  <TaskRow key={task.id} task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
                 ))}
               </div>
             </div>
