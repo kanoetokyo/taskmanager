@@ -58,22 +58,22 @@ const taskStatesRouter = router({
         .where(and(gte(taskStates.dateKey, monthStart), lt(taskStates.dateKey, input.dateKey)));
 
       // 今日の状態をベースに、showOnDaysタスクの当月完了状態でマージ
-      const result = [...todayStates];
       const todayStateMap = new Map(todayStates.map(s => [s.taskId, s]));
+      // 今日のレコードから開始（showOnDaysタスクは後で当月完了を優先する可能性があるため別管理）
+      const result = todayStates.filter(s => !showOnDaysTaskIds.has(s.taskId));
 
       for (const taskId of Array.from(showOnDaysTaskIds)) {
-        // 今日すでに状態があればスキップ
-        if (todayStateMap.has(taskId)) continue;
+        const todayState = todayStateMap.get(taskId);
 
         // 当月中の完了済みレコードを探す（最新日付優先）
         const monthlyCompleted = monthlyStates
           .filter(s => s.taskId === taskId && s.done)
           .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
-        if (monthlyCompleted.length > 0) {
+        if (monthlyCompleted.length > 0 && (!todayState || !todayState.done)) {
+          // 当月完了済みがあり、今日未完了（または未記録）の場合は当月完了を優先
           const original = monthlyCompleted[0];
-          // 当月完了済みとして今日の状態に追加
-          // noteフィールドに元の完了日を "__completedDate:YYYY-MM-DD" 形式で埋め込む
+          // noteフィールドに元の完了日を "__completedDate:YYYY-MM-DD" 形式で埋め追加
           const completedDateTag = `__completedDate:${original.dateKey}`;
           const existingNote = original.note ?? "";
           const noteWithDate = existingNote.includes("__completedDate:")
@@ -86,6 +86,9 @@ const taskStatesRouter = router({
             dateKey: input.dateKey,
             note: noteWithDate,
           });
+        } else if (todayState) {
+          // 今日すでに完了済みの場合は今日の状態をそのまま使用
+          result.push(todayState);
         }
       }
 
