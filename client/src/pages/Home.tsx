@@ -603,8 +603,8 @@ export default function Home() {
               .replace(/\n?__completedBy:[^\n]+/g, "")
               .trim();
             const isDone = dbState?.done ?? false;
-            // done=trueなのにcompletedDateKeyがない場合は今日の日付をフォールバック
-            const resolvedCompletedDateKey = completedDateKey ?? (isDone ? currentDateKeyRef.current : undefined);
+            // done=trueなのにcompletedDateKeyがない場合はDBレコードのdateKey（実際に完了した日）をフォールバック
+            const resolvedCompletedDateKey = completedDateKey ?? (isDone ? (dbState?.dateKey ?? currentDateKeyRef.current) : undefined);
             return {
               ...t,
               planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
@@ -633,8 +633,8 @@ export default function Home() {
                 .replace(/\n?__completedBy:[^\n]+/g, "")
                 .trim();
               const isDone = dbState.done ?? t.done;
-              // done=trueなのにcompletedDateKeyがない場合は今日の日付をフォールバック
-              const resolvedCompletedDateKey = completedDateKey ?? (isDone ? currentDateKeyRef.current : undefined);
+              // done=trueなのにcompletedDateKeyがない場合はDBレコードのdateKey（実際に完了した日）をフォールバック
+              const resolvedCompletedDateKey = completedDateKey ?? (isDone ? (dbState.dateKey ?? currentDateKeyRef.current) : undefined);
               return {
                 ...t,
                 done: isDone,
