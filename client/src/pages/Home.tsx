@@ -1558,7 +1558,7 @@ export default function Home() {
                 className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors shadow-sm"
               >
                 <CalendarDays className="w-3.5 h-3.5" />
-                表示日制限設定
+                ルーティン一覧
               </a>
               <a
                 href="/customers"

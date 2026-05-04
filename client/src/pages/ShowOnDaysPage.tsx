@@ -390,7 +390,7 @@ export default function ShowOnDaysPage() {
   // タブタイトルを設定
   useEffect(() => {
     const prev = document.title;
-    document.title = "表示日制限設定";
+    document.title = "ルーティン一覧";
     return () => { document.title = prev; };
   }, []);
 
@@ -564,7 +564,7 @@ export default function ShowOnDaysPage() {
           <div className="flex items-center gap-2 ml-2">
             <span className="flex items-center gap-1.5 text-sm font-bold text-blue-700">
               <CalendarDays className="w-4 h-4" />
-              表示日制限設定
+              ルーティン一覧
             </span>
             <span className="text-xs text-gray-400 bg-blue-50 px-2 py-0.5 rounded-full font-medium">
               {limitedTasks}件設定中
