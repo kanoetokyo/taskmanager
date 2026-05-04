@@ -61,7 +61,28 @@ function mergeShowOnDaysStates(params: {
       });
     } else if (todayState) {
       // 今日すでに完了済みの場合は今日の状態をそのまま使用
-      result.push(todayState);
+      // ただし当日レコードにnoteタグが欠けている場合は当月完了レコードのnoteで補完
+      const todayNote = todayState.note ?? "";
+      const hasCompletedDateTag = todayNote.includes("__completedDate:");
+      // 補完に使うレコードは「__completedDateタグを持つ最新の当月完了レコード」
+      const monthlyCompletedWithTag = monthlyCompleted.filter(s => s.note?.includes("__completedDate:"));
+      if (!hasCompletedDateTag && monthlyCompletedWithTag.length > 0) {
+        const original = monthlyCompletedWithTag[0]!;
+        const completedDateTag = `__completedDate:${original.dateKey}`;
+        const originalNote = original.note ?? "";
+        const completedByMatch = originalNote.match(/__completedBy:([^\n]+)/);
+        const completedByTag = completedByMatch ? `\n__completedBy:${completedByMatch[1]!.trim()}` : "";
+        const cleanTodayNote = todayNote
+          .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+          .replace(/\n?__completedBy:[^\n]+/g, "")
+          .trim();
+        const noteWithTags = cleanTodayNote
+          ? `${cleanTodayNote}\n${completedDateTag}${completedByTag}`
+          : `${completedDateTag}${completedByTag}`;
+        result.push({ ...todayState, note: noteWithTags });
+      } else {
+        result.push(todayState);
+      }
     }
   }
 
@@ -218,6 +239,99 @@ describe("showOnDaysタスクの完了状態引き継ぎロジック", () => {
       const matches = taskResult!.note!.match(/__completedDate:/g);
       expect(matches).toHaveLength(1);
       expect(taskResult!.note).toContain("__completedDate:2026-05-03");
+    });
+  });
+
+  describe("バグ修正3: 更新・再訪問時に完了日・完了者がリセットされる問題", () => {
+    it("当日レコードに__completedDateタグがない場合、当月完了レコードからタグを補完する", () => {
+      // シナリオ: 5/3にチェックした→自動保存で__completedDateタグ付き5/3レコードが保存される
+      // → 5/4に再度自動保存でdone=trueだがタグなしの5/4レコードが書き込まれる
+      // → 更新ボタンを押すとgetByDateWithMonthlyが5/4レコードを優先してタグなしで返す→完了日がリセット
+      const todayStates: TaskState[] = [
+        // 5/4の自動保存でdone=trueだが__completedDateタグなし
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "" },
+      ];
+      const monthlyStates: TaskState[] = [
+        // 5/3に完了済み（元の完了日タグ付き）
+        {
+          dateKey: "2026-05-03",
+          taskId: TASK_ID,
+          done: true,
+          help: false,
+          note: "__completedDate:2026-05-03",
+        },
+        // 5/4のレコードもmonthlyStatesに含まれる（lte修正後）
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "" },
+      ];
+
+      const result = mergeShowOnDaysStates({
+        todayStates,
+        monthlyStates,
+        showOnDaysTaskIds,
+        targetDateKey: "2026-05-04",
+      });
+
+      const taskResult = result.find(s => s.taskId === TASK_ID);
+      expect(taskResult).toBeDefined();
+      expect(taskResult!.done).toBe(true);
+      // 5/3の完了日タグが補完される
+      expect(taskResult!.note).toContain("__completedDate:2026-05-03");
+      // 5/4の日付は完了日として入っていない
+      expect(taskResult!.note).not.toContain("__completedDate:2026-05-04");
+    });
+
+    it("当日レコードに__completedDateタグがある場合はそのまま使用する", () => {
+      const todayStates: TaskState[] = [
+        // 5/4に正しくタグ付きで保存されたケース
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "__completedDate:2026-05-04" },
+      ];
+      const monthlyStates: TaskState[] = [
+        { dateKey: "2026-05-03", taskId: TASK_ID, done: true, help: false, note: "__completedDate:2026-05-03" },
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "__completedDate:2026-05-04" },
+      ];
+
+      const result = mergeShowOnDaysStates({
+        todayStates,
+        monthlyStates,
+        showOnDaysTaskIds,
+        targetDateKey: "2026-05-04",
+      });
+
+      const taskResult = result.find(s => s.taskId === TASK_ID);
+      expect(taskResult).toBeDefined();
+      expect(taskResult!.done).toBe(true);
+      // 当日レコードのタグがそのまま使われる
+      expect(taskResult!.note).toContain("__completedDate:2026-05-04");
+    });
+
+    it("当日レコードに__completedDateタグがなく、当月完了レコードに__completedByもある場合、完了者も補完される", () => {
+      const todayStates: TaskState[] = [
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "" },
+      ];
+      const monthlyStates: TaskState[] = [
+        {
+          dateKey: "2026-05-03",
+          taskId: TASK_ID,
+          done: true,
+          help: false,
+          note: "__completedDate:2026-05-03\n__completedBy:前田",
+        },
+        { dateKey: "2026-05-04", taskId: TASK_ID, done: true, help: false, note: "" },
+      ];
+
+      const result = mergeShowOnDaysStates({
+        todayStates,
+        monthlyStates,
+        showOnDaysTaskIds,
+        targetDateKey: "2026-05-04",
+      });
+
+      const taskResult = result.find(s => s.taskId === TASK_ID);
+      expect(taskResult).toBeDefined();
+      expect(taskResult!.done).toBe(true);
+      // 完了日・完了者のタグが補完される
+      expect(taskResult!.note).toContain("__completedDate:2026-05-03");
+      expect(taskResult!.note).toContain("__completedBy:前田");
     });
   });
 

@@ -333,3 +333,8 @@
 ## 完了日バッジ「現在日付で上書き」バグ修正 (2026-05-04)
 - [x] フロントエンドの完了日フォールバックをcurrentDateKeyRef.currentからdbState.dateKeyに変更（初回ロード・ポーリング更新両方）
 - [x] TypeScriptエラーなし確認
+
+## 完了日バッジ・対応者が更新/再訪問でリセットされるバグ修正 (2026-05-04)
+- [x] バグ原因特定：自動保存bulkUpsertが当日dateKeyで上書き→getByDateWithMonthlyが当日レコードを優先→completedDate/completedByが消える
+- [x] サーバー側修正：getByDateWithMonthlyで当日レコードにnoteタグが欠けている場合は当月完了レコードのnoteで補完する
+- [x] フロントエンド側修正：自動保存時、showOnDaysタスクで当月完了済みの場合はnoteに__completedDate/__completedByタグを保持する

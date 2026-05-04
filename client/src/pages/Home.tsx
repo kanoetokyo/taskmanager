@@ -774,7 +774,22 @@ export default function Home() {
         const latestTasks = tasksRef.current;
         const latestDateKey = currentDateKeyRef.current;
         await bulkUpsertTaskStatesRef.current.mutateAsync(
-          latestTasks.map(t => ({ dateKey: latestDateKey, taskId: t.id, done: t.done, help: t.help, note: t.note ?? "" }))
+          latestTasks.map(t => {
+            // showOnDaysタスクで完了済みの場合、completedDateKey・completedByタグをnoteに必ず含めて保存
+            // これにより、更新・再訪問後もサーバー側が正しい完了日・完了者を返せる
+            let note = t.note ?? "";
+            if (t.done && t.completedDateKey) {
+              // 既存のタグを一度クリアしてから再構築
+              const cleanNote = note
+                .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+                .replace(/\n?__completedBy:[^\n]+/g, "")
+                .trim();
+              const dateTag = `__completedDate:${t.completedDateKey}`;
+              const byTag = t.completedBy ? `\n__completedBy:${t.completedBy}` : "";
+              note = cleanNote ? `${cleanNote}\n${dateTag}${byTag}` : `${dateTag}${byTag}`;
+            }
+            return { dateKey: latestDateKey, taskId: t.id, done: t.done, help: t.help, note };
+          })
         );
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);

@@ -1,4 +1,4 @@
-import { and, eq, gte, lt, ne, or } from "drizzle-orm";
+import { and, eq, gte, lt, lte, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   customerHandovers,
@@ -51,11 +51,11 @@ const taskStatesRouter = router({
       // 当月の開始日を計算（YYYY-MM-01）
       const monthStart = input.dateKey.slice(0, 7) + "-01";
 
-      // 当月中の全タスク状態を取得
+      // 当月中の全タスク状態を取得（当日を含むことで、当日に保存されたレコードも参照可能）
       const monthlyStates = await db
         .select()
         .from(taskStates)
-        .where(and(gte(taskStates.dateKey, monthStart), lt(taskStates.dateKey, input.dateKey)));
+        .where(and(gte(taskStates.dateKey, monthStart), lte(taskStates.dateKey, input.dateKey)));
 
       // 今日の状態をベースに、showOnDaysタスクの当月完了状態でマージ
       const todayStateMap = new Map(todayStates.map(s => [s.taskId, s]));
@@ -88,7 +88,29 @@ const taskStatesRouter = router({
           });
         } else if (todayState) {
           // 今日すでに完了済みの場合は今日の状態をそのまま使用
-          result.push(todayState);
+          // ただし当日レコードにnoteタグが欠けている場合は当月完了レコードのnoteで補完
+          const todayNote = todayState.note ?? "";
+          const hasCompletedDateTag = todayNote.includes("__completedDate:");
+          // 補完に使うレコードは「__completedDateタグを持つ最新の当月完了レコード」
+          const monthlyCompletedWithTag = monthlyCompleted.filter(s => s.note?.includes("__completedDate:"));
+          if (!hasCompletedDateTag && monthlyCompletedWithTag.length > 0) {
+            // 当日レコードにタグがない → 当月完了レコードのnoteからタグを補完
+            const original = monthlyCompletedWithTag[0];
+            const completedDateTag = `__completedDate:${original.dateKey}`;
+            const originalNote = original.note ?? "";
+            const completedByMatch = originalNote.match(/__completedBy:([^\n]+)/);
+            const completedByTag = completedByMatch ? `\n__completedBy:${completedByMatch[1].trim()}` : "";
+            const cleanTodayNote = todayNote
+              .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+              .replace(/\n?__completedBy:[^\n]+/g, "")
+              .trim();
+            const noteWithTags = cleanTodayNote
+              ? `${cleanTodayNote}\n${completedDateTag}${completedByTag}`
+              : `${completedDateTag}${completedByTag}`;
+            result.push({ ...todayState, note: noteWithTags });
+          } else {
+            result.push(todayState);
+          }
         }
       }
 
