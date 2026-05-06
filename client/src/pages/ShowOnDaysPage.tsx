@@ -188,73 +188,69 @@ function TaskRow({ task, taskState, todayDateKey, onSave, onSaveCompletedDate }:
             ? "border-gray-200 bg-white"
             : "border-gray-100 bg-gray-50"
     }`}>
-      {/* タスク名 + 状態バッジ */}
-      <div className="flex items-start gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium leading-snug ${
-            overdue && !visible ? "text-red-700" : "text-gray-800"
-          }`}>
-            {task.label}
-          </p>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {/* 完了状態バッジ（showOnDays設定があるタスクのみ表示） */}
-          {taskState?.done && hasLimit ? (() => {
-            // completedDateKeyがあればその日付、なければpropsのtodayDateKeyを使用
-            const dateKey = taskState.completedDateKey ?? todayDateKey;
-            const [, m, d] = dateKey.split("-");
-            return (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowDatePicker(p => !p);
-                }}
-                className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 transition-colors cursor-pointer"
-                title="完了日を変更（クリックで編集）"
-              >
-                <Check className="w-2.5 h-2.5" />
-                {parseInt(m)}月{parseInt(d)}日完了
-              </button>
-            );
-          })() : taskState !== undefined ? (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
-              未完了
-            </span>
-          ) : null}
-          {/* 今日の表示状態バッジ */}
-          {hasLimit ? (
-            visible ? (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white">
-                <Eye className="w-2.5 h-2.5" />
-                今日表示中
-              </span>
-            ) : overdue ? (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                期限超過
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-600">
-                <EyeOff className="w-2.5 h-2.5" />
-                今日は非表示
-              </span>
-            )
-          ) : (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-              毎日表示
-            </span>
-          )}
-          {/* 編集ボタン */}
-          {!editing && (
+      {/* タスク名（1行フル表示） */}
+      <p className={`text-sm font-medium leading-snug mb-1.5 ${
+        overdue && !visible ? "text-red-700" : "text-gray-800"
+      }`}>
+        {task.label}
+      </p>
+      {/* バッジ + 編集ボタン（タスク名の下の行） */}
+      <div className="flex items-center gap-1 flex-wrap mb-2">
+        {/* 完了状態バッジ（showOnDays設定があるタスクのみ表示） */}
+        {taskState?.done && hasLimit ? (() => {
+          const dateKey = taskState.completedDateKey ?? todayDateKey;
+          const [, m, d] = dateKey.split("-");
+          return (
             <button
-              onClick={() => setEditing(true)}
-              className="p-1 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-              title="編集"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDatePicker(p => !p);
+              }}
+              className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 transition-colors cursor-pointer"
+              title="完了日を変更（クリックで編集）"
             >
-              <Edit2 className="w-3.5 h-3.5" />
+              <Check className="w-2.5 h-2.5" />
+              {parseInt(m)}月{parseInt(d)}日完了
             </button>
-          )}
-        </div>
+          );
+        })() : taskState !== undefined ? (
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
+            未完了
+          </span>
+        ) : null}
+        {/* 今日の表示状態バッジ */}
+        {hasLimit ? (
+          visible ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500 text-white">
+              <Eye className="w-2.5 h-2.5" />
+              今日表示中
+            </span>
+          ) : overdue ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+              <AlertTriangle className="w-2.5 h-2.5" />
+              期限超過
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-600">
+              <EyeOff className="w-2.5 h-2.5" />
+              今日は非表示
+            </span>
+          )
+        ) : (
+          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+            毎日表示
+          </span>
+        )}
+        {/* 編集ボタン */}
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors ml-auto"
+            title="編集"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* 現在の設定値（表示モード） */}
