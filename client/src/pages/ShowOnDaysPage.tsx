@@ -558,7 +558,7 @@ export default function ShowOnDaysPage() {
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-blue-100 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link href="/">
             <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-500 transition-colors">
               <ArrowLeft className="w-4 h-4" />
@@ -591,7 +591,7 @@ export default function ShowOnDaysPage() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
 
         {/* 今日の状況サマリー */}
         <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
