@@ -653,7 +653,7 @@ export default function ShowOnDaysPage() {
           </button>
         </div>
 
-        {/* タスク一覧：制限設定済みは日付順グループ、全表示はカテゴリ別 */}
+        {/* タスク一覧：制限設定済みは日付順グループ（3列）、全表示はカテゴリ別 */}
         {filterMode === "limited" ? (
           !limitedTasksGrouped || limitedTasksGrouped.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
@@ -664,33 +664,52 @@ export default function ShowOnDaysPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {limitedTasksGrouped.map(group => (
-                <div key={group.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                  {/* グループヘッダー */}
-                  <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-white border-b border-indigo-100 flex items-center gap-2">
-                    <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-xs font-bold text-indigo-700">{group.label}</span>
-                    <span className="text-[10px] text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                      {group.tasks.length}件
-                    </span>
-                  </div>
-                  {/* タスク一覧 */}
-                  <div className="p-3 space-y-2">
-                    {group.tasks.map(task => (
-                      <div key={task.id}>
-                        {/* カテゴリ名バッジ */}
-                        <div className="mb-1">
-                          <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">
-                            {task.categoryName}
-                          </span>
+            // 月初・中旬・月末の3列グリッド（常に3列を表示、タスクがない列は空欄）
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+              {[
+                { label: "月初（1〜10日）", range: [1, 10] as [number, number] },
+                { label: "中旬（11〜20日）", range: [11, 20] as [number, number] },
+                { label: "月末（21〜31日）", range: [21, 31] as [number, number] },
+              ].map(col => {
+                const group = limitedTasksGrouped.find(g => g.label === col.label);
+                const colColors = {
+                  "月初（1〜10日）": { header: "from-blue-50", border: "border-blue-100", icon: "text-blue-500", text: "text-blue-700", badge: "bg-blue-100 text-blue-400" },
+                  "中旬（11〜20日）": { header: "from-violet-50", border: "border-violet-100", icon: "text-violet-500", text: "text-violet-700", badge: "bg-violet-100 text-violet-400" },
+                  "月末（21〜31日）": { header: "from-emerald-50", border: "border-emerald-100", icon: "text-emerald-500", text: "text-emerald-700", badge: "bg-emerald-100 text-emerald-400" },
+                } as const;
+                const c = colColors[col.label as keyof typeof colColors];
+                return (
+                  <div key={col.label} className={`bg-white rounded-xl border ${c.border} shadow-sm overflow-hidden`}>
+                    {/* 列ヘッダー */}
+                    <div className={`px-4 py-2.5 bg-gradient-to-r ${c.header} to-white border-b ${c.border} flex items-center gap-2`}>
+                      <CalendarDays className={`w-3.5 h-3.5 ${c.icon}`} />
+                      <span className={`text-xs font-bold ${c.text}`}>{col.label}</span>
+                      <span className={`text-[10px] ${c.badge} px-1.5 py-0.5 rounded-full`}>
+                        {group ? group.tasks.length : 0}件
+                      </span>
+                    </div>
+                    {/* タスク一覧 */}
+                    <div className="p-3 space-y-2">
+                      {group && group.tasks.length > 0 ? (
+                        group.tasks.map(task => (
+                          <div key={task.id}>
+                            <div className="mb-1">
+                              <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                                {task.categoryName}
+                              </span>
+                            </div>
+                            <TaskRow task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-6 text-center">
+                          <p className="text-xs text-gray-300">この期間のルーティンはありません</p>
                         </div>
-                        <TaskRow task={task} taskState={taskStateMap.get(`def-${task.id}`)} todayDateKey={todayDateKey} onSave={handleSave} onSaveCompletedDate={handleSaveCompletedDate} />
-                      </div>
-                    ))}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )
         ) : (
