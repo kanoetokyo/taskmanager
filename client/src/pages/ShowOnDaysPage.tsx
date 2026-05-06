@@ -164,7 +164,7 @@ function TaskRow({ task, taskState, todayDateKey, onSave, onSaveCompletedDate }:
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const visible = isVisibleToday(task.showOnDays ?? "");
-  const overdue = isOverdueToday(task.showOnDays ?? "");
+  const overdue = isOverdueToday(task.showOnDays ?? "") && !taskState?.done; // 完了済みは期限超過扱いにしない
   const hasLimit = (task.showOnDays ?? "").trim() !== "";
 
   const handleSave = () => {
@@ -536,7 +536,11 @@ export default function ShowOnDaysPage() {
   const overdueToday = categories.reduce((sum, cat) =>
     sum + cat.tasks.filter(t => {
       const s = t.showOnDays ?? "";
-      return s.trim() !== "" && isOverdueToday(s) && !isVisibleToday(s);
+      if (s.trim() === "") return false;
+      if (!isOverdueToday(s) || isVisibleToday(s)) return false;
+      // 完了済みタスクは期限超過としてカウントしない
+      const state = taskStateMap.get(`def-${t.id}`);
+      return !state?.done;
     }).length, 0);
   // 今日の制限タスクのうち完了済み件数
   const completedLimitedToday = categories.reduce((sum, cat) =>
