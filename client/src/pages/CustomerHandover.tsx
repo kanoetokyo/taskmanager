@@ -527,7 +527,7 @@ export default function CustomerHandover() {
             </button>
           </Link>
           <div className="flex items-center gap-2 ml-2">
-            <span className="flex items-center gap-1.5 text-sm font-bold text-rose-700">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-rose-700" style={{ fontFamily: "'Zen Maru Gothic', 'Noto Sans JP', sans-serif", letterSpacing: "0.06em" }}>
               <Users className="w-4 h-4" />
               顧客引き継ぎ
             </span>

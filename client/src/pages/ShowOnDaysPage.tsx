@@ -562,7 +562,7 @@ export default function ShowOnDaysPage() {
             </button>
           </Link>
           <div className="flex items-center gap-2 ml-2">
-            <span className="flex items-center gap-1.5 text-sm font-bold text-blue-700">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-blue-700" style={{ fontFamily: "'Zen Maru Gothic', 'Noto Sans JP', sans-serif", letterSpacing: "0.06em" }}>
               <CalendarDays className="w-4 h-4" />
               ルーティン一覧
             </span>
