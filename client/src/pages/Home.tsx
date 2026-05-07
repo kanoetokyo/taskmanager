@@ -1276,69 +1276,31 @@ export default function Home() {
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-10 overflow-hidden" style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #f0fdf4 100%)", borderBottom: "1px solid #bbf7d0", boxShadow: "0 1px 4px rgba(34,197,94,0.10)" }}>
-        {/* 5月の装飾 - 左側 */}
-        <div className="absolute left-0 top-0 bottom-0 w-32 pointer-events-none select-none flex items-center justify-start pl-3 gap-1.5 opacity-70">
-          {/* クローバー */}
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="14" cy="8" rx="5" ry="6.5" fill="#4ade80" opacity="0.9"/>
-            <ellipse cx="8" cy="16" rx="5" ry="6.5" fill="#22c55e" opacity="0.9" transform="rotate(-30 8 16)"/>
-            <ellipse cx="20" cy="16" rx="5" ry="6.5" fill="#16a34a" opacity="0.9" transform="rotate(30 20 16)"/>
-            <rect x="13" y="20" width="2" height="6" rx="1" fill="#15803d"/>
-          </svg>
-          {/* 小さな花 */}
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95"/>
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95" transform="rotate(60 10 10)"/>
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95" transform="rotate(120 10 10)"/>
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95" transform="rotate(180 10 10)"/>
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95" transform="rotate(240 10 10)"/>
-            <ellipse cx="10" cy="5" rx="3" ry="4.5" fill="#fde68a" opacity="0.95" transform="rotate(300 10 10)"/>
-            <circle cx="10" cy="10" r="3" fill="#fb923c"/>
-          </svg>
-          {/* 四つ葉クローバー */}
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#86efac" opacity="0.9"/>
-            <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#4ade80" opacity="0.9" transform="rotate(90 11 11)"/>
-            <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#22c55e" opacity="0.9" transform="rotate(180 11 11)"/>
-            <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#16a34a" opacity="0.9" transform="rotate(270 11 11)"/>
-            <circle cx="11" cy="11" r="2" fill="#15803d"/>
-          </svg>
-        </div>
-        {/* 5月の装飾 - 右側 */}
-        <div className="absolute right-0 top-0 bottom-0 w-32 pointer-events-none select-none flex items-center justify-end pr-3 gap-1.5 opacity-70">
-          {/* 蝶 */}
-          <svg width="26" height="22" viewBox="0 0 26 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="7" cy="8" rx="6.5" ry="5" fill="#a78bfa" opacity="0.85" transform="rotate(-20 7 8)"/>
-            <ellipse cx="19" cy="8" rx="6.5" ry="5" fill="#c4b5fd" opacity="0.85" transform="rotate(20 19 8)"/>
-            <ellipse cx="6" cy="15" rx="5" ry="3.5" fill="#7c3aed" opacity="0.75" transform="rotate(15 6 15)"/>
-            <ellipse cx="20" cy="15" rx="5" ry="3.5" fill="#8b5cf6" opacity="0.75" transform="rotate(-15 20 15)"/>
-            <rect x="12" y="4" width="2" height="14" rx="1" fill="#4c1d95" opacity="0.7"/>
-            <circle cx="13" cy="4" r="1.5" fill="#4c1d95" opacity="0.8"/>
-            <line x1="13" y1="4" x2="9" y2="1" stroke="#4c1d95" strokeWidth="1" opacity="0.6"/>
-            <line x1="13" y1="4" x2="17" y2="1" stroke="#4c1d95" strokeWidth="1" opacity="0.6"/>
-          </svg>
-          {/* 小花 */}
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95"/>
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(60 9 9)"/>
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fbcfe8" opacity="0.95" transform="rotate(120 9 9)"/>
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(180 9 9)"/>
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fbcfe8" opacity="0.95" transform="rotate(240 9 9)"/>
-            <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(300 9 9)"/>
-            <circle cx="9" cy="9" r="2.5" fill="#fbbf24"/>
-          </svg>
-          {/* クローバー小 */}
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="11" cy="7" rx="4" ry="5" fill="#4ade80" opacity="0.9"/>
-            <ellipse cx="7" cy="13" rx="4" ry="5" fill="#22c55e" opacity="0.9" transform="rotate(-30 7 13)"/>
-            <ellipse cx="15" cy="13" rx="4" ry="5" fill="#16a34a" opacity="0.9" transform="rotate(30 15 13)"/>
-            <rect x="10" y="17" width="2" height="4" rx="1" fill="#15803d"/>
-          </svg>
-        </div>
         <div className="max-w-4xl mx-auto px-4 pt-3 pb-2">
 
           {/* Row 1: アイコン + タイトル（常に1行で表示） */}
           <div className="flex items-center justify-center gap-2">
+            {/* 5月装飾 - タイトル左側 */}
+            <div className="flex items-center gap-1 pointer-events-none select-none opacity-75">
+              {/* 四つ葉クローバー */}
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#86efac" opacity="0.9"/>
+                <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#4ade80" opacity="0.9" transform="rotate(90 11 11)"/>
+                <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#22c55e" opacity="0.9" transform="rotate(180 11 11)"/>
+                <ellipse cx="11" cy="6" rx="4" ry="5.5" fill="#16a34a" opacity="0.9" transform="rotate(270 11 11)"/>
+                <circle cx="11" cy="11" r="2" fill="#15803d"/>
+              </svg>
+              {/* 小花（黄） */}
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95" transform="rotate(60 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95" transform="rotate(120 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95" transform="rotate(180 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95" transform="rotate(240 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fde68a" opacity="0.95" transform="rotate(300 9 9)"/>
+                <circle cx="9" cy="9" r="2.5" fill="#fb923c"/>
+              </svg>
+            </div>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2563eb" }}>
               <Zap className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
@@ -1353,6 +1315,30 @@ export default function Home() {
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-blue-500" : ""}`} />
             </button>
+            {/* 5月装飾 - タイトル右側 */}
+            <div className="flex items-center gap-1 pointer-events-none select-none opacity-75">
+              {/* 小花（ピンク） */}
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(60 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fbcfe8" opacity="0.95" transform="rotate(120 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(180 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#fbcfe8" opacity="0.95" transform="rotate(240 9 9)"/>
+                <ellipse cx="9" cy="4" rx="2.5" ry="3.5" fill="#f9a8d4" opacity="0.95" transform="rotate(300 9 9)"/>
+                <circle cx="9" cy="9" r="2.5" fill="#fbbf24"/>
+              </svg>
+              {/* 蝶 */}
+              <svg width="24" height="20" viewBox="0 0 26 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="7" cy="8" rx="6.5" ry="5" fill="#a78bfa" opacity="0.85" transform="rotate(-20 7 8)"/>
+                <ellipse cx="19" cy="8" rx="6.5" ry="5" fill="#c4b5fd" opacity="0.85" transform="rotate(20 19 8)"/>
+                <ellipse cx="6" cy="15" rx="5" ry="3.5" fill="#7c3aed" opacity="0.75" transform="rotate(15 6 15)"/>
+                <ellipse cx="20" cy="15" rx="5" ry="3.5" fill="#8b5cf6" opacity="0.75" transform="rotate(-15 20 15)"/>
+                <rect x="12" y="4" width="2" height="14" rx="1" fill="#4c1d95" opacity="0.7"/>
+                <circle cx="13" cy="4" r="1.5" fill="#4c1d95" opacity="0.8"/>
+                <line x1="13" y1="4" x2="9" y2="1" stroke="#4c1d95" strokeWidth="1" opacity="0.6"/>
+                <line x1="13" y1="4" x2="17" y2="1" stroke="#4c1d95" strokeWidth="1" opacity="0.6"/>
+              </svg>
+            </div>
 
           </div>
 
