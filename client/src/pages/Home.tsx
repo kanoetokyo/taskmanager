@@ -1272,7 +1272,7 @@ export default function Home() {
   const { main: prevDateMain } = formatDateLabel(prevDayKey);
 
   return (
-    <div className="min-h-screen" style={{ background: "#f0f2f5" }}>
+    <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #f0fdf4 0%, #f7fef9 40%, #ecfdf5 100%)" }}>
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-10 overflow-hidden" style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #f0fdf4 100%)", borderBottom: "1px solid #bbf7d0", boxShadow: "0 1px 4px rgba(34,197,94,0.10)" }}>
