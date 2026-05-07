@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-interface Petal {
+interface Leaf {
   x: number;
   y: number;
   size: number;
@@ -12,68 +12,92 @@ interface Petal {
   swing: number;
   swingSpeed: number;
   swingOffset: number;
+  colorIndex: number; // 葉の色バリエーション
 }
 
-const PETAL_COUNT = 28;
+const LEAF_COUNT = 22;
 
-function createPetal(canvasWidth: number, canvasHeight: number, fromTop = false): Petal {
+// 新緑カラーパレット
+const LEAF_COLORS = [
+  { center: "rgba(120, 200, 80, 1)",  mid: "rgba(90, 170, 55, 1)",  edge: "rgba(60, 130, 30, 0.7)"  }, // 明るい緑
+  { center: "rgba(150, 210, 100, 1)", mid: "rgba(110, 185, 65, 1)", edge: "rgba(75, 145, 40, 0.7)"  }, // 黄緑
+  { center: "rgba(100, 185, 70, 1)",  mid: "rgba(75, 160, 50, 1)",  edge: "rgba(50, 120, 25, 0.7)"  }, // 深緑
+  { center: "rgba(170, 220, 110, 1)", mid: "rgba(130, 200, 80, 1)", edge: "rgba(90, 160, 50, 0.7)"  }, // 若葉
+];
+
+function createLeaf(canvasWidth: number, canvasHeight: number, fromTop = false): Leaf {
   return {
     x: Math.random() * canvasWidth,
     y: fromTop ? -20 - Math.random() * 100 : Math.random() * canvasHeight,
-    size: 6 + Math.random() * 8,
-    speedY: 0.6 + Math.random() * 1.0,
-    speedX: -0.3 + Math.random() * 0.6,
+    size: 8 + Math.random() * 10,
+    speedY: 0.5 + Math.random() * 0.9,
+    speedX: -0.4 + Math.random() * 0.8,
     rotation: Math.random() * Math.PI * 2,
-    rotationSpeed: (Math.random() - 0.5) * 0.04,
-    opacity: 0.35 + Math.random() * 0.35,
-    swing: 18 + Math.random() * 24,
-    swingSpeed: 0.008 + Math.random() * 0.012,
+    rotationSpeed: (Math.random() - 0.5) * 0.035,
+    opacity: 0.30 + Math.random() * 0.35,
+    swing: 20 + Math.random() * 28,
+    swingSpeed: 0.007 + Math.random() * 0.010,
     swingOffset: Math.random() * Math.PI * 2,
+    colorIndex: Math.floor(Math.random() * LEAF_COLORS.length),
   };
 }
 
-function drawPetal(ctx: CanvasRenderingContext2D, petal: Petal, time: number) {
+function drawLeaf(ctx: CanvasRenderingContext2D, leaf: Leaf, time: number) {
   ctx.save();
 
-  const swingX = petal.x + Math.sin(time * petal.swingSpeed + petal.swingOffset) * petal.swing;
+  const swingX = leaf.x + Math.sin(time * leaf.swingSpeed + leaf.swingOffset) * leaf.swing;
 
-  ctx.translate(swingX, petal.y);
-  ctx.rotate(petal.rotation);
-  ctx.globalAlpha = petal.opacity;
+  ctx.translate(swingX, leaf.y);
+  ctx.rotate(leaf.rotation);
+  ctx.globalAlpha = leaf.opacity;
 
-  // 桜の花びら形状（楕円を2枚組み合わせたハート型）
+  const s = leaf.size;
+  const color = LEAF_COLORS[leaf.colorIndex];
+
+  // 葉っぱ形状（楕円ベースの木の葉型）
   ctx.beginPath();
-  const w = petal.size;
-  const h = petal.size * 1.4;
-
-  // 左の楕円
   ctx.save();
-  ctx.rotate(-0.4);
-  ctx.scale(1, 1.5);
-  ctx.arc(-w * 0.25, 0, w * 0.5, 0, Math.PI * 2);
+  ctx.scale(1, 1.8);
+  ctx.arc(0, 0, s * 0.52, 0, Math.PI * 2);
   ctx.restore();
 
-  // 右の楕円
-  ctx.save();
-  ctx.rotate(0.4);
-  ctx.scale(1, 1.5);
-  ctx.arc(w * 0.25, 0, w * 0.5, 0, Math.PI * 2);
-  ctx.restore();
-
-  // グラデーション塗り
-  const grad = ctx.createRadialGradient(0, -h * 0.1, 0, 0, 0, w);
-  grad.addColorStop(0, "rgba(255, 220, 230, 1)");
-  grad.addColorStop(0.5, "rgba(255, 183, 197, 1)");
-  grad.addColorStop(1, "rgba(240, 150, 170, 0.7)");
+  // グラデーション塗り（中心から外側へ）
+  const grad = ctx.createRadialGradient(0, -s * 0.15, 0, 0, 0, s * 0.6);
+  grad.addColorStop(0,   color.center);
+  grad.addColorStop(0.5, color.mid);
+  grad.addColorStop(1,   color.edge);
   ctx.fillStyle = grad;
   ctx.fill();
+
+  // 中央の葉脈（メイン）
+  ctx.beginPath();
+  ctx.moveTo(0, -s * 0.85);
+  ctx.lineTo(0,  s * 0.85);
+  ctx.strokeStyle = "rgba(40, 100, 20, 0.35)";
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  // 左右の葉脈（サブ）
+  for (let i = -1; i <= 1; i += 2) {
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 0.3);
+    ctx.lineTo(i * s * 0.42, s * 0.15);
+    ctx.strokeStyle = "rgba(40, 100, 20, 0.22)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.1);
+    ctx.lineTo(i * s * 0.38, s * 0.55);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }
 
 export default function SakuraPetals() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const petalsRef = useRef<Petal[]>([]);
+  const leavesRef = useRef<Leaf[]>([]);
   const rafRef = useRef<number>(0);
   const timeRef = useRef<number>(0);
 
@@ -91,29 +115,28 @@ export default function SakuraPetals() {
     resize();
     window.addEventListener("resize", resize);
 
-    // 初期花びらを生成（画面全体にランダム配置）
-    petalsRef.current = Array.from({ length: PETAL_COUNT }, () =>
-      createPetal(canvas.width, canvas.height, false)
+    // 初期葉っぱを生成（画面全体にランダム配置）
+    leavesRef.current = Array.from({ length: LEAF_COUNT }, () =>
+      createLeaf(canvas.width, canvas.height, false)
     );
 
     const animate = () => {
       timeRef.current += 1;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      petalsRef.current = petalsRef.current.map((petal) => {
-        // 落下・横移動
-        const newY = petal.y + petal.speedY;
-        const newX = petal.x + petal.speedX;
-        const newRotation = petal.rotation + petal.rotationSpeed;
+      leavesRef.current = leavesRef.current.map((leaf) => {
+        const newY = leaf.y + leaf.speedY;
+        const newX = leaf.x + leaf.speedX;
+        const newRotation = leaf.rotation + leaf.rotationSpeed;
 
         // 画面外に出たら上から再生成
         if (newY > canvas.height + 30) {
-          return createPetal(canvas.width, canvas.height, true);
+          return createLeaf(canvas.width, canvas.height, true);
         }
 
-        drawPetal(ctx, { ...petal, x: newX, y: newY, rotation: newRotation }, timeRef.current);
+        drawLeaf(ctx, { ...leaf, x: newX, y: newY, rotation: newRotation }, timeRef.current);
 
-        return { ...petal, x: newX, y: newY, rotation: newRotation };
+        return { ...leaf, x: newX, y: newY, rotation: newRotation };
       });
 
       rafRef.current = requestAnimationFrame(animate);
