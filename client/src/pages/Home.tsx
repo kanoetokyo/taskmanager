@@ -405,6 +405,9 @@ export default function Home() {
   // stale closure防止: individualHandoversの最新値をRefで保持
   const individualHandoversRef = useRef<IndividualHandoverRecord[]>([]);
   useEffect(() => { individualHandoversRef.current = individualHandovers; }, [individualHandovers]);
+  // 重要フラグを専用Refで管理（ポーリング・自動保存競合を完全排除）
+  // このRefはポーリングで上書きされず、重要ボタン押下時のみ更新される
+  const importantFlagsRef = useRef<Record<string, boolean>>({});
 
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
@@ -706,13 +709,24 @@ export default function Home() {
         inherited: r.dateKey !== currentDateKey,
         important: r.important ?? false,
       }));
+      // importantFlagsRefに未登録のカードのみ初期値を設定（既にボタン操作で設定済みのフラグは上書きしない）
+      records.forEach(r => {
+        if (!(r.id in importantFlagsRef.current)) {
+          importantFlagsRef.current[r.id] = r.important ?? false;
+        }
+      });
+      // importantFlagsRefの値でrecordsのimportantを上書き（ポーリングが古い値を返してもボタン操作の値を優先）
+      const recordsWithFlags = records.map(r => ({
+        ...r,
+        important: importantFlagsRef.current[r.id] ?? r.important ?? false,
+      }));
       // 重要フラグ付きを先頭に並び替え
-      records.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
+      recordsWithFlags.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
       // DBロードによるstate変更は自動保存をトリガーするのでスキップフラグを立てる
       skipAutoSaveRef.current = true;
       // Refも同時に更新して自動保存タイマーが古い値を使わないようにする
-      individualHandoversRef.current = records;
-      setIndividualHandovers(records);
+      individualHandoversRef.current = recordsWithFlags;
+      setIndividualHandovers(recordsWithFlags);
       if (!individualHandoverLoadedRef.current) {
         setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
       }
@@ -897,6 +911,8 @@ export default function Home() {
   };
 
   const handleDeleteIndividualHandover = async (id: string) => {
+    // 専用Refからも削除
+    delete importantFlagsRef.current[id];
     setIndividualHandovers(prev => prev.filter(r => r.id !== id));
     try {
       await deleteIndividualHandover.mutateAsync({ id });
@@ -927,6 +943,8 @@ export default function Home() {
         const record = updated.find(r => r.id === recordId);
         if (record && record.tasks.every(t => t.done)) {
           setTimeout(async () => {
+            // 専用Refからも削除
+            delete importantFlagsRef.current[recordId];
             setIndividualHandovers(p => p.filter(r => r.id !== recordId));
             try {
               await deleteIndividualHandover.mutateAsync({ id: recordId });
@@ -1510,6 +1528,8 @@ export default function Home() {
                           clearTimeout(individualHandoverSaveTimerRef.current);
                           individualHandoverSaveTimerRef.current = null;
                         }
+                        // 重要フラグを専用Refに即座に記録（ポーリング・自動保存の競合を完全排除）
+                        importantFlagsRef.current[record.id] = newImportant;
                         // 自動保存との競合を防ぐ：次の自動保存useEffectをスキップ
                         skipAutoSaveRef.current = true;
                         isSavingIndividualRef.current = true; // 即時保存中はポーリング上書きを防ぐ
