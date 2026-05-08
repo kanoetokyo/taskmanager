@@ -589,28 +589,76 @@ export default function ShowOnDaysPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
 
-        {/* 今日の状況サマリー */}
-        <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Calendar className="w-4 h-4 text-blue-500" />
-            <h2 className="text-sm font-bold text-gray-700">今日の状況 — {todayStr}</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">{limitedTasks}</p>
-              <p className="text-xs text-blue-400 mt-0.5">毎月のルーティン</p>
+        {/* 今日の状況サマリー：コルクボード風 */}
+        <div
+          className="rounded-2xl p-5 shadow-md relative overflow-hidden"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 30%, rgba(210,170,110,0.35) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 70%, rgba(185,145,85,0.3) 0%, transparent 55%),
+              radial-gradient(ellipse at 50% 50%, rgba(230,195,140,0.2) 0%, transparent 70%),
+              linear-gradient(135deg, #d4a96a 0%, #c8985a 25%, #d9b07a 50%, #c49055 75%, #d2a568 100%)
+            `,
+            border: "6px solid #a0722a",
+            boxShadow: "inset 0 2px 8px rgba(0,0,0,0.18), inset 0 -2px 6px rgba(255,255,255,0.12), 0 4px 16px rgba(120,80,20,0.25), 0 1px 3px rgba(0,0,0,0.2)",
+          }}
+        >
+          {/* コルク質感のノイズオーバーレイ */}
+          <div
+            className="absolute inset-0 pointer-events-none rounded-xl opacity-30"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23noise)' opacity='0.4'/%3E%3C/svg%3E")`,
+              backgroundSize: "200px 200px",
+            }}
+          />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-4 h-4 text-amber-900" />
+              <h2 className="text-sm font-bold text-amber-900" style={{ textShadow: "0 1px 2px rgba(255,255,255,0.4)" }}>今日の状況 — {todayStr}</h2>
             </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">{completedLimitedToday}</p>
-              <p className="text-xs text-green-400 mt-0.5">毎月ルーティン完了済み</p>
-            </div>
-            <div className={`text-center p-3 rounded-lg ${overdueToday > 0 ? "bg-red-50" : "bg-gray-50"}`}>
-              <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-600" : "text-gray-400"}`}>
-                {overdueToday}
-              </p>
-              <p className={`text-xs mt-0.5 ${overdueToday > 0 ? "text-red-400" : "text-gray-300"}`}>
-                期限超過中
-              </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {/* 付箋風カード：青 */}
+              <div
+                className="text-center p-3 rounded-lg relative"
+                style={{
+                  background: "linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)",
+                  boxShadow: "2px 3px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.6)",
+                  transform: "rotate(-1deg)",
+                }}
+              >
+                <p className="text-2xl font-bold text-blue-700">{limitedTasks}</p>
+                <p className="text-xs text-blue-500 mt-0.5 font-medium">毎月のルーティン</p>
+              </div>
+              {/* 付箋風カード：緑 */}
+              <div
+                className="text-center p-3 rounded-lg relative"
+                style={{
+                  background: "linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)",
+                  boxShadow: "2px 3px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.6)",
+                  transform: "rotate(0.8deg)",
+                }}
+              >
+                <p className="text-2xl font-bold text-green-700">{completedLimitedToday}</p>
+                <p className="text-xs text-green-600 mt-0.5 font-medium">毎月ルーティン完了済み</p>
+              </div>
+              {/* 付箋風カード：赤 or グレー */}
+              <div
+                className="text-center p-3 rounded-lg relative"
+                style={{
+                  background: overdueToday > 0
+                    ? "linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"
+                    : "linear-gradient(135deg, #f5f0e8 0%, #ede8dc 100%)",
+                  boxShadow: "2px 3px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.6)",
+                  transform: "rotate(-0.5deg)",
+                }}
+              >
+                <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-700" : "text-amber-800"}`}>
+                  {overdueToday}
+                </p>
+                <p className={`text-xs mt-0.5 font-medium ${overdueToday > 0 ? "text-red-500" : "text-amber-700"}`}>
+                  期限超過中
+                </p>
+              </div>
             </div>
           </div>
         </div>
