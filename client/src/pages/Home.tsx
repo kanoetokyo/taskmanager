@@ -708,6 +708,10 @@ export default function Home() {
       }));
       // 重要フラグ付きを先頭に並び替え
       records.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
+      // DBロードによるstate変更は自動保存をトリガーするのでスキップフラグを立てる
+      skipAutoSaveRef.current = true;
+      // Refも同時に更新して自動保存タイマーが古い値を使わないようにする
+      individualHandoversRef.current = records;
       setIndividualHandovers(records);
       if (!individualHandoverLoadedRef.current) {
         setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
