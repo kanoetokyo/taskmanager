@@ -624,8 +624,8 @@ export default function Home() {
         });
         setTimeout(() => { tasksLoadedRef.current = true; }, 0);
       } else {
-        // ポーリング更新: 自動保存タイマーが動作中でなければDBの値を反映
-        if (!isSavingTasksRef.current) {
+        // ポーリング更新: 保存タイマーが起動中の場合のみブロック（保存完了後のinvalidate由来の更新は通す）
+        if (!(isSavingTasksRef.current && taskSaveTimerRef.current !== null)) {
           setTasks(prev => {
             return prev.map(t => {
               const dbState = taskStatesData.find(s => s.taskId === t.id);
@@ -691,7 +691,8 @@ export default function Home() {
   useEffect(() => {
     if (individualHandoverData !== undefined) {
       if (isEditingIndividualRef.current) return; // 入力中は上書きしない
-      if (isSavingIndividualRef.current) return; // 保存中は上書きしない
+      // 保存タイマーが起動中の場合のみ上書きをブロック（保存完了後のinvalidate由来の更新は通す）
+      if (isSavingIndividualRef.current && individualHandoverSaveTimerRef.current !== null) return;
       const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
         id: r.id,
         author: r.author,
@@ -705,14 +706,14 @@ export default function Home() {
         inherited: r.dateKey !== currentDateKey,
         important: r.important ?? false,
       }));
-      // 重要フラグ付きを先頭に並べ替え
+      // 重要フラグ付きを先頭に並び替え
       records.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
       setIndividualHandovers(records);
       if (!individualHandoverLoadedRef.current) {
         setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
       }
     }
-  }, [individualHandoverData, currentDateKey]);
+  }, [individualHandoverData, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // Load MISOCA status from DB
@@ -801,6 +802,8 @@ export default function Home() {
         );
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+        // 保存完了後にキャッシュを無効化してポーリングデータを最新化（フラグ解除前に実行）
+        await utils.task.taskStates.getByDateWithMonthly.invalidate();
       } catch (e) {
         console.error("Task save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
@@ -866,7 +869,9 @@ export default function Home() {
           });
         }
         const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+        // 保存完了後にキャッシュを無効化してポーリングデータを最新化（フラグ解除前に実行）
+        await utils.task.individualHandover.getActive.invalidate();
       } catch (e) {
         console.error("Individual handover save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
@@ -1496,13 +1501,13 @@ export default function Home() {
                     <button
                       onClick={async () => {
                         const newImportant = !record.important;
-                        // 自動保存との競合を防ぐ：次の自動保存useEffectをスキップ
-                        skipAutoSaveRef.current = true;
                         // タイマーが起動中ならキャンセル（即時保存が優先）
                         if (individualHandoverSaveTimerRef.current) {
                           clearTimeout(individualHandoverSaveTimerRef.current);
                           individualHandoverSaveTimerRef.current = null;
                         }
+                        // 自動保存との競合を防ぐ：次の自動保存useEffectをスキップ
+                        skipAutoSaveRef.current = true;
                         isSavingIndividualRef.current = true; // 即時保存中はポーリング上書きを防ぐ
                         const updated = individualHandoversRef.current.map(r => r.id === record.id ? { ...r, important: newImportant } : r);
                         setIndividualHandovers(updated);
@@ -1517,6 +1522,8 @@ export default function Home() {
                             completed: allDone,
                             important: newImportant,
                           });
+                          // 保存成功後にキャッシュを無効化してポーリングデータを最新化
+                          await utils.task.individualHandover.getActive.invalidate();
                         } catch (e) {
                           console.error('important save failed:', e);
                           toast.error('重要フラグの保存に失敗しました');
