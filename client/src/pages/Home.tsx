@@ -839,9 +839,16 @@ export default function Home() {
   }, [storeCheck, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 個別引き継ぎ自動保存
+  // 重要フラグ変更は即時保存（onClickで直接upsert）するため、自動保存から除外するためのフラグ
+  const skipAutoSaveRef = useRef(false);
   const individualHandoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!individualHandoverLoadedRef.current) return; // DB読み込み中は保存しない
+    if (skipAutoSaveRef.current) {
+      // 重要フラグ変更による再レンダリングは自動保存をスキップ（即時保存済みのため）
+      skipAutoSaveRef.current = false;
+      return;
+    }
     if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current);
     isSavingIndividualRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     individualHandoverSaveTimerRef.current = setTimeout(async () => {
@@ -859,7 +866,7 @@ export default function Home() {
           });
         }
         const now = new Date();
-        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+        setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"00")}:${String(now.getMinutes()).padStart(2,"00")}`);
       } catch (e) {
         console.error("Individual handover save failed:", e);
         toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
@@ -1489,9 +1496,16 @@ export default function Home() {
                     <button
                       onClick={async () => {
                         const newImportant = !record.important;
+                        // 自動保存との競合を防ぐ：次の自動保存useEffectをスキップ
+                        skipAutoSaveRef.current = true;
+                        // タイマーが起動中ならキャンセル（即時保存が優先）
+                        if (individualHandoverSaveTimerRef.current) {
+                          clearTimeout(individualHandoverSaveTimerRef.current);
+                          individualHandoverSaveTimerRef.current = null;
+                        }
+                        isSavingIndividualRef.current = true; // 即時保存中はポーリング上書きを防ぐ
                         const updated = individualHandoversRef.current.map(r => r.id === record.id ? { ...r, important: newImportant } : r);
                         setIndividualHandovers(updated);
-                        // 重要フラグは即時保存（stale closureを回避するためRefの値を使わず直接変数で保存）
                         try {
                           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
                           await upsertIndividualHandover.mutateAsync({
@@ -1505,6 +1519,9 @@ export default function Home() {
                           });
                         } catch (e) {
                           console.error('important save failed:', e);
+                          toast.error('重要フラグの保存に失敗しました');
+                        } finally {
+                          isSavingIndividualRef.current = false;
                         }
                       }}
                       className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border-2 transition-all ${
