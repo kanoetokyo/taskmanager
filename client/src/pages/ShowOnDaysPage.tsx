@@ -595,18 +595,14 @@ export default function ShowOnDaysPage() {
             <Calendar className="w-4 h-4 text-blue-500" />
             <h2 className="text-sm font-bold text-gray-700">今日の状況 — {todayStr}</h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <p className="text-2xl font-bold text-gray-700">{totalTasks}</p>
-              <p className="text-xs text-gray-400 mt-0.5">総タスク数</p>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="text-center p-3 bg-blue-50 rounded-lg">
               <p className="text-2xl font-bold text-blue-600">{limitedTasks}</p>
-              <p className="text-xs text-blue-400 mt-0.5">表示日制限あり</p>
+              <p className="text-xs text-blue-400 mt-0.5">毎月のルーティン</p>
             </div>
             <div className="text-center p-3 bg-green-50 rounded-lg">
               <p className="text-2xl font-bold text-green-600">{completedLimitedToday}</p>
-              <p className="text-xs text-green-400 mt-0.5">制限タスク完了済み</p>
+              <p className="text-xs text-green-400 mt-0.5">毎月ルーティン完了済み</p>
             </div>
             <div className={`text-center p-3 rounded-lg ${overdueToday > 0 ? "bg-red-50" : "bg-gray-50"}`}>
               <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-600" : "text-gray-400"}`}>
