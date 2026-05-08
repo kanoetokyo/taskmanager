@@ -1510,6 +1510,8 @@ export default function Home() {
                         skipAutoSaveRef.current = true;
                         isSavingIndividualRef.current = true; // 即時保存中はポーリング上書きを防ぐ
                         const updated = individualHandoversRef.current.map(r => r.id === record.id ? { ...r, important: newImportant } : r);
+                        // Reactのstate更新は非同期のため、Refも即座に更新して自動保存タイマーが古い値を使わないようにする
+                        individualHandoversRef.current = updated;
                         setIndividualHandovers(updated);
                         try {
                           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
