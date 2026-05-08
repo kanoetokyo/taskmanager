@@ -619,31 +619,61 @@ export default function ShowOnDaysPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {/* 付箋風カード：青 */}
               <div
-                className="text-center p-3 rounded-lg relative"
+                className="text-center pt-5 pb-3 px-3 rounded-lg relative"
                 style={{
                   background: "linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)",
                   boxShadow: "2px 3px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.6)",
                   transform: "rotate(-1deg)",
                 }}
               >
+                {/* 赤い画鋲 */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.35))" }}>
+                  <svg width="22" height="26" viewBox="0 0 22 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="9" r="8" fill="#dc2626" />
+                    <circle cx="11" cy="9" r="8" fill="url(#pinGrad1)" />
+                    <circle cx="8.5" cy="6.5" r="2.5" fill="rgba(255,255,255,0.45)" />
+                    <line x1="11" y1="16" x2="11" y2="26" stroke="#7f1d1d" strokeWidth="2.5" strokeLinecap="round" />
+                    <defs>
+                      <radialGradient id="pinGrad1" cx="35%" cy="30%" r="65%">
+                        <stop offset="0%" stopColor="#f87171" />
+                        <stop offset="100%" stopColor="#991b1b" />
+                      </radialGradient>
+                    </defs>
+                  </svg>
+                </div>
                 <p className="text-2xl font-bold text-blue-700">{limitedTasks}</p>
                 <p className="text-xs text-blue-500 mt-0.5 font-medium">毎月のルーティン</p>
               </div>
               {/* 付箋風カード：緑 */}
               <div
-                className="text-center p-3 rounded-lg relative"
+                className="text-center pt-5 pb-3 px-3 rounded-lg relative"
                 style={{
                   background: "linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)",
                   boxShadow: "2px 3px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.6)",
                   transform: "rotate(0.8deg)",
                 }}
               >
+                {/* 赤い画鋲 */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.35))" }}>
+                  <svg width="22" height="26" viewBox="0 0 22 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="9" r="8" fill="#dc2626" />
+                    <circle cx="11" cy="9" r="8" fill="url(#pinGrad2)" />
+                    <circle cx="8.5" cy="6.5" r="2.5" fill="rgba(255,255,255,0.45)" />
+                    <line x1="11" y1="16" x2="11" y2="26" stroke="#7f1d1d" strokeWidth="2.5" strokeLinecap="round" />
+                    <defs>
+                      <radialGradient id="pinGrad2" cx="35%" cy="30%" r="65%">
+                        <stop offset="0%" stopColor="#f87171" />
+                        <stop offset="100%" stopColor="#991b1b" />
+                      </radialGradient>
+                    </defs>
+                  </svg>
+                </div>
                 <p className="text-2xl font-bold text-green-700">{completedLimitedToday}</p>
                 <p className="text-xs text-green-600 mt-0.5 font-medium">毎月ルーティン完了済み</p>
               </div>
               {/* 付箋風カード：赤 or グレー */}
               <div
-                className="text-center p-3 rounded-lg relative"
+                className="text-center pt-5 pb-3 px-3 rounded-lg relative"
                 style={{
                   background: overdueToday > 0
                     ? "linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"
@@ -652,6 +682,21 @@ export default function ShowOnDaysPage() {
                   transform: "rotate(-0.5deg)",
                 }}
               >
+                {/* 赤い画鋲 */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.35))" }}>
+                  <svg width="22" height="26" viewBox="0 0 22 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="9" r="8" fill="#dc2626" />
+                    <circle cx="11" cy="9" r="8" fill="url(#pinGrad3)" />
+                    <circle cx="8.5" cy="6.5" r="2.5" fill="rgba(255,255,255,0.45)" />
+                    <line x1="11" y1="16" x2="11" y2="26" stroke="#7f1d1d" strokeWidth="2.5" strokeLinecap="round" />
+                    <defs>
+                      <radialGradient id="pinGrad3" cx="35%" cy="30%" r="65%">
+                        <stop offset="0%" stopColor="#f87171" />
+                        <stop offset="100%" stopColor="#991b1b" />
+                      </radialGradient>
+                    </defs>
+                  </svg>
+                </div>
                 <p className={`text-2xl font-bold ${overdueToday > 0 ? "text-red-700" : "text-amber-800"}`}>
                   {overdueToday}
                 </p>
