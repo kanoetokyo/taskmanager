@@ -402,6 +402,10 @@ export default function Home() {
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { currentDateKeyRef.current = currentDateKey; }, [currentDateKey]);
 
+  // stale closure防止: individualHandoversの最新値をRefで保持
+  const individualHandoversRef = useRef<IndividualHandoverRecord[]>([]);
+  useEffect(() => { individualHandoversRef.current = individualHandovers; }, [individualHandovers]);
+
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
   // Task definitions from DB (master data)
@@ -842,7 +846,7 @@ export default function Home() {
     isSavingIndividualRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     individualHandoverSaveTimerRef.current = setTimeout(async () => {
       try {
-        for (const record of individualHandovers) {
+        for (const record of individualHandoversRef.current) {
           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
           await upsertIndividualHandover.mutateAsync({
             id: record.id,
@@ -1483,7 +1487,26 @@ export default function Home() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* 重要トグルボタン */}
                     <button
-                      onClick={() => setIndividualHandovers(prev => prev.map(r => r.id === record.id ? { ...r, important: !r.important } : r))}
+                      onClick={async () => {
+                        const newImportant = !record.important;
+                        const updated = individualHandoversRef.current.map(r => r.id === record.id ? { ...r, important: newImportant } : r);
+                        setIndividualHandovers(updated);
+                        // 重要フラグは即時保存（stale closureを回避するためRefの値を使わず直接変数で保存）
+                        try {
+                          const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
+                          await upsertIndividualHandover.mutateAsync({
+                            id: record.id,
+                            dateKey: currentDateKey,
+                            author: record.author,
+                            target: record.target,
+                            tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
+                            completed: allDone,
+                            important: newImportant,
+                          });
+                        } catch (e) {
+                          console.error('important save failed:', e);
+                        }
+                      }}
                       className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border-2 transition-all ${
                         record.important
                           ? 'bg-red-500 border-red-500 text-white shadow-md'

@@ -1,0 +1,100 @@
+{
+  "query": "SELECT id, dateKey, author, target, completed, important, updatedAt FROM individual_handovers ORDER BY updatedAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 4u7nUaEYpATBFbt.63cf1d350b04 --database npkLFqGPE3vEJf85UN43kx --execute SELECT id, dateKey, author, target, completed, important, updatedAt FROM individual_handovers ORDER BY updatedAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "eea617e9-f8f6-4f72-bdb4-3382084ff356",
+      "dateKey": "2026-05-08",
+      "author": "新井なお",
+      "target": "新井なお",
+      "completed": "0",
+      "important": "0",
+      "updatedAt": "2026-05-08 04:29:29"
+    },
+    {
+      "id": "d2a1a11c-1601-47b5-926f-0dbaa15f6d90",
+      "dateKey": "2026-05-08",
+      "author": "新井さやか",
+      "target": "田邊まい",
+      "completed": "0",
+      "important": "0",
+      "updatedAt": "2026-05-08 04:23:55"
+    },
+    {
+      "id": "4a5be393-ff8e-45dd-8b94-77c451b9582e",
+      "dateKey": "2026-05-05",
+      "author": "前田",
+      "target": "",
+      "completed": "0",
+      "important": "0",
+      "updatedAt": "2026-05-07 08:27:13"
+    },
+    {
+      "id": "26ea74df-969e-4095-9f5a-af4fe5672edd",
+      "dateKey": "2026-05-06",
+      "author": "加藤",
+      "target": "新井なお",
+      "completed": "0",
+      "important": "0",
+      "updatedAt": "2026-05-06 10:31:12"
+    },
+    {
+      "id": "c308cf58-e486-4f9d-a5d5-6dc31af1d055",
+      "dateKey": "2026-05-01",
+      "author": "新井さやか",
+      "target": "新井なお",
+      "completed": "0",
+      "important": "0",
+      "updatedAt": "2026-05-06 10:05:14"
+    },
+    {
+      "id": "f3a47f0a-f322-4479-862a-7da212dcf120",
+      "dateKey": "2026-03-27",
+      "author": "新井なお",
+      "target": "",
+      "completed": "1",
+      "important": "0",
+      "updatedAt": "2026-03-27 05:35:30"
+    },
+    {
+      "id": "81de9638-6d10-4d68-9998-b5e85f714dcc",
+      "dateKey": "2026-03-25",
+      "author": "前田",
+      "target": "新井さやか",
+      "completed": "1",
+      "important": "0",
+      "updatedAt": "2026-03-25 03:47:08"
+    },
+    {
+      "id": "5da59ed0-5342-44ca-82fc-4e7ee5b37dc7",
+      "dateKey": "2026-03-16",
+      "author": "新井さやか",
+      "target": "新井なお",
+      "completed": "1",
+      "important": "0",
+      "updatedAt": "2026-03-16 01:29:07"
+    },
+    {
+      "id": "7f733933-0de5-4459-9f6c-8622729b6292",
+      "dateKey": "2026-03-08",
+      "author": "田邊まい",
+      "target": "新井なお",
+      "completed": "1",
+      "important": "0",
+      "updatedAt": "2026-03-08 01:58:05"
+    },
+    {
+      "id": "a1eb2b00-72d9-4289-99a5-fa16d38c90b8",
+      "dateKey": "2026-03-07",
+      "author": "新井さやか",
+      "target": "田邊まい",
+      "completed": "1",
+      "important": "0",
+      "updatedAt": "2026-03-07 01:17:29"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tdateKey\tauthor\ttarget\tcompleted\timportant\tupdatedAt\neea617e9-f8f6-4f72-bdb4-3382084ff356\t2026-05-08\t新井なお\t新井なお\t0\t0\t2026-05-08 04:29:29\nd2a1a11c-1601-47b5-926f-0dbaa15f6d90\t2026-05-08\t新井さやか\t田邊まい\t0\t0\t2026-05-08 04:23:55\n4a5be393-ff8e-45dd-8b94-77c451b9582e\t2026-05-05\t前田\t\t0\t0\t2026-05-07 08:27:13\n26ea74df-969e-4095-9f5a-af4fe5672edd\t2026-05-06\t加藤\t新井なお\t0\t0\t2026-05-06 10:31:12\nc308cf58-e486-4f9d-a5d5-6dc31af1d055\t2026-05-01\t新井さやか\t新井なお\t0\t0\t2026-05-06 10:05:14\nf3a47f0a-f322-4479-862a-7da212dcf120\t2026-03-27\t新井なお\t\t1\t0\t2026-03-27 05:35:30\n81de9638-6d10-4d68-9998-b5e85f714dcc\t2026-03-25\t前田\t新井さやか\t1\t0\t2026-03-25 03:47:08\n5da59ed0-5342-44ca-82fc-4e7ee5b37dc7\t2026-03-16\t新井さやか\t新井なお\t1\t0\t2026-03-16 01:29:07\n7f733933-0de5-4459-9f6c-8622729b6292\t2026-03-08\t田邊まい\t新井なお\t1\t0\t2026-03-08 01:58:05\na1eb2b00-72d9-4289-99a5-fa16d38c90b8\t2026-03-07\t新井さやか\t田邊まい\t1\t0\t2026-03-07 01:17:29\n",
+  "stderr": "",
+  "execution_time_ms": 1814
+}
