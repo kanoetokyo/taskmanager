@@ -82,6 +82,7 @@ interface IndividualHandoverRecord {
   target: string;       // 対象者
   tasks: IndividualHandoverTask[]; // 引き継ぎ項目（1つ以上）
   inherited?: boolean;
+  important?: boolean;  // 重要フラグ
 }
 
 function newIndividualTask(): IndividualHandoverTask {
@@ -698,7 +699,10 @@ export default function Home() {
           deadline: t.deadline ?? "",
         })),
         inherited: r.dateKey !== currentDateKey,
+        important: r.important ?? false,
       }));
+      // 重要フラグ付きを先頭に並べ替え
+      records.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
       setIndividualHandovers(records);
       if (!individualHandoverLoadedRef.current) {
         setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
@@ -847,6 +851,7 @@ export default function Home() {
             target: record.target,
             tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
             completed: allDone,
+            important: record.important ?? false,
           });
         }
         const now = new Date();
@@ -1472,14 +1477,34 @@ export default function Home() {
                 「引き継ぎを追加」ボタンで個別引き継ぎを作成できます
               </div>
             ) : (
-              individualHandovers.map(record => (
-                <div key={record.id} className="px-4 py-3 space-y-3">
-                  {/* 前日引き継ぎバッジ */}
-                  {record.inherited && (
-                    <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
-                      ↩ 前日から引き継ぎ
-                    </span>
-                  )}
+              [...individualHandovers].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0)).map(record => (
+                <div key={record.id} className={`px-4 py-3 space-y-3 transition-colors ${record.important ? 'bg-red-50 border-l-4 border-l-red-500' : ''}`}>
+                  {/* バッジ行：重要・前日引き継ぎ */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* 重要トグルボタン */}
+                    <button
+                      onClick={() => setIndividualHandovers(prev => prev.map(r => r.id === record.id ? { ...r, important: !r.important } : r))}
+                      className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border-2 transition-all ${
+                        record.important
+                          ? 'bg-red-500 border-red-500 text-white shadow-md'
+                          : 'bg-white border-gray-300 text-gray-400 hover:border-red-400 hover:text-red-400'
+                      }`}
+                      title="重要フラグをトグル"
+                    >
+                      <span className="text-sm">⚠️</span>
+                      {record.important ? '重要' : '重要にする'}
+                    </button>
+                    {record.important && (
+                      <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                        ⚠️ 重要
+                      </span>
+                    )}
+                    {record.inherited && (
+                      <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
+                        ↩ 前日から引き継ぎ
+                      </span>
+                    )}
+                  </div>
                   {/* 作成者・対象者行 */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <select

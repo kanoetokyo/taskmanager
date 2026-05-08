@@ -63,6 +63,7 @@ export const individualHandovers = mysqlTable("individual_handovers", {
   target: varchar("target", { length: 64 }).notNull().default(""),
   tasks: json("tasks").notNull().$type<Array<{ id: string; content: string; done: boolean; deadline?: string }>>().default([]),
   completed: boolean("completed").default(false).notNull(),
+  important: boolean("important").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

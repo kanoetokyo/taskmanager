@@ -1,0 +1,1 @@
+ALTER TABLE `individual_handovers` ADD `important` boolean DEFAULT false NOT NULL;

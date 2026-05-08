@@ -193,14 +193,15 @@ const individualHandoverRouter = router({
         deadline: z.string().optional(),
       })),
       completed: z.boolean(),
+      important: z.boolean().optional().default(false),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       await db
         .insert(individualHandovers)
-        .values(input)
-        .onDuplicateKeyUpdate({ set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed } });
+        .values({ ...input, important: input.important ?? false })
+        .onDuplicateKeyUpdate({ set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed, important: input.important ?? false } });
     }),
 
   delete: publicProcedure

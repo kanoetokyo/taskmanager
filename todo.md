@@ -338,3 +338,10 @@
 - [x] バグ原因特定：自動保存bulkUpsertが当日dateKeyで上書き→getByDateWithMonthlyが当日レコードを優先→completedDate/completedByが消える
 - [x] サーバー側修正：getByDateWithMonthlyで当日レコードにnoteタグが欠けている場合は当月完了レコードのnoteで補完する
 - [x] フロントエンド側修正：自動保存時、showOnDaysタスクで当月完了済みの場合はnoteに__completedDate/__completedByタグを保持する
+
+## 個別引継ぎカードに「重要」バッジ追加 (2026-05-08)
+- [x] DBスキーマ（individualHandovers）にimportantフラグを追加・マイグレーション
+- [x] サーバー側のupsert/getActiveプロシージャにimportantフィールドを追加
+- [x] フロントエンド：重要バッジトグルボタンをカードに追加
+- [x] フロントエンド：重要カードを上部優先表示にソート
+- [x] フロントエンド：重要カードの背景を赤系で目立たせる
