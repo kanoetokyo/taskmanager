@@ -405,9 +405,10 @@ export default function Home() {
   // stale closure防止: individualHandoversの最新値をRefで保持
   const individualHandoversRef = useRef<IndividualHandoverRecord[]>([]);
   useEffect(() => { individualHandoversRef.current = individualHandovers; }, [individualHandovers]);
-  // 重要フラグを専用Refで管理（ポーリング・自動保存競合を完全排除）
-  // このRefはポーリングで上書きされず、重要ボタン押下時のみ更新される
+  // 重要フラグを専用Refで管理（ポーリング・自動保存の競合を完全排除）
   const importantFlagsRef = useRef<Record<string, boolean>>({});
+  // チェック状態を専用Refで管理（ポーリング・自動保存の競合を完全排除）
+  const doneFlagsRef = useRef<Record<string, boolean>>({});
 
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
@@ -640,7 +641,8 @@ export default function Home() {
                 .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
                 .replace(/\n?__completedBy:[^\n]+/g, "")
                 .trim();
-              const isDone = dbState.done ?? t.done;
+              // doneFlagsRefに登録済みの場合はボタン操作の値を優先（ポーリングが古い値を返しても上書きしない）
+              const isDone = (t.id in doneFlagsRef.current) ? doneFlagsRef.current[t.id] : (dbState.done ?? t.done);
               // done=trueなのにcompletedDateKeyがない場合はDBレコードのdateKey（実際に完了した日）をフォールバック
               const resolvedCompletedDateKey = completedDateKey ?? (isDone ? (dbState.dateKey ?? currentDateKeyRef.current) : undefined);
               return {
@@ -778,6 +780,8 @@ export default function Home() {
     tasksLoadedRef.current = false;
     storeCheckLoadedRef.current = false;
     individualHandoverLoadedRef.current = false;
+    // 日付変更時はdoneFlagsRefもリセット（新しい日付のチェック状態はDBから取得）
+    doneFlagsRef.current = {};
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
     setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
     setLastSaved(null);
@@ -974,6 +978,8 @@ export default function Home() {
   const toggleDone = (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (task && !task.done) {
+      // doneFlagsRefに即座に記録（ポーリング・自動保存の競合を完全排除）
+      doneFlagsRef.current[id] = true;
       // 完了にする場合はアニメーションを先に起動
       setCompletingTasks(prev => new Set(prev).add(id));
       setTimeout(() => {
@@ -989,6 +995,8 @@ export default function Home() {
         setCompletingTasks(prev => { const s = new Set(prev); s.delete(id); return s; });
       }, 400);
     } else {
+      // doneFlagsRefに即座に記録（ポーリング・自動保存の競合を完全排除）
+      doneFlagsRef.current[id] = false;
       // 完了解除は即座に戻す（__completedDate・__completedByタグも削除）
       setUndoHistory(h => [...h.slice(-9), tasks]);
       setTasks(prev => prev.map(t => {
@@ -1005,6 +1013,8 @@ export default function Home() {
   const undoLast = () => {
     if (undoHistory.length === 0) return;
     const prev = undoHistory[undoHistory.length - 1];
+    // undo実行時はdoneFlagsRefをリセット（undo後の状態を正しく反映させる）
+    prev.forEach(t => { doneFlagsRef.current[t.id] = t.done; });
     setTasks(prev);
     setUndoHistory(h => h.slice(0, -1));
     toast.success("元に戻しました");
@@ -2028,6 +2038,8 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
+                        // doneFlagsRefも同時に更新
+                        tasks.filter(t => t.category === cat).forEach(t => { doneFlagsRef.current[t.id] = true; });
                         setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
                       className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
@@ -2635,6 +2647,8 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
+                        // doneFlagsRefも同時に更新
+                        tasks.filter(t => t.category === cat).forEach(t => { doneFlagsRef.current[t.id] = true; });
                         setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
                       }}
                       className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
