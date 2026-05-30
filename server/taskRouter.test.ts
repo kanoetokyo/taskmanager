@@ -287,7 +287,7 @@ describe("cleanup old date key records logic", () => {
     const [y, m, d] = today.split("-").map(Number);
     const date = new Date(y, m - 1, d);
     date.setDate(date.getDate() - 3);
-    return date.toISOString().slice(0, 10);
+    return dateToKey(date);
   }
 
   it("calculates cutoff key as 3 days before today", () => {
