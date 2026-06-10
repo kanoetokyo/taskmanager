@@ -40,6 +40,12 @@ pnpm db:push
 
 The project script runs Drizzle's `generate` and `migrate` commands. With the committed baseline migration, this applies the Postgres schema to the database in `DATABASE_URL`.
 
+If you prefer using only the Supabase dashboard:
+
+1. Open Supabase SQL Editor.
+2. Paste and run `drizzle/migrations/0000_supabase_postgres_baseline.sql`.
+3. Paste and run `supabase/seed-task-definitions.sql`.
+
 ## 4. Seed Initial Task Definitions
 
 After the schema exists, run:
@@ -49,6 +55,12 @@ node seed-task-definitions.mjs
 ```
 
 The seed script skips if `task_categories` already contains data.
+
+If you already ran `supabase/seed-task-definitions.sql` in Supabase SQL Editor, you do not need to run this script.
+
+## 5. Redeploy Vercel
+
+After adding or changing Vercel environment variables, redeploy the latest deployment so the running app receives the new values.
 
 ## Notes
 
