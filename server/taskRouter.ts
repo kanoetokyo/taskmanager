@@ -126,7 +126,10 @@ const taskStatesRouter = router({
       await db
         .insert(taskStates)
         .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help, note: input.note })
-        .onDuplicateKeyUpdate({ set: { done: input.done, help: input.help, note: input.note } });
+        .onConflictDoUpdate({
+          target: [taskStates.dateKey, taskStates.taskId],
+          set: { done: input.done, help: input.help, note: input.note },
+        });
     }),
 
   // Bulk upsert task states
@@ -139,7 +142,10 @@ const taskStatesRouter = router({
         await db
           .insert(taskStates)
           .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help, note: item.note })
-          .onDuplicateKeyUpdate({ set: { done: item.done, help: item.help, note: item.note } });
+          .onConflictDoUpdate({
+            target: [taskStates.dateKey, taskStates.taskId],
+            set: { done: item.done, help: item.help, note: item.note },
+          });
       }
     }),
 });
@@ -162,7 +168,10 @@ const storeCheckRouter = router({
       await db
         .insert(storeCheckStates)
         .values({ dateKey: input.dateKey, checkType: input.checkType, checkedStores: input.checkedStores })
-        .onDuplicateKeyUpdate({ set: { checkedStores: input.checkedStores } });
+        .onConflictDoUpdate({
+          target: [storeCheckStates.dateKey, storeCheckStates.checkType],
+          set: { checkedStores: input.checkedStores },
+        });
     }),
 });
 
@@ -201,7 +210,10 @@ const individualHandoverRouter = router({
       await db
         .insert(individualHandovers)
         .values({ ...input, important: input.important ?? false })
-        .onDuplicateKeyUpdate({ set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed, important: input.important ?? false } });
+        .onConflictDoUpdate({
+          target: individualHandovers.id,
+          set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed, important: input.important ?? false },
+        });
     }),
 
   delete: publicProcedure
@@ -248,7 +260,10 @@ const customerHandoverRouter = router({
       await db
         .insert(customerHandovers)
         .values({ ...input, links, dueDate })
-        .onDuplicateKeyUpdate({ set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links, dueDate } });
+        .onConflictDoUpdate({
+          target: customerHandovers.id,
+          set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links, dueDate },
+        });
     }),
 
   delete: publicProcedure

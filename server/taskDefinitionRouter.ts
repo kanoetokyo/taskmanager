@@ -58,12 +58,15 @@ export const taskDefinitionRouter = router({
         .where(eq(taskCategories.isActive, true))
         .orderBy(asc(taskCategories.sortOrder));
       const maxSort = existing.length > 0 ? existing[existing.length - 1].sortOrder + 1 : 0;
-      const [result] = await db.insert(taskCategories).values({
-        name: input.name,
-        sortOrder: maxSort,
-        isActive: true,
-      });
-      return { id: (result as any).insertId };
+      const [result] = await db
+        .insert(taskCategories)
+        .values({
+          name: input.name,
+          sortOrder: maxSort,
+          isActive: true,
+        })
+        .returning({ id: taskCategories.id });
+      return { id: result.id };
     }),
 
   // カテゴリ名変更
@@ -152,16 +155,19 @@ export const taskDefinitionRouter = router({
 
       const maxSort = existing.length > 0 ? existing[existing.length - 1].sortOrder + 1 : 0;
 
-      const [result] = await db.insert(taskDefinitions).values({
-        categoryId: input.categoryId,
-        label: input.label,
-        defaultPlanned: input.defaultPlanned,
-        deadline: input.deadline,
-        sortOrder: maxSort,
-        isActive: true,
-      });
+      const [result] = await db
+        .insert(taskDefinitions)
+        .values({
+          categoryId: input.categoryId,
+          label: input.label,
+          defaultPlanned: input.defaultPlanned,
+          deadline: input.deadline,
+          sortOrder: maxSort,
+          isActive: true,
+        })
+        .returning({ id: taskDefinitions.id });
 
-      return { id: (result as any).insertId };
+      return { id: result.id };
     }),
 
   // タスク編集

@@ -1,13 +1,16 @@
-import mysql from 'mysql2/promise';
+import postgres from 'postgres';
 import { config } from 'dotenv';
 config();
 
-const conn = await mysql.createConnection(process.env.DATABASE_URL);
+const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 
 // 直近7日間のタスク状態を確認
-const [rows] = await conn.execute(
-  'SELECT dateKey, taskId, done FROM task_states ORDER BY dateKey DESC, taskId LIMIT 100'
-);
+const rows = await sql`
+  SELECT "dateKey", "taskId", done
+  FROM task_states
+  ORDER BY "dateKey" DESC, "taskId"
+  LIMIT 100
+`;
 
 // 日付ごとに集計
 const byDate = {};
@@ -23,9 +26,13 @@ for (const [date, counts] of Object.entries(byDate)) {
 }
 
 // 完了タスクが存在する日付を探す
-const [doneRows] = await conn.execute(
-  'SELECT dateKey, COUNT(*) as cnt FROM task_states WHERE done = 1 GROUP BY dateKey ORDER BY dateKey DESC'
-);
+const doneRows = await sql`
+  SELECT "dateKey", COUNT(*)::int as cnt
+  FROM task_states
+  WHERE done = true
+  GROUP BY "dateKey"
+  ORDER BY "dateKey" DESC
+`;
 console.log('\n完了タスクが存在する日付:');
 if (doneRows.length === 0) {
   console.log('  なし（DBに完了タスクが一切ない）');
@@ -33,4 +40,4 @@ if (doneRows.length === 0) {
   doneRows.forEach(r => console.log(`  ${r.dateKey}: ${r.cnt}件完了`));
 }
 
-await conn.end();
+await sql.end();

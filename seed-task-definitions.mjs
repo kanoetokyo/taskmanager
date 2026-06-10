@@ -3,9 +3,9 @@
  * 実行: node seed-task-definitions.mjs
  */
 import "dotenv/config";
-import mysql from "mysql2/promise";
+import postgres from "postgres";
 
-const conn = await mysql.createConnection(process.env.DATABASE_URL);
+const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 
 // カテゴリ定義（表示順）
 const CATEGORIES = [
@@ -51,22 +51,23 @@ const BASE_TASKS = [
 ];
 
 // 既存データ確認
-const [existingCats] = await conn.execute("SELECT COUNT(*) as cnt FROM task_categories");
+const existingCats = await sql`SELECT COUNT(*)::int as cnt FROM task_categories`;
 if (existingCats[0].cnt > 0) {
   console.log("task_categoriesにすでにデータがあります。スキップします。");
-  await conn.end();
+  await sql.end();
   process.exit(0);
 }
 
 // カテゴリ投入
 const categoryIdMap = {};
 for (let i = 0; i < CATEGORIES.length; i++) {
-  const [result] = await conn.execute(
-    "INSERT INTO task_categories (name, sortOrder, isActive) VALUES (?, ?, 1)",
-    [CATEGORIES[i], i]
-  );
-  categoryIdMap[CATEGORIES[i]] = result.insertId;
-  console.log(`カテゴリ追加: ${CATEGORIES[i]} (id=${result.insertId})`);
+  const [result] = await sql`
+    INSERT INTO task_categories (name, "sortOrder", "isActive")
+    VALUES (${CATEGORIES[i]}, ${i}, true)
+    RETURNING id
+  `;
+  categoryIdMap[CATEGORIES[i]] = result.id;
+  console.log(`カテゴリ追加: ${CATEGORIES[i]} (id=${result.id})`);
 }
 
 // タスク定義投入
@@ -80,12 +81,12 @@ for (const task of BASE_TASKS) {
   const sortOrder = taskCountByCategory[task.category] ?? 0;
   taskCountByCategory[task.category] = sortOrder + 1;
 
-  await conn.execute(
-    "INSERT INTO task_definitions (categoryId, label, defaultPlanned, deadline, sortOrder, isActive) VALUES (?, ?, ?, ?, ?, 1)",
-    [catId, task.label, task.defaultPlanned, task.deadline, sortOrder]
-  );
+  await sql`
+    INSERT INTO task_definitions ("categoryId", label, "defaultPlanned", deadline, "sortOrder", "isActive")
+    VALUES (${catId}, ${task.label}, ${task.defaultPlanned}, ${task.deadline}, ${sortOrder}, true)
+  `;
   console.log(`タスク追加: [${task.category}] ${task.label}`);
 }
 
-await conn.end();
+await sql.end();
 console.log("\n✅ 初期データ投入完了");
