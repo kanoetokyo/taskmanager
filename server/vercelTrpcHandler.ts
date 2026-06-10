@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { nodeHTTPRequestHandler } from "@trpc/server/adapters/node-http";
-import { appRouter } from "../../server/routers";
-import { sdk } from "../../server/_core/sdk";
-import type { TrpcContext } from "../../server/_core/context";
-import type { User } from "../../drizzle/schema";
+import { appRouter } from "./routers";
+import { sdk } from "./_core/sdk";
+import type { TrpcContext } from "./_core/context";
+import type { User } from "../drizzle/schema";
 
 export const config = {
   api: {
@@ -20,7 +20,6 @@ type VercelRequest = IncomingMessage & {
 type CookieOptions = {
   domain?: string;
   httpOnly?: boolean;
-  maxAge?: number;
   path?: string;
   sameSite?: boolean | "lax" | "strict" | "none";
   secure?: boolean;
