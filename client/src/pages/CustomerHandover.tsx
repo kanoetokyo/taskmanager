@@ -47,6 +47,7 @@ const MEMBER_LIST = [
   "ベーさん",
   "篠原",
   "野村",
+  "中尾",
 ];
 
 const STORE_NAMES_FULL = [

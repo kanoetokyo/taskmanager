@@ -146,7 +146,7 @@ interface TaskState {
   completedBy?: string;
 }
 
-const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "その他"];
+const PLANNED_MEMBERS = ["当日事務担当", "当日現場責任者", "前田", "加藤", "泉", "新井なお", "新井さやか", "田邊まい", "四藤", "ウララ", "森山", "勅使河原", "中尾", "その他"];
 
 interface TaskRowProps {
   task: TaskDefRow;
