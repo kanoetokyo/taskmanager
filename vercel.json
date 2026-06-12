@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/customers",
+      "destination": "/"
+    },
+    {
+      "source": "/show-on-days",
+      "destination": "/"
+    }
+  ]
+}
