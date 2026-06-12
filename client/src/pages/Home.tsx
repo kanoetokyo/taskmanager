@@ -1729,7 +1729,7 @@ export default function Home() {
                 ルーティン一覧
               </a>
               <a
-                href="/customers"
+                href="https://taskmanager-five-plum.vercel.app/customers"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
