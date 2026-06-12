@@ -1,4 +1,4 @@
-import { and, eq, gte, lt, lte, ne, or } from "drizzle-orm";
+import { and, eq, gte, lt, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   customerHandovers,
@@ -23,7 +23,10 @@ const taskStatesRouter = router({
       if (!db) return [];
       // 3日超の古いデータをクリーンアップ（非同期・エラーは無視）
       cleanupOldDateKeyRecords().catch(() => {});
-      return db.select().from(taskStates).where(eq(taskStates.dateKey, input.dateKey));
+      return db
+        .select()
+        .from(taskStates)
+        .where(eq(taskStates.dateKey, input.dateKey));
     }),
 
   // Get task states for a date, with monthly persistence for showOnDays tasks
@@ -36,17 +39,27 @@ const taskStatesRouter = router({
       cleanupOldDateKeyRecords().catch(() => {});
 
       // 今日のタスク状態を取得
-      const todayStates = await db.select().from(taskStates).where(eq(taskStates.dateKey, input.dateKey));
+      const todayStates = await db
+        .select()
+        .from(taskStates)
+        .where(eq(taskStates.dateKey, input.dateKey));
 
       // showOnDays設定タスクのIDリストを取得
       const showOnDaysTasks = await db
         .select({ id: taskDefinitions.id })
         .from(taskDefinitions)
-        .where(and(eq(taskDefinitions.isActive, true), gte(taskDefinitions.showOnDays, "1")));
+        .where(
+          and(
+            eq(taskDefinitions.isActive, true),
+            gte(taskDefinitions.showOnDays, "1")
+          )
+        );
 
       if (showOnDaysTasks.length === 0) return todayStates;
 
-      const showOnDaysTaskIds = new Set(showOnDaysTasks.map(t => `def-${t.id}`));
+      const showOnDaysTaskIds = new Set(
+        showOnDaysTasks.map(t => `def-${t.id}`)
+      );
 
       // 当月の開始日を計算（YYYY-MM-01）
       const monthStart = input.dateKey.slice(0, 7) + "-01";
@@ -55,7 +68,12 @@ const taskStatesRouter = router({
       const monthlyStates = await db
         .select()
         .from(taskStates)
-        .where(and(gte(taskStates.dateKey, monthStart), lte(taskStates.dateKey, input.dateKey)));
+        .where(
+          and(
+            gte(taskStates.dateKey, monthStart),
+            lte(taskStates.dateKey, input.dateKey)
+          )
+        );
 
       // 今日の状態をベースに、showOnDaysタスクの当月完了状態でマージ
       const todayStateMap = new Map(todayStates.map(s => [s.taskId, s]));
@@ -92,14 +110,20 @@ const taskStatesRouter = router({
           const todayNote = todayState.note ?? "";
           const hasCompletedDateTag = todayNote.includes("__completedDate:");
           // 補完に使うレコードは「__completedDateタグを持つ最新の当月完了レコード」
-          const monthlyCompletedWithTag = monthlyCompleted.filter(s => s.note?.includes("__completedDate:"));
+          const monthlyCompletedWithTag = monthlyCompleted.filter(s =>
+            s.note?.includes("__completedDate:")
+          );
           if (!hasCompletedDateTag && monthlyCompletedWithTag.length > 0) {
             // 当日レコードにタグがない → 当月完了レコードのnoteからタグを補完
             const original = monthlyCompletedWithTag[0];
             const completedDateTag = `__completedDate:${original.dateKey}`;
             const originalNote = original.note ?? "";
-            const completedByMatch = originalNote.match(/__completedBy:([^\n]+)/);
-            const completedByTag = completedByMatch ? `\n__completedBy:${completedByMatch[1].trim()}` : "";
+            const completedByMatch = originalNote.match(
+              /__completedBy:([^\n]+)/
+            );
+            const completedByTag = completedByMatch
+              ? `\n__completedBy:${completedByMatch[1].trim()}`
+              : "";
             const cleanTodayNote = todayNote
               .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
               .replace(/\n?__completedBy:[^\n]+/g, "")
@@ -119,13 +143,27 @@ const taskStatesRouter = router({
 
   // Upsert a task state
   upsert: publicProcedure
-    .input(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false), note: z.string().default("") }))
+    .input(
+      z.object({
+        dateKey: z.string(),
+        taskId: z.string(),
+        done: z.boolean(),
+        help: z.boolean().default(false),
+        note: z.string().default(""),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       await db
         .insert(taskStates)
-        .values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help, note: input.note })
+        .values({
+          dateKey: input.dateKey,
+          taskId: input.taskId,
+          done: input.done,
+          help: input.help,
+          note: input.note,
+        })
         .onConflictDoUpdate({
           target: [taskStates.dateKey, taskStates.taskId],
           set: { done: input.done, help: input.help, note: input.note },
@@ -134,14 +172,30 @@ const taskStatesRouter = router({
 
   // Bulk upsert task states
   bulkUpsert: publicProcedure
-    .input(z.array(z.object({ dateKey: z.string(), taskId: z.string(), done: z.boolean(), help: z.boolean().default(false), note: z.string().default("") })))
+    .input(
+      z.array(
+        z.object({
+          dateKey: z.string(),
+          taskId: z.string(),
+          done: z.boolean(),
+          help: z.boolean().default(false),
+          note: z.string().default(""),
+        })
+      )
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db || input.length === 0) return;
       for (const item of input) {
         await db
           .insert(taskStates)
-          .values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help, note: item.note })
+          .values({
+            dateKey: item.dateKey,
+            taskId: item.taskId,
+            done: item.done,
+            help: item.help,
+            note: item.note,
+          })
           .onConflictDoUpdate({
             target: [taskStates.dateKey, taskStates.taskId],
             set: { done: item.done, help: item.help, note: item.note },
@@ -157,24 +211,36 @@ const storeCheckRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
-      return db.select().from(storeCheckStates).where(eq(storeCheckStates.dateKey, input.dateKey));
+      return db
+        .select()
+        .from(storeCheckStates)
+        .where(eq(storeCheckStates.dateKey, input.dateKey));
     }),
 
   upsert: publicProcedure
-    .input(z.object({ dateKey: z.string(), checkType: z.string(), checkedStores: z.array(z.string()) }))
+    .input(
+      z.object({
+        dateKey: z.string(),
+        checkType: z.string(),
+        checkedStores: z.array(z.string()),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       await db
         .insert(storeCheckStates)
-        .values({ dateKey: input.dateKey, checkType: input.checkType, checkedStores: input.checkedStores })
+        .values({
+          dateKey: input.dateKey,
+          checkType: input.checkType,
+          checkedStores: input.checkedStores,
+        })
         .onConflictDoUpdate({
           target: [storeCheckStates.dateKey, storeCheckStates.checkType],
           set: { checkedStores: input.checkedStores },
         });
     }),
 });
-
 
 // ─── Individual Handovers (個別引き継ぎ) ──────────────────────────────────────
 const individualHandoverRouter = router({
@@ -185,25 +251,32 @@ const individualHandoverRouter = router({
       const db = await getDb();
       if (!db) return [];
       // Get all non-completed records (carries over) + today's records
-      const all = await db.select().from(individualHandovers).where(eq(individualHandovers.completed, false));
+      const all = await db
+        .select()
+        .from(individualHandovers)
+        .where(eq(individualHandovers.completed, false));
       return all;
     }),
 
   upsert: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      dateKey: z.string(),
-      author: z.string(),
-      target: z.string(),
-      tasks: z.array(z.object({
+    .input(
+      z.object({
         id: z.string(),
-        content: z.string(),
-        done: z.boolean(),
-        deadline: z.string().optional(),
-      })),
-      completed: z.boolean(),
-      important: z.boolean().optional().default(false),
-    }))
+        dateKey: z.string(),
+        author: z.string(),
+        target: z.string(),
+        tasks: z.array(
+          z.object({
+            id: z.string(),
+            content: z.string(),
+            done: z.boolean(),
+            deadline: z.string().optional(),
+          })
+        ),
+        completed: z.boolean(),
+        important: z.boolean().optional().default(false),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
@@ -212,7 +285,13 @@ const individualHandoverRouter = router({
         .values({ ...input, important: input.important ?? false })
         .onConflictDoUpdate({
           target: individualHandovers.id,
-          set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed, important: input.important ?? false },
+          set: {
+            author: input.author,
+            target: input.target,
+            tasks: input.tasks,
+            completed: input.completed,
+            important: input.important ?? false,
+          },
         });
     }),
 
@@ -221,48 +300,80 @@ const individualHandoverRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
-      await db.delete(individualHandovers).where(eq(individualHandovers.id, input.id));
+      await db
+        .delete(individualHandovers)
+        .where(eq(individualHandovers.id, input.id));
     }),
 });
 
 // ─── Customer Handovers (顧客引き継ぎ) ───────────────────────────────────────
+let customerCallColumnsEnsured = false;
+
+async function ensureCustomerCallColumns(db: Awaited<ReturnType<typeof getDb>>) {
+  if (!db || customerCallColumnsEnsured) return;
+  await db.execute(sql`
+    ALTER TABLE "customer_handovers"
+      ADD COLUMN IF NOT EXISTS "callCount" integer DEFAULT 0 NOT NULL
+  `);
+  customerCallColumnsEnsured = true;
+}
+
 const customerHandoverRouter = router({
   getActive: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
+    await ensureCustomerCallColumns(db);
     // 「完了」ステータスのレコードをDBから自動削除してから返す
-    await db.delete(customerHandovers).where(eq(customerHandovers.status, "完了"));
+    await db
+      .delete(customerHandovers)
+      .where(eq(customerHandovers.status, "完了"));
     return db.select().from(customerHandovers);
   }),
 
   upsert: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      dateKey: z.string(),
-      customerName: z.string(),
-      store: z.string(),
-      content: z.string(),
-      status: z.string(),
-      assignee: z.string(),
-      links: z.array(z.string()).max(4).optional(),
-      dueDate: z.number().nullable().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+        dateKey: z.string(),
+        customerName: z.string(),
+        store: z.string(),
+        content: z.string(),
+        status: z.string(),
+        assignee: z.string(),
+        links: z.array(z.string()).max(4).optional(),
+        dueDate: z.number().nullable().optional(),
+        callCount: z.number().int().min(0).max(2).optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       // 「完了」ステータスのupsertは受け付けず即座に削除する
       if (input.status === "完了") {
-        await db.delete(customerHandovers).where(eq(customerHandovers.id, input.id));
+        await db
+          .delete(customerHandovers)
+          .where(eq(customerHandovers.id, input.id));
         return;
       }
       const links = input.links ?? [];
       const dueDate = input.dueDate ?? null;
+      const callCount = input.callCount ?? 0;
+      await ensureCustomerCallColumns(db);
       await db
         .insert(customerHandovers)
-        .values({ ...input, links, dueDate })
+        .values({ ...input, links, dueDate, callCount })
         .onConflictDoUpdate({
           target: customerHandovers.id,
-          set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links, dueDate },
+          set: {
+            customerName: input.customerName,
+            store: input.store,
+            content: input.content,
+            status: input.status,
+            assignee: input.assignee,
+            links,
+            dueDate,
+            callCount,
+          },
         });
     }),
 
@@ -271,7 +382,9 @@ const customerHandoverRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
-      await db.delete(customerHandovers).where(eq(customerHandovers.id, input.id));
+      await db
+        .delete(customerHandovers)
+        .where(eq(customerHandovers.id, input.id));
     }),
 });
 
@@ -291,9 +404,13 @@ const misocaRouter = router({
       if (!db) return;
       const existing = await db.select().from(misocaStatus).limit(1);
       if (existing.length > 0) {
-        await db.update(misocaStatus).set({ completedUntil: input.completedUntil });
+        await db
+          .update(misocaStatus)
+          .set({ completedUntil: input.completedUntil });
       } else {
-        await db.insert(misocaStatus).values({ completedUntil: input.completedUntil });
+        await db
+          .insert(misocaStatus)
+          .values({ completedUntil: input.completedUntil });
       }
     }),
 });
@@ -308,15 +425,30 @@ const grayCellRouter = router({
   }),
 
   upsert: publicProcedure
-    .input(z.object({ confirmedUntil: z.string(), updatedBy: z.string().default("") }))
+    .input(
+      z.object({
+        confirmedUntil: z.string(),
+        updatedBy: z.string().default(""),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       const existing = await db.select().from(grayCellStatus).limit(1);
       if (existing.length > 0) {
-        await db.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+        await db
+          .update(grayCellStatus)
+          .set({
+            confirmedUntil: input.confirmedUntil,
+            updatedBy: input.updatedBy,
+          });
       } else {
-        await db.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+        await db
+          .insert(grayCellStatus)
+          .values({
+            confirmedUntil: input.confirmedUntil,
+            updatedBy: input.updatedBy,
+          });
       }
     }),
 });
@@ -331,15 +463,30 @@ const storesShiftRouter = router({
   }),
 
   upsert: publicProcedure
-    .input(z.object({ confirmedUntil: z.string(), updatedBy: z.string().default("") }))
+    .input(
+      z.object({
+        confirmedUntil: z.string(),
+        updatedBy: z.string().default(""),
+      })
+    )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) return;
       const existing = await db.select().from(storesShiftStatus).limit(1);
       if (existing.length > 0) {
-        await db.update(storesShiftStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+        await db
+          .update(storesShiftStatus)
+          .set({
+            confirmedUntil: input.confirmedUntil,
+            updatedBy: input.updatedBy,
+          });
       } else {
-        await db.insert(storesShiftStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+        await db
+          .insert(storesShiftStatus)
+          .values({
+            confirmedUntil: input.confirmedUntil,
+            updatedBy: input.updatedBy,
+          });
       }
     }),
 });

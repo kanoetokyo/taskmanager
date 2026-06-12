@@ -9,6 +9,7 @@ CREATE TABLE "customer_handovers" (
 	"assignee" varchar(64) DEFAULT '' NOT NULL,
 	"links" jsonb,
 	"dueDate" bigint,
+	"callCount" integer DEFAULT 0 NOT NULL,
 	"createdAt" timestamp DEFAULT now() NOT NULL,
 	"updatedAt" timestamp DEFAULT now() NOT NULL
 );

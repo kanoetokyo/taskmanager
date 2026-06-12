@@ -1,4 +1,16 @@
-import { bigint, boolean, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const userRole = pgEnum("role", ["user", "admin"]);
 
@@ -20,7 +32,10 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: userRole("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -30,30 +45,53 @@ export type InsertUser = typeof users.$inferInsert;
 // TODO: Add your tables here
 
 // ─── Task States (per date) ────────────────────────────────────────────────
-export const taskStates = pgTable("task_states", {
-  id: serial("id").primaryKey(),
-  dateKey: varchar("dateKey", { length: 10 }).notNull(),
-  taskId: varchar("taskId", { length: 128 }).notNull(),
-  done: boolean("done").default(false).notNull(),
-  help: boolean("help").default(false).notNull(),
-  note: varchar("note", { length: 1024 }).notNull().default(""),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
-}, (table) => ({
-  dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(table.dateKey, table.taskId),
-}));
+export const taskStates = pgTable(
+  "task_states",
+  {
+    id: serial("id").primaryKey(),
+    dateKey: varchar("dateKey", { length: 10 }).notNull(),
+    taskId: varchar("taskId", { length: 128 }).notNull(),
+    done: boolean("done").default(false).notNull(),
+    help: boolean("help").default(false).notNull(),
+    note: varchar("note", { length: 1024 }).notNull().default(""),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  table => ({
+    dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(
+      table.dateKey,
+      table.taskId
+    ),
+  })
+);
 export type TaskState = typeof taskStates.$inferSelect;
 export type InsertTaskState = typeof taskStates.$inferInsert;
 
 // ─── Store Check States (per date) ────────────────────────────────────────
-export const storeCheckStates = pgTable("store_check_states", {
-  id: serial("id").primaryKey(),
-  dateKey: varchar("dateKey", { length: 10 }).notNull(),
-  checkType: varchar("checkType", { length: 32 }).notNull(),
-  checkedStores: jsonb("checkedStores").notNull().$type<string[]>().default([]),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
-}, (table) => ({
-  dateKeyCheckTypeIdx: uniqueIndex("store_check_states_date_type_unique").on(table.dateKey, table.checkType),
-}));
+export const storeCheckStates = pgTable(
+  "store_check_states",
+  {
+    id: serial("id").primaryKey(),
+    dateKey: varchar("dateKey", { length: 10 }).notNull(),
+    checkType: varchar("checkType", { length: 32 }).notNull(),
+    checkedStores: jsonb("checkedStores")
+      .notNull()
+      .$type<string[]>()
+      .default([]),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  table => ({
+    dateKeyCheckTypeIdx: uniqueIndex("store_check_states_date_type_unique").on(
+      table.dateKey,
+      table.checkType
+    ),
+  })
+);
 export type StoreCheckState = typeof storeCheckStates.$inferSelect;
 export type InsertStoreCheckState = typeof storeCheckStates.$inferInsert;
 
@@ -63,11 +101,19 @@ export const individualHandovers = pgTable("individual_handovers", {
   dateKey: varchar("dateKey", { length: 10 }).notNull(),
   author: varchar("author", { length: 64 }).notNull().default(""),
   target: varchar("target", { length: 64 }).notNull().default(""),
-  tasks: jsonb("tasks").notNull().$type<Array<{ id: string; content: string; done: boolean; deadline?: string }>>().default([]),
+  tasks: jsonb("tasks")
+    .notNull()
+    .$type<
+      Array<{ id: string; content: string; done: boolean; deadline?: string }>
+    >()
+    .default([]),
   completed: boolean("completed").default(false).notNull(),
   important: boolean("important").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type IndividualHandover = typeof individualHandovers.$inferSelect;
 export type InsertIndividualHandover = typeof individualHandovers.$inferInsert;
@@ -83,8 +129,12 @@ export const customerHandovers = pgTable("customer_handovers", {
   assignee: varchar("assignee", { length: 64 }).notNull().default(""),
   links: jsonb("links").$type<string[]>(),
   dueDate: bigint("dueDate", { mode: "number" }),
+  callCount: integer("callCount").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type CustomerHandover = typeof customerHandovers.$inferSelect;
 export type InsertCustomerHandover = typeof customerHandovers.$inferInsert;
@@ -92,8 +142,13 @@ export type InsertCustomerHandover = typeof customerHandovers.$inferInsert;
 // ─── MISOCA Status (グローバル) ──────────────────────────────────────────────────────
 export const misocaStatus = pgTable("misoca_status", {
   id: serial("id").primaryKey(),
-  completedUntil: varchar("completedUntil", { length: 16 }).notNull().default(""),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  completedUntil: varchar("completedUntil", { length: 16 })
+    .notNull()
+    .default(""),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type MisocaStatus = typeof misocaStatus.$inferSelect;
 export type InsertMisocaStatus = typeof misocaStatus.$inferInsert;
@@ -101,9 +156,14 @@ export type InsertMisocaStatus = typeof misocaStatus.$inferInsert;
 // ─── Gray Cell Status (グレーセル確認, グローバル) ─────────────────────────────────────
 export const grayCellStatus = pgTable("gray_cell_status", {
   id: serial("id").primaryKey(),
-  confirmedUntil: varchar("confirmedUntil", { length: 16 }).notNull().default(""),
+  confirmedUntil: varchar("confirmedUntil", { length: 16 })
+    .notNull()
+    .default(""),
   updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type GrayCellStatus = typeof grayCellStatus.$inferSelect;
 export type InsertGrayCellStatus = typeof grayCellStatus.$inferInsert;
@@ -111,9 +171,14 @@ export type InsertGrayCellStatus = typeof grayCellStatus.$inferInsert;
 // ─── STORES Shift Status (STORESシフト, グローバル) ──────────────────────────────────────
 export const storesShiftStatus = pgTable("stores_shift_status", {
   id: serial("id").primaryKey(),
-  confirmedUntil: varchar("confirmedUntil", { length: 16 }).notNull().default(""),
+  confirmedUntil: varchar("confirmedUntil", { length: 16 })
+    .notNull()
+    .default(""),
   updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type StoresShiftStatus = typeof storesShiftStatus.$inferSelect;
 export type InsertStoresShiftStatus = typeof storesShiftStatus.$inferInsert;
@@ -125,7 +190,10 @@ export const taskCategories = pgTable("task_categories", {
   sortOrder: integer("sortOrder").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type TaskCategory = typeof taskCategories.$inferSelect;
 export type InsertTaskCategory = typeof taskCategories.$inferInsert;
@@ -135,14 +203,19 @@ export const taskDefinitions = pgTable("task_definitions", {
   id: serial("id").primaryKey(),
   categoryId: integer("categoryId").notNull(),
   label: varchar("label", { length: 512 }).notNull(),
-  defaultPlanned: varchar("defaultPlanned", { length: 64 }).notNull().default("当日事務担当"),
+  defaultPlanned: varchar("defaultPlanned", { length: 64 })
+    .notNull()
+    .default("当日事務担当"),
   deadline: varchar("deadline", { length: 64 }).notNull().default(""),
   sortOrder: integer("sortOrder").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   legacyId: varchar("legacyId", { length: 128 }), // 既存BASE_TASKS文字列IDとの互換性維持用
   showOnDays: varchar("showOnDays", { length: 128 }).notNull().default(""), // 表示日制限（例: "15,30" = 毎月15日・30日のみ。空文字列 = 常時表示）
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 export type TaskDefinition = typeof taskDefinitions.$inferSelect;
 export type InsertTaskDefinition = typeof taskDefinitions.$inferInsert;

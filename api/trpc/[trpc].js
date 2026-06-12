@@ -24,7 +24,19 @@ __export(schema_exports, {
   userRole: () => userRole,
   users: () => users
 });
-import { bigint, boolean, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar
+} from "drizzle-orm/pg-core";
 var userRole, users, taskStates, storeCheckStates, individualHandovers, customerHandovers, misocaStatus, grayCellStatus, storesShiftStatus, taskCategories, taskDefinitions;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
@@ -46,26 +58,40 @@ var init_schema = __esm({
       updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date()),
       lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
     });
-    taskStates = pgTable("task_states", {
-      id: serial("id").primaryKey(),
-      dateKey: varchar("dateKey", { length: 10 }).notNull(),
-      taskId: varchar("taskId", { length: 128 }).notNull(),
-      done: boolean("done").default(false).notNull(),
-      help: boolean("help").default(false).notNull(),
-      note: varchar("note", { length: 1024 }).notNull().default(""),
-      updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
-    }, (table) => ({
-      dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(table.dateKey, table.taskId)
-    }));
-    storeCheckStates = pgTable("store_check_states", {
-      id: serial("id").primaryKey(),
-      dateKey: varchar("dateKey", { length: 10 }).notNull(),
-      checkType: varchar("checkType", { length: 32 }).notNull(),
-      checkedStores: jsonb("checkedStores").notNull().$type().default([]),
-      updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
-    }, (table) => ({
-      dateKeyCheckTypeIdx: uniqueIndex("store_check_states_date_type_unique").on(table.dateKey, table.checkType)
-    }));
+    taskStates = pgTable(
+      "task_states",
+      {
+        id: serial("id").primaryKey(),
+        dateKey: varchar("dateKey", { length: 10 }).notNull(),
+        taskId: varchar("taskId", { length: 128 }).notNull(),
+        done: boolean("done").default(false).notNull(),
+        help: boolean("help").default(false).notNull(),
+        note: varchar("note", { length: 1024 }).notNull().default(""),
+        updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
+      },
+      (table) => ({
+        dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(
+          table.dateKey,
+          table.taskId
+        )
+      })
+    );
+    storeCheckStates = pgTable(
+      "store_check_states",
+      {
+        id: serial("id").primaryKey(),
+        dateKey: varchar("dateKey", { length: 10 }).notNull(),
+        checkType: varchar("checkType", { length: 32 }).notNull(),
+        checkedStores: jsonb("checkedStores").notNull().$type().default([]),
+        updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
+      },
+      (table) => ({
+        dateKeyCheckTypeIdx: uniqueIndex("store_check_states_date_type_unique").on(
+          table.dateKey,
+          table.checkType
+        )
+      })
+    );
     individualHandovers = pgTable("individual_handovers", {
       id: varchar("id", { length: 64 }).primaryKey(),
       dateKey: varchar("dateKey", { length: 10 }).notNull(),
@@ -87,6 +113,7 @@ var init_schema = __esm({
       assignee: varchar("assignee", { length: 64 }).notNull().default(""),
       links: jsonb("links").$type(),
       dueDate: bigint("dueDate", { mode: "number" }),
+      callCount: integer("callCount").default(0).notNull(),
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
     });
@@ -319,7 +346,7 @@ var systemRouter = router({
 
 // server/taskRouter.ts
 init_schema();
-import { and as and2, eq as eq2, gte as gte2, lte } from "drizzle-orm";
+import { and as and2, eq as eq2, gte as gte2, lte, sql } from "drizzle-orm";
 import { z as z2 } from "zod";
 
 // server/db.ts
@@ -459,11 +486,23 @@ var taskStatesRouter = router({
     cleanupOldDateKeyRecords().catch(() => {
     });
     const todayStates = await db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
-    const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(and2(eq2(taskDefinitions.isActive, true), gte2(taskDefinitions.showOnDays, "1")));
+    const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(
+      and2(
+        eq2(taskDefinitions.isActive, true),
+        gte2(taskDefinitions.showOnDays, "1")
+      )
+    );
     if (showOnDaysTasks.length === 0) return todayStates;
-    const showOnDaysTaskIds = new Set(showOnDaysTasks.map((t2) => `def-${t2.id}`));
+    const showOnDaysTaskIds = new Set(
+      showOnDaysTasks.map((t2) => `def-${t2.id}`)
+    );
     const monthStart = input.dateKey.slice(0, 7) + "-01";
-    const monthlyStates = await db.select().from(taskStates).where(and2(gte2(taskStates.dateKey, monthStart), lte(taskStates.dateKey, input.dateKey)));
+    const monthlyStates = await db.select().from(taskStates).where(
+      and2(
+        gte2(taskStates.dateKey, monthStart),
+        lte(taskStates.dateKey, input.dateKey)
+      )
+    );
     const todayStateMap = new Map(todayStates.map((s) => [s.taskId, s]));
     const result = todayStates.filter((s) => !showOnDaysTaskIds.has(s.taskId));
     for (const taskId of Array.from(showOnDaysTaskIds)) {
@@ -483,12 +522,16 @@ ${completedDateTag}` : completedDateTag;
       } else if (todayState) {
         const todayNote = todayState.note ?? "";
         const hasCompletedDateTag = todayNote.includes("__completedDate:");
-        const monthlyCompletedWithTag = monthlyCompleted.filter((s) => s.note?.includes("__completedDate:"));
+        const monthlyCompletedWithTag = monthlyCompleted.filter(
+          (s) => s.note?.includes("__completedDate:")
+        );
         if (!hasCompletedDateTag && monthlyCompletedWithTag.length > 0) {
           const original = monthlyCompletedWithTag[0];
           const completedDateTag = `__completedDate:${original.dateKey}`;
           const originalNote = original.note ?? "";
-          const completedByMatch = originalNote.match(/__completedBy:([^\n]+)/);
+          const completedByMatch = originalNote.match(
+            /__completedBy:([^\n]+)/
+          );
           const completedByTag = completedByMatch ? `
 __completedBy:${completedByMatch[1].trim()}` : "";
           const cleanTodayNote = todayNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim();
@@ -503,20 +546,50 @@ ${completedDateTag}${completedByTag}` : `${completedDateTag}${completedByTag}`;
     return result;
   }),
   // Upsert a task state
-  upsert: publicProcedure.input(z2.object({ dateKey: z2.string(), taskId: z2.string(), done: z2.boolean(), help: z2.boolean().default(false), note: z2.string().default("") })).mutation(async ({ input }) => {
+  upsert: publicProcedure.input(
+    z2.object({
+      dateKey: z2.string(),
+      taskId: z2.string(),
+      done: z2.boolean(),
+      help: z2.boolean().default(false),
+      note: z2.string().default("")
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
-    await db.insert(taskStates).values({ dateKey: input.dateKey, taskId: input.taskId, done: input.done, help: input.help, note: input.note }).onConflictDoUpdate({
+    await db.insert(taskStates).values({
+      dateKey: input.dateKey,
+      taskId: input.taskId,
+      done: input.done,
+      help: input.help,
+      note: input.note
+    }).onConflictDoUpdate({
       target: [taskStates.dateKey, taskStates.taskId],
       set: { done: input.done, help: input.help, note: input.note }
     });
   }),
   // Bulk upsert task states
-  bulkUpsert: publicProcedure.input(z2.array(z2.object({ dateKey: z2.string(), taskId: z2.string(), done: z2.boolean(), help: z2.boolean().default(false), note: z2.string().default("") }))).mutation(async ({ input }) => {
+  bulkUpsert: publicProcedure.input(
+    z2.array(
+      z2.object({
+        dateKey: z2.string(),
+        taskId: z2.string(),
+        done: z2.boolean(),
+        help: z2.boolean().default(false),
+        note: z2.string().default("")
+      })
+    )
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db || input.length === 0) return;
     for (const item of input) {
-      await db.insert(taskStates).values({ dateKey: item.dateKey, taskId: item.taskId, done: item.done, help: item.help, note: item.note }).onConflictDoUpdate({
+      await db.insert(taskStates).values({
+        dateKey: item.dateKey,
+        taskId: item.taskId,
+        done: item.done,
+        help: item.help,
+        note: item.note
+      }).onConflictDoUpdate({
         target: [taskStates.dateKey, taskStates.taskId],
         set: { done: item.done, help: item.help, note: item.note }
       });
@@ -529,10 +602,20 @@ var storeCheckRouter = router({
     if (!db) return [];
     return db.select().from(storeCheckStates).where(eq2(storeCheckStates.dateKey, input.dateKey));
   }),
-  upsert: publicProcedure.input(z2.object({ dateKey: z2.string(), checkType: z2.string(), checkedStores: z2.array(z2.string()) })).mutation(async ({ input }) => {
+  upsert: publicProcedure.input(
+    z2.object({
+      dateKey: z2.string(),
+      checkType: z2.string(),
+      checkedStores: z2.array(z2.string())
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
-    await db.insert(storeCheckStates).values({ dateKey: input.dateKey, checkType: input.checkType, checkedStores: input.checkedStores }).onConflictDoUpdate({
+    await db.insert(storeCheckStates).values({
+      dateKey: input.dateKey,
+      checkType: input.checkType,
+      checkedStores: input.checkedStores
+    }).onConflictDoUpdate({
       target: [storeCheckStates.dateKey, storeCheckStates.checkType],
       set: { checkedStores: input.checkedStores }
     });
@@ -546,25 +629,35 @@ var individualHandoverRouter = router({
     const all = await db.select().from(individualHandovers).where(eq2(individualHandovers.completed, false));
     return all;
   }),
-  upsert: publicProcedure.input(z2.object({
-    id: z2.string(),
-    dateKey: z2.string(),
-    author: z2.string(),
-    target: z2.string(),
-    tasks: z2.array(z2.object({
+  upsert: publicProcedure.input(
+    z2.object({
       id: z2.string(),
-      content: z2.string(),
-      done: z2.boolean(),
-      deadline: z2.string().optional()
-    })),
-    completed: z2.boolean(),
-    important: z2.boolean().optional().default(false)
-  })).mutation(async ({ input }) => {
+      dateKey: z2.string(),
+      author: z2.string(),
+      target: z2.string(),
+      tasks: z2.array(
+        z2.object({
+          id: z2.string(),
+          content: z2.string(),
+          done: z2.boolean(),
+          deadline: z2.string().optional()
+        })
+      ),
+      completed: z2.boolean(),
+      important: z2.boolean().optional().default(false)
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
     await db.insert(individualHandovers).values({ ...input, important: input.important ?? false }).onConflictDoUpdate({
       target: individualHandovers.id,
-      set: { author: input.author, target: input.target, tasks: input.tasks, completed: input.completed, important: input.important ?? false }
+      set: {
+        author: input.author,
+        target: input.target,
+        tasks: input.tasks,
+        completed: input.completed,
+        important: input.important ?? false
+      }
     });
   }),
   delete: publicProcedure.input(z2.object({ id: z2.string() })).mutation(async ({ input }) => {
@@ -573,24 +666,37 @@ var individualHandoverRouter = router({
     await db.delete(individualHandovers).where(eq2(individualHandovers.id, input.id));
   })
 });
+var customerCallColumnsEnsured = false;
+async function ensureCustomerCallColumns(db) {
+  if (!db || customerCallColumnsEnsured) return;
+  await db.execute(sql`
+    ALTER TABLE "customer_handovers"
+      ADD COLUMN IF NOT EXISTS "callCount" integer DEFAULT 0 NOT NULL
+  `);
+  customerCallColumnsEnsured = true;
+}
 var customerHandoverRouter = router({
   getActive: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
+    await ensureCustomerCallColumns(db);
     await db.delete(customerHandovers).where(eq2(customerHandovers.status, "\u5B8C\u4E86"));
     return db.select().from(customerHandovers);
   }),
-  upsert: publicProcedure.input(z2.object({
-    id: z2.string(),
-    dateKey: z2.string(),
-    customerName: z2.string(),
-    store: z2.string(),
-    content: z2.string(),
-    status: z2.string(),
-    assignee: z2.string(),
-    links: z2.array(z2.string()).max(4).optional(),
-    dueDate: z2.number().nullable().optional()
-  })).mutation(async ({ input }) => {
+  upsert: publicProcedure.input(
+    z2.object({
+      id: z2.string(),
+      dateKey: z2.string(),
+      customerName: z2.string(),
+      store: z2.string(),
+      content: z2.string(),
+      status: z2.string(),
+      assignee: z2.string(),
+      links: z2.array(z2.string()).max(4).optional(),
+      dueDate: z2.number().nullable().optional(),
+      callCount: z2.number().int().min(0).max(2).optional()
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
     if (input.status === "\u5B8C\u4E86") {
@@ -599,9 +705,20 @@ var customerHandoverRouter = router({
     }
     const links = input.links ?? [];
     const dueDate = input.dueDate ?? null;
-    await db.insert(customerHandovers).values({ ...input, links, dueDate }).onConflictDoUpdate({
+    const callCount = input.callCount ?? 0;
+    await ensureCustomerCallColumns(db);
+    await db.insert(customerHandovers).values({ ...input, links, dueDate, callCount }).onConflictDoUpdate({
       target: customerHandovers.id,
-      set: { customerName: input.customerName, store: input.store, content: input.content, status: input.status, assignee: input.assignee, links, dueDate }
+      set: {
+        customerName: input.customerName,
+        store: input.store,
+        content: input.content,
+        status: input.status,
+        assignee: input.assignee,
+        links,
+        dueDate,
+        callCount
+      }
     });
   }),
   delete: publicProcedure.input(z2.object({ id: z2.string() })).mutation(async ({ input }) => {
@@ -635,14 +752,25 @@ var grayCellRouter = router({
     const result = await db.select().from(grayCellStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: publicProcedure.input(z2.object({ confirmedUntil: z2.string(), updatedBy: z2.string().default("") })).mutation(async ({ input }) => {
+  upsert: publicProcedure.input(
+    z2.object({
+      confirmedUntil: z2.string(),
+      updatedBy: z2.string().default("")
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
     const existing = await db.select().from(grayCellStatus).limit(1);
     if (existing.length > 0) {
-      await db.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      await db.update(grayCellStatus).set({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      });
     } else {
-      await db.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      await db.insert(grayCellStatus).values({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      });
     }
   })
 });
@@ -653,14 +781,25 @@ var storesShiftRouter = router({
     const result = await db.select().from(storesShiftStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: publicProcedure.input(z2.object({ confirmedUntil: z2.string(), updatedBy: z2.string().default("") })).mutation(async ({ input }) => {
+  upsert: publicProcedure.input(
+    z2.object({
+      confirmedUntil: z2.string(),
+      updatedBy: z2.string().default("")
+    })
+  ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) return;
     const existing = await db.select().from(storesShiftStatus).limit(1);
     if (existing.length > 0) {
-      await db.update(storesShiftStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      await db.update(storesShiftStatus).set({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      });
     } else {
-      await db.insert(storesShiftStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy });
+      await db.insert(storesShiftStatus).values({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      });
     }
   })
 });
