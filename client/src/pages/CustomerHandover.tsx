@@ -17,7 +17,7 @@
  * - 削除はUI即時反映 + DB非同期削除（ポーリングに依存しない）。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import {
@@ -189,7 +189,7 @@ interface CustomerCardProps {
   onCalledToggle: (id: string, callCount?: number) => void;
 }
 
-function CustomerCard({
+const CustomerCard = memo(function CustomerCard({
   c,
   onUpdate,
   onDelete,
@@ -200,11 +200,11 @@ function CustomerCard({
   const overdue = isOverdue(c);
   const isKorekara = c.status === "これから";
   const isUnreachable = c.status === "不通・未対応";
-  const autosize = (el: HTMLTextAreaElement | null) => {
+  const autosize = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  };
+  }, []);
 
   if (isUnreachable || isKorekara) {
     const cardTone = isUnreachable
@@ -522,7 +522,7 @@ function CustomerCard({
       )}
     </div>
   );
-}
+});
 
 // ─── メインコンポーネント ────────────────────────────────────────────────────
 
