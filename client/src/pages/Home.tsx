@@ -1478,7 +1478,7 @@ export default function Home() {
                 {prevDayUndoneTasks.map(task => (
                   <div key={task.id} className="flex items-center gap-2 px-4 py-2">
                     <span className="text-rose-400 shrink-0">{task.icon}</span>
-                    <span className="flex-1 text-sm text-rose-800">{task.label}</span>
+                    <span className="flex-1 text-sm text-rose-800 whitespace-pre-line">{task.label}</span>
                     {task.planned && (
                       <span className="text-xs text-rose-500 bg-rose-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
                     )}
@@ -2253,12 +2253,18 @@ export default function Home() {
                     {/* 編集モード時: インライン編集UI */}
                     {isEditMode && isThisEditing ? (
                       <div className="space-y-2">
-                        <input
-                          type="text"
+                        <textarea
                           value={editingLabel}
                           onChange={e => setEditingLabel(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") saveEditTask(); if (e.key === "Escape") setEditingTaskId(null); }}
-                          className="w-full text-sm border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault();
+                              saveEditTask();
+                            }
+                            if (e.key === "Escape") setEditingTaskId(null);
+                          }}
+                          rows={2}
+                          className="w-full text-sm leading-relaxed border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
                           autoFocus
                         />
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2344,7 +2350,7 @@ export default function Home() {
                       </span>
 
                       {/* Label */}
-                      <span className={`flex-1 text-sm leading-snug min-w-0 ${
+                      <span className={`flex-1 text-sm leading-snug min-w-0 whitespace-pre-line ${
                         task.done
                           ? "text-gray-400 line-through"
                           : task.isOverdue
@@ -2708,12 +2714,18 @@ export default function Home() {
                       {isEditMode && isThisEditing ? (
                         // 編集インラインフォーム
                         <div className="space-y-2">
-                          <input
-                            type="text"
+                          <textarea
                             value={editingLabel}
                             onChange={e => setEditingLabel(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") saveEditTask(); if (e.key === "Escape") setEditingTaskId(null); }}
-                            className="w-full text-sm border border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                saveEditTask();
+                              }
+                              if (e.key === "Escape") setEditingTaskId(null);
+                            }}
+                            rows={2}
+                            className="w-full text-sm leading-relaxed border border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
                             autoFocus
                           />
                           <div className="flex gap-2">
@@ -2787,7 +2799,7 @@ export default function Home() {
                               }`}>HELP</span>
                             </label>
                             <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
-                            <span className={`flex-1 text-sm leading-snug ${
+                            <span className={`flex-1 text-sm leading-snug whitespace-pre-line ${
                               task.done
                                 ? "line-through text-gray-400"
                                 : task.isOverdue
@@ -2987,13 +2999,19 @@ export default function Home() {
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 font-medium">タスク名 <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
+                <textarea
                   value={addTaskLabel}
                   onChange={e => setAddTaskLabel(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && addTaskLabel.trim()) handleAddTask(); if (e.key === "Escape") setShowAddTaskDialog(false); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && addTaskLabel.trim()) {
+                      e.preventDefault();
+                      handleAddTask();
+                    }
+                    if (e.key === "Escape") setShowAddTaskDialog(false);
+                  }}
                   placeholder="タスクの内容を入力…"
-                  className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  rows={3}
+                  className="mt-1 w-full text-sm leading-relaxed border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
                   autoFocus
                 />
               </div>
@@ -3150,7 +3168,7 @@ export default function Home() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mb-1 leading-relaxed">{completedByDialog.label}</p>
+            <p className="text-xs text-gray-500 mb-1 leading-relaxed whitespace-pre-line">{completedByDialog.label}</p>
             {(() => {
               const [, m, d] = completedByDialog.completedDateKey.split("-");
               return <p className="text-xs text-green-600 font-medium mb-4">✓ {parseInt(m)}月{parseInt(d)}日完了</p>;
@@ -3230,7 +3248,7 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-bold text-gray-800 mb-2">タスクを削除</h2>
-            <p className="text-sm text-gray-600 mb-4">「{deleteConfirm.label}」を削除しますか？<br /><span className="text-xs text-gray-400">この操作は元に戻せません。</span></p>
+            <p className="text-sm text-gray-600 mb-4 whitespace-pre-line">「{deleteConfirm.label}」を削除しますか？<br /><span className="text-xs text-gray-400">この操作は元に戻せません。</span></p>
             <div className="flex gap-2">
               <button
                 onClick={() => confirmDeleteTask(deleteConfirm.id)}

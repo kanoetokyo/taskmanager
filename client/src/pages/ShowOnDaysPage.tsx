@@ -189,7 +189,7 @@ function TaskRow({ task, taskState, todayDateKey, onSave, onSaveCompletedDate }:
             : "border-gray-100 bg-gray-50"
     }`}>
       {/* タスク名（1行フル表示） */}
-      <p className={`text-sm font-medium leading-snug mb-1.5 ${
+      <p className={`text-sm font-medium leading-snug mb-1.5 whitespace-pre-line ${
         overdue && !visible ? "text-red-700" : "text-gray-800"
       }`}>
         {task.label}
