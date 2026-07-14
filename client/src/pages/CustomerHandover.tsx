@@ -65,6 +65,7 @@ const CONTACT_OPTIONS = [
   ...STORE_NAMES_FULL.map(s => `POS(${s})`),
   ...STORE_NAMES_FULL.map(s => `ラクーン(${s})`),
   ...STORE_NAMES_FULL.map(s => `LINE(${s})`),
+  "ストアーズLINE",
   "フリーダイヤル",
   "来店",
   "SMS",
