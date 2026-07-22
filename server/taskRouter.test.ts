@@ -126,17 +126,11 @@ describe("customer status logic", () => {
     expect(nonCompleted.map(c => c.name)).toEqual(["田中", "佐藤"]);
   });
 
-  it("完了ステータスのupsertは安全にスキップされるべき", () => {
-    // upsert時に「完了」ステータスのレコードは保存しないことを検証
-    const customers = [
-      { id: "1", status: "不通・未対応", name: "田中" },
-      { id: "2", status: "完了", name: "鈴木" },
-      { id: "3", status: "これから", name: "佐藤" },
-    ];
-    const toUpsert = customers.filter(c => c.status !== "完了");
-    expect(toUpsert.length).toBe(2);
-    expect(toUpsert.map(c => c.name)).toEqual(["田中", "佐藤"]);
-    expect(toUpsert.every(c => c.status !== "完了")).toBe(true);
+  it("完了ステータスは論理アーカイブとして保存できる", () => {
+    const completion = { id: "2", status: "完了", completedAt: new Date() };
+
+    expect(completion.status).toBe("完了");
+    expect(completion.completedAt).toBeInstanceOf(Date);
   });
 
   it("完了ステータスに変更されたレコードはフロントエンドから除去されるべき", () => {
@@ -281,43 +275,19 @@ describe("Gray Cell date logic", () => {
   });
 });
 
-describe("cleanup old date key records logic", () => {
-  /** cutoffKey: 今日から3日前の日付文字列を計算するロジックのテスト */
-  function calcCutoffKey(today: string): string {
-    const [y, m, d] = today.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
-    date.setDate(date.getDate() - 3);
-    return date.toISOString().slice(0, 10);
-  }
-
-  it("calculates cutoff key as 3 days before today", () => {
-    const cutoff = calcCutoffKey("2026-03-17");
-    expect(cutoff).toBe("2026-03-14");
-  });
-
-  it("records older than cutoff should be deleted", () => {
-    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
+describe("date key record retention", () => {
+  it("keeps historical task and store records until a retention policy is explicitly approved", () => {
     const records = [
-      { dateKey: "2026-03-13" }, // 4日前 → 削除対象
-      { dateKey: "2026-03-14" }, // ちょうど3日前 → 残す（lt: strictly less than）
-      { dateKey: "2026-03-15" }, // 2日前 → 残す
-      { dateKey: "2026-03-17" }, // 今日 → 残す
+      { dateKey: "2026-03-13" },
+      { dateKey: "2026-03-14" },
+      { dateKey: "2026-03-17" },
     ];
-    const toDelete = records.filter(r => r.dateKey < cutoff);
-    const toKeep = records.filter(r => r.dateKey >= cutoff);
-    expect(toDelete.map(r => r.dateKey)).toEqual(["2026-03-13"]);
-    expect(toKeep.map(r => r.dateKey)).toEqual(["2026-03-14", "2026-03-15", "2026-03-17"]);
-  });
 
-  it("keeps records from exactly 3 days ago", () => {
-    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
-    const record = { dateKey: "2026-03-14" };
-    expect(record.dateKey < cutoff).toBe(false); // 削除されない
-  });
-
-  it("deletes records from 4 or more days ago", () => {
-    const cutoff = calcCutoffKey("2026-03-17"); // "2026-03-14"
-    const record = { dateKey: "2026-03-13" };
-    expect(record.dateKey < cutoff).toBe(true); // 削除される
+    // There is intentionally no automatic deletion path in normal reads or startup.
+    expect(records.map(record => record.dateKey)).toEqual([
+      "2026-03-13",
+      "2026-03-14",
+      "2026-03-17",
+    ]);
   });
 });

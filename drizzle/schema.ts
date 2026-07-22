@@ -54,6 +54,8 @@ export const taskStates = pgTable(
     done: boolean("done").default(false).notNull(),
     help: boolean("help").default(false).notNull(),
     note: varchar("note", { length: 1024 }).notNull().default(""),
+    planned: varchar("planned", { length: 64 }).notNull().default(""),
+    revision: integer("revision").notNull().default(1),
     updatedAt: timestamp("updatedAt")
       .defaultNow()
       .notNull()
@@ -80,6 +82,7 @@ export const storeCheckStates = pgTable(
       .notNull()
       .$type<string[]>()
       .default([]),
+    revision: integer("revision").notNull().default(1),
     updatedAt: timestamp("updatedAt")
       .defaultNow()
       .notNull()
@@ -108,7 +111,11 @@ export const individualHandovers = pgTable("individual_handovers", {
     >()
     .default([]),
   completed: boolean("completed").default(false).notNull(),
+  completedAt: timestamp("completedAt"),
+  deletedAt: timestamp("deletedAt"),
   important: boolean("important").default(false).notNull(),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  revision: integer("revision").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -130,6 +137,10 @@ export const customerHandovers = pgTable("customer_handovers", {
   links: jsonb("links").$type<string[]>(),
   dueDate: bigint("dueDate", { mode: "number" }),
   callCount: integer("callCount").default(0).notNull(),
+  completedAt: timestamp("completedAt"),
+  deletedAt: timestamp("deletedAt"),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  revision: integer("revision").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -138,6 +149,21 @@ export const customerHandovers = pgTable("customer_handovers", {
 });
 export type CustomerHandover = typeof customerHandovers.$inferSelect;
 export type InsertCustomerHandover = typeof customerHandovers.$inferInsert;
+
+// ─── Audit Log ─────────────────────────────────────────────────────────────
+// Stores before/after snapshots for recoverability and incident investigation.
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  entityType: varchar("entityType", { length: 64 }).notNull(),
+  entityId: varchar("entityId", { length: 128 }).notNull(),
+  action: varchar("action", { length: 32 }).notNull(),
+  before: jsonb("before").$type<unknown>(),
+  after: jsonb("after").$type<unknown>(),
+  actorId: varchar("actorId", { length: 64 }),
+  requestId: varchar("requestId", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AuditLog = typeof auditLogs.$inferSelect;
 
 // ─── MISOCA Status (グローバル) ──────────────────────────────────────────────────────
 export const misocaStatus = pgTable("misoca_status", {

@@ -142,6 +142,8 @@ interface TaskState {
   done: boolean;
   help: boolean;
   note: string;
+  planned: string;
+  revision?: number;
   completedDateKey?: string;
   completedBy?: string;
 }
@@ -420,6 +422,8 @@ export default function ShowOnDaysPage() {
         done: !!s.done,
         help: !!s.help,
         note: rawNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim(),
+        planned: String(s.planned ?? ""),
+        revision: s.revision,
         completedDateKey: completedDateMatch ? completedDateMatch[1] : undefined,
         completedBy: completedByMatch ? completedByMatch[1].trim() : undefined,
       });
@@ -466,6 +470,8 @@ export default function ShowOnDaysPage() {
       done: true,
       help: state.help,
       note: newNote,
+      planned: state.planned,
+      expectedRevision: state.revision && state.revision > 0 ? state.revision : undefined,
     });
   }, [taskStateMap, todayDateKey, upsertTaskState]);
 

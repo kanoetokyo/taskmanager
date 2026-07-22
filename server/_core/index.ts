@@ -7,7 +7,6 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { cleanupOldDateKeyRecords } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -64,6 +63,3 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
-
-// 起動時に古いデータをクリーンアップ
-cleanupOldDateKeyRecords().catch(err => console.warn("[Startup Cleanup]", err));

@@ -46,6 +46,46 @@ If you prefer using only the Supabase dashboard:
 2. Paste and run `drizzle/migrations/0000_supabase_postgres_baseline.sql`.
 3. Paste and run `supabase/seed-task-definitions.sql`.
 
+### Data-safety migration
+
+`drizzle/migrations/0002_data_safety.sql` is additive: it adds revision numbers,
+soft-delete timestamps, audit logs, database-side `updatedAt` triggers, and direct
+table access restrictions. It does not delete or rename existing tables or columns.
+
+Apply this migration to a Supabase Preview Branch or staging database first. Do not
+run it against production until the preview verification has passed and the changes
+have been approved.
+
+```bash
+# DATABASE_URL must point to the Preview Branch, not production.
+node scripts/apply-sql-migration.mjs drizzle/migrations/0002_data_safety.sql
+```
+
+The connection URL supplied by Supabase may contain a placeholder password. Replace
+that placeholder with the **database password** from Supabase Database Settings. It
+is not the Supabase service-role key and not the JWT secret.
+
+## 3.1 Backup and Restore Procedure
+
+Before any production migration:
+
+1. In Supabase Dashboard, open **Database -> Backups** and confirm a recent
+   successful physical backup exists. For a more precise recovery point, enable PITR
+   in the project plan if available.
+2. Create a Supabase Preview Branch **with data** and run the migration there first.
+3. Record the migration file name, deployment commit, backup timestamp, and row
+   counts for `task_states`, `store_check_states`, `individual_handovers`, and
+   `customer_handovers`.
+
+If recovery is required, use **Database -> Backups -> Restore** to create a restored
+project or restore to the selected recovery point. Verify the four table counts and
+sample records in the restored environment before repointing `DATABASE_URL`. Do not
+attempt a production restore from the application UI.
+
+Customer and individual handovers are logically deleted after the data-safety
+migration. Restore them through the application undo action or the protected restore
+API; physical deletion is reserved for an administrator-only maintenance operation.
+
 ## 4. Seed Initial Task Definitions
 
 After the schema exists, run:

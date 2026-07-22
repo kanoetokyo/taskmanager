@@ -131,6 +131,7 @@ interface CustomerRecord {
   links: string[];
   dueDate: number | null;
   callCount: number;
+  revision?: number;
 }
 
 function newCustomerRecord(
@@ -146,6 +147,33 @@ function newCustomerRecord(
     links: [],
     dueDate: null,
     callCount: 0,
+    revision: undefined,
+  };
+}
+
+function toCustomerRecord(c: {
+  id: string;
+  customerName: string;
+  status: string;
+  store: string;
+  content: string;
+  assignee: string;
+  links: unknown;
+  dueDate: number | null;
+  callCount: number;
+  revision: number;
+}): CustomerRecord {
+  return {
+    id: c.id,
+    name: c.customerName,
+    status: c.status as CustomerStatus,
+    contact: c.store,
+    memo: c.content,
+    assignee: c.assignee ?? "",
+    links: Array.isArray(c.links) ? c.links.filter((link): link is string => typeof link === "string") : [],
+    dueDate: c.dueDate ?? null,
+    callCount: c.callCount ?? 0,
+    revision: c.revision,
   };
 }
 
@@ -541,78 +569,127 @@ export default function CustomerHandover() {
   }, []);
 
   const loadedRef = useRef(false);
-  // 最新のcustomers stateを常に保持する（非同期コールバック内で最新値を参照するため）
   const customersRef = useRef<CustomerRecord[]>([]);
-  // テキスト入力のデバウンスタイマー（カードIDごとに管理）
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
+  const customerSnapshotRef = useRef<Record<string, CustomerRecord>>({});
+  const dirtyFieldsRef = useRef<Map<string, Set<keyof CustomerRecord>>>(new Map());
+  const changeVersionRef = useRef<Map<string, number>>(new Map());
 
-  const { data: customerData } = trpc.task.customerHandover.getActive.useQuery(
+  const { data: customerData, error: customerError } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
     { refetchInterval: 30000 }
   );
 
   const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
+  const patchCustomer = trpc.task.customerHandover.patch.useMutation();
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
+  const restoreCustomer = trpc.task.customerHandover.restore.useMutation();
 
   // customersが変わるたびにrefを同期
   useEffect(() => {
     customersRef.current = customers;
   }, [customers]);
 
-  // DBデータをstateに反映
-  // 【重要】初回ロードのみ全件上書き。2回目以降のポーリングはstateを変更しない。
   useEffect(() => {
     if (customerData === undefined) return;
-    if (loadedRef.current) return; // 2回目以降は無視
-
-    const records: CustomerRecord[] = customerData.map(c => ({
-      id: c.id,
-      name: c.customerName,
-      status: c.status as CustomerStatus,
-      contact: c.store,
-      memo: c.content,
-      assignee: c.assignee ?? "",
-      links: (c.links as string[]) ?? [],
-      dueDate: c.dueDate ?? null,
-      callCount: c.callCount ?? 0,
-    }));
-    setCustomers(records);
-    setTimeout(() => {
+    const records = customerData.map(toCustomerRecord);
+    const nextSnapshot = Object.fromEntries(records.map(record => [record.id, record]));
+    if (!loadedRef.current) {
+      customerSnapshotRef.current = nextSnapshot;
+      setCustomers(records);
       loadedRef.current = true;
-    }, 0);
+      return;
+    }
+
+    // A transient empty response must never erase the cards already on screen.
+    if (records.length === 0 && customersRef.current.length > 0) return;
+    setCustomers(current => {
+      const currentIds = new Set(current.map(record => record.id));
+      const serverById = new Map(records.map(record => [record.id, record]));
+      const merged = current.map(record => {
+        const fields = dirtyFieldsRef.current.get(record.id);
+        const serverRecord = serverById.get(record.id);
+        return !serverRecord || fields?.size ? record : serverRecord;
+      });
+      records.forEach(record => {
+        if (!currentIds.has(record.id)) merged.push(record);
+        if (!dirtyFieldsRef.current.get(record.id)?.size) customerSnapshotRef.current[record.id] = record;
+      });
+      return merged;
+    });
   }, [customerData]);
 
-  // DB送信ヘルパー（customersRefから最新データを取得して送信）
+  useEffect(() => () => {
+    debounceTimers.current.forEach(timer => clearTimeout(timer));
+    debounceTimers.current.clear();
+  }, []);
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (debounceTimers.current.size > 0) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, []);
+
   const saveToDb = useCallback(
     async (id: string) => {
       const c = customersRef.current.find(r => r.id === id);
       if (!c) return;
-      if (c.status === "完了") return;
+      const fields = new Set(dirtyFieldsRef.current.get(id) ?? []);
+      if (fields.size === 0) return;
+      const version = changeVersionRef.current.get(id) ?? 0;
       try {
-        await upsertCustomer.mutateAsync({
-          id: c.id,
-          dateKey: todayKey(),
-          customerName: c.name,
-          store: c.contact,
-          content: c.memo,
-          status: c.status,
-          assignee: c.assignee ?? "",
-        links: c.links ?? [],
-        dueDate: c.dueDate ?? null,
-        callCount: c.callCount ?? 0,
-      });
+        const saved = c.revision
+          ? await patchCustomer.mutateAsync({
+              id: c.id,
+              expectedRevision: c.revision,
+              ...(fields.has("name") ? { customerName: c.name } : {}),
+              ...(fields.has("contact") ? { store: c.contact } : {}),
+              ...(fields.has("memo") ? { content: c.memo } : {}),
+              ...(fields.has("status") ? { status: c.status } : {}),
+              ...(fields.has("assignee") ? { assignee: c.assignee } : {}),
+              ...(fields.has("links") ? { links: c.links } : {}),
+              ...(fields.has("dueDate") ? { dueDate: c.dueDate } : {}),
+              ...(fields.has("callCount") ? { callCount: c.callCount } : {}),
+            })
+          : await upsertCustomer.mutateAsync({
+              id: c.id,
+              dateKey: todayKey(),
+              customerName: c.name,
+              store: c.contact,
+              content: c.memo,
+              status: c.status,
+              assignee: c.assignee,
+              links: c.links,
+              dueDate: c.dueDate,
+              callCount: c.callCount,
+              expectedRevision: undefined,
+            });
+        const serverRecord = toCustomerRecord(saved);
+        customerSnapshotRef.current[id] = serverRecord;
+        if ((changeVersionRef.current.get(id) ?? 0) === version) {
+          dirtyFieldsRef.current.delete(id);
+        }
+        setCustomers(current => current.map(record => record.id === id
+          ? { ...record, revision: serverRecord.revision }
+          : record
+        ));
         const now = new Date();
         setLastSaved(
           `同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
         );
       } catch (e) {
         console.error("Customer save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。");
+        toast.error("接続できません。データは変更されていません。再試行してください。");
       }
     },
-    [upsertCustomer]
+    [patchCustomer, upsertCustomer]
   );
 
   // テキストフィールド用デバウンス送信（300ms）
@@ -629,60 +706,58 @@ export default function CustomerHandover() {
     [saveToDb]
   );
 
-  // フィールド更新
   const updateCustomer = useCallback(
     (id: string, field: keyof CustomerRecord, value: string) => {
+      if (field === "status" && value === "完了") {
+        const current = customersRef.current.find(record => record.id === id);
+        if (!current) return;
+        const complete = async () => {
+          try {
+            const saved = current.revision
+              ? await patchCustomer.mutateAsync({ id, expectedRevision: current.revision, status: "完了" })
+              : await upsertCustomer.mutateAsync({
+                  id: current.id, dateKey: todayKey(), customerName: current.name, store: current.contact,
+                  content: current.memo, status: "完了", assignee: current.assignee, links: current.links,
+                  dueDate: current.dueDate, callCount: current.callCount, expectedRevision: undefined,
+                });
+            setCustomers(records => records.filter(record => record.id !== id));
+            toast.success("完了として保存しました。", {
+              action: {
+                label: "元に戻す",
+                onClick: async () => {
+                  try {
+                    const restored = await restoreCustomer.mutateAsync({ id, expectedRevision: saved.revision, status: current.status });
+                    const restoredRecord = toCustomerRecord(restored);
+                    customerSnapshotRef.current[id] = restoredRecord;
+                    setCustomers(records => [...records, restoredRecord]);
+                  } catch {
+                    toast.error("復元に失敗しました。画面を更新して確認してください。");
+                  }
+                },
+              },
+            });
+          } catch {
+            toast.error("完了にできませんでした。データは変更されていません。");
+          }
+        };
+        void complete();
+        return;
+      }
       setCustomers(prev => {
         const updated = prev.map(c =>
           c.id !== id ? c : { ...c, [field]: value }
         );
-        // refも即座に更新（非同期コールバックで最新値を参照するため）
         customersRef.current = updated;
-
-        const target = updated.find(c => c.id === id);
-        if (!target) return prev;
-
-        // 「完了」への変更：即座にUI削除 + DB削除
-        if (field === "status" && value === "完了") {
-          // 進行中のデバウンスタイマーをキャンセル
-          const existing = debounceTimers.current.get(id);
-          if (existing) {
-            clearTimeout(existing);
-            debounceTimers.current.delete(id);
-          }
-          deleteCustomer
-            .mutateAsync({ id })
-            .then(() => {
-              toast.success("完了として削除しました");
-            })
-            .catch(e => {
-              console.error("Customer delete failed:", e);
-              toast.error("削除に失敗しました。");
-            });
-          const filtered = prev.filter(c => c.id !== id);
-          customersRef.current = filtered;
-          return filtered;
-        }
-
-        // select系（status/contact/assignee）は即時DB送信
-        if (field === "status" || field === "contact" || field === "assignee") {
-          // 進行中のデバウンスタイマーをキャンセルして即時送信
-          const existing = debounceTimers.current.get(id);
-          if (existing) {
-            clearTimeout(existing);
-            debounceTimers.current.delete(id);
-          }
-          // refが更新された後に送信するためsetTimeoutで1tick遅らせる
-          setTimeout(() => saveToDb(id), 0);
-          return updated;
-        }
-
-        // テキスト系（name/memo）はデバウンス送信
-        setTimeout(() => saveToDbDebounced(id), 0);
+        const fields = dirtyFieldsRef.current.get(id) ?? new Set<keyof CustomerRecord>();
+        fields.add(field);
+        dirtyFieldsRef.current.set(id, fields);
+        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
+        if (field === "status" || field === "contact" || field === "assignee") setTimeout(() => saveToDb(id), 0);
+        else setTimeout(() => saveToDbDebounced(id), 0);
         return updated;
       });
     },
-    [saveToDb, saveToDbDebounced, deleteCustomer]
+    [patchCustomer, restoreCustomer, saveToDb, saveToDbDebounced, upsertCustomer]
   );
 
   // 期限更新（即時DB送信）
@@ -691,12 +766,8 @@ export default function CustomerHandover() {
       setCustomers(prev => {
         const updated = prev.map(c => (c.id !== id ? c : { ...c, dueDate }));
         customersRef.current = updated;
-        // 進行中のデバウンスタイマーをキャンセルして即時送信
-        const existing = debounceTimers.current.get(id);
-        if (existing) {
-          clearTimeout(existing);
-          debounceTimers.current.delete(id);
-        }
+        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "dueDate"]));
+        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
         setTimeout(() => saveToDb(id), 0);
         return updated;
       });
@@ -710,6 +781,8 @@ export default function CustomerHandover() {
       setCustomers(prev => {
         const updated = prev.map(c => (c.id === id ? { ...c, links } : c));
         customersRef.current = updated;
+        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "links"]));
+        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
         setTimeout(() => saveToDbDebounced(id), 0);
         return updated;
       });
@@ -730,11 +803,8 @@ export default function CustomerHandover() {
           };
         });
         customersRef.current = updated;
-        const existing = debounceTimers.current.get(id);
-        if (existing) {
-          clearTimeout(existing);
-          debounceTimers.current.delete(id);
-        }
+        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "callCount"]));
+        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
         setTimeout(() => saveToDb(id), 0);
         return updated;
       });
@@ -742,36 +812,42 @@ export default function CustomerHandover() {
     [saveToDb]
   );
 
-  // 手動削除：UIから即座に除去 + DB非同期削除
   const handleDelete = useCallback(
-    (id: string) => {
-      // 進行中のデバウンスタイマーをキャンセル
+    async (id: string) => {
+      const record = customersRef.current.find(customer => customer.id === id);
+      if (!record) return;
       const existing = debounceTimers.current.get(id);
       if (existing) {
         clearTimeout(existing);
         debounceTimers.current.delete(id);
       }
-      // UIから即座に除去
-      setCustomers(prev => {
-        const filtered = prev.filter(c => c.id !== id);
-        customersRef.current = filtered;
-        return filtered;
-      });
-      // DB非同期削除
-      deleteCustomer
-        .mutateAsync({ id })
-        .then(() => {
-          const now = new Date();
-          setLastSaved(
-            `同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-          );
-        })
-        .catch(e => {
-          console.error("Customer delete failed:", e);
-          toast.error("削除に失敗しました。");
+      if (!record.revision) {
+        setCustomers(records => records.filter(customer => customer.id !== id));
+        return;
+      }
+      try {
+        const deleted = await deleteCustomer.mutateAsync({ id, expectedRevision: record.revision });
+        setCustomers(records => records.filter(customer => customer.id !== id));
+        toast.success("顧客引き継ぎをアーカイブしました。", {
+          action: {
+            label: "元に戻す",
+            onClick: async () => {
+              try {
+                const restored = await restoreCustomer.mutateAsync({ id, expectedRevision: deleted.revision, status: record.status });
+                const restoredRecord = toCustomerRecord(restored);
+                customerSnapshotRef.current[id] = restoredRecord;
+                setCustomers(records => [...records, restoredRecord]);
+              } catch {
+                toast.error("復元に失敗しました。画面を更新して確認してください。");
+              }
+            },
+          },
         });
+      } catch {
+        toast.error("削除できませんでした。データは変更されていません。");
+      }
     },
-    [deleteCustomer]
+    [deleteCustomer, restoreCustomer]
   );
 
   // 列ごとに追加
@@ -783,7 +859,8 @@ export default function CustomerHandover() {
         customersRef.current = updated;
         return updated;
       });
-      // 新規カードをDBに即時保存
+      dirtyFieldsRef.current.set(rec.id, new Set<keyof CustomerRecord>(["name", "status", "contact", "memo", "assignee", "links", "dueDate", "callCount"]));
+      changeVersionRef.current.set(rec.id, 1);
       setTimeout(() => saveToDb(rec.id), 0);
     },
     [saveToDb]
@@ -825,6 +902,11 @@ export default function CustomerHandover() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {customerError && (
+              <span className="text-xs text-rose-600 font-medium">
+                接続できません。表示中のデータは保持されています。
+              </span>
+            )}
             {lastSaved && (
               <span className="text-xs text-gray-400 flex items-center gap-1">
                 <RefreshCw className="w-3 h-3" />

@@ -78,6 +78,7 @@ interface IndividualHandoverTask {
 
 interface IndividualHandoverRecord {
   id: string;
+  revision?: number;
   author: string;       // 作成者
   target: string;       // 対象者
   tasks: IndividualHandoverTask[]; // 引き継ぎ項目（1つ以上）
@@ -108,6 +109,7 @@ interface TaskDef {
 }
 
 interface Task extends TaskDef {
+  revision?: number;
   planned: string;
   actual: string;
   done: boolean;
@@ -215,6 +217,42 @@ function getIconColor(id: string): string {
 
 function makeInitialTasks(): Task[] {
   return BASE_TASKS.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" }));
+}
+
+function sameTaskState(left: Task, right: Task): boolean {
+  return left.planned === right.planned
+    && left.done === right.done
+    && left.help === right.help
+    && left.note === right.note
+    && left.completedDateKey === right.completedDateKey
+    && left.completedBy === right.completedBy;
+}
+
+function persistedTaskNote(task: Task): string {
+  const cleanNote = (task.note ?? "")
+    .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+    .replace(/\n?__completedBy:[^\n]+/g, "")
+    .trim();
+  if (!task.done || !task.completedDateKey) return cleanNote;
+  const dateTag = `__completedDate:${task.completedDateKey}`;
+  const byTag = task.completedBy ? `\n__completedBy:${task.completedBy}` : "";
+  return cleanNote ? `${cleanNote}\n${dateTag}${byTag}` : `${dateTag}${byTag}`;
+}
+
+function sameStringList(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function sameStoreCheck(left: StoreCheckState, right: StoreCheckState, key: keyof StoreCheckState): boolean {
+  if (key === "aiVoicemail") return left.aiVoicemail === right.aiVoicemail;
+  return sameStringList(left[key], right[key]);
+}
+
+function sameIndividualHandover(left: IndividualHandoverRecord, right: IndividualHandoverRecord): boolean {
+  return left.author === right.author
+    && left.target === right.target
+    && left.important === right.important
+    && JSON.stringify(left.tasks) === JSON.stringify(right.tasks);
 }
 
 function dateToKey(date: Date): string {
@@ -399,8 +437,10 @@ export default function Home() {
   // stale closure防止: tasksとcurrentDateKeyの最新値をRefで保持
   const tasksRef = useRef<Task[]>(tasks);
   const currentDateKeyRef = useRef<string>(currentDateKey);
+  const storeCheckRef = useRef<StoreCheckState>(storeCheck);
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { currentDateKeyRef.current = currentDateKey; }, [currentDateKey]);
+  useEffect(() => { storeCheckRef.current = storeCheck; }, [storeCheck]);
 
   // stale closure防止: individualHandoversの最新値をRefで保持
   const individualHandoversRef = useRef<IndividualHandoverRecord[]>([]);
@@ -409,6 +449,13 @@ export default function Home() {
   const importantFlagsRef = useRef<Record<string, boolean>>({});
   // チェック状態を専用Refで管理（ポーリング・自動保存の競合を完全排除）
   const doneFlagsRef = useRef<Record<string, boolean>>({});
+  const taskSnapshotRef = useRef<Record<string, Task>>({});
+  const taskDirtyIdsRef = useRef<Set<string>>(new Set());
+  const storeCheckSnapshotRef = useRef<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
+  const storeCheckRevisionsRef = useRef<Record<string, number | undefined>>({});
+  const storeCheckDirtyTypesRef = useRef<Set<string>>(new Set());
+  const individualSnapshotRef = useRef<Record<string, IndividualHandoverRecord>>({});
+  const individualDirtyIdsRef = useRef<Set<string>>(new Set());
 
   // ─── tRPC Queries ─────────────────────────────────────────────────────────
 
@@ -419,19 +466,19 @@ export default function Home() {
   );
 
   // Task states for current date
-  const { data: taskStatesData, refetch: refetchTaskStates } = trpc.task.taskStates.getByDateWithMonthly.useQuery(
+  const { data: taskStatesData, error: taskStatesError, refetch: refetchTaskStates } = trpc.task.taskStates.getByDateWithMonthly.useQuery(
     { dateKey: currentDateKey },
     { refetchInterval: 30000 } // 30秒ごとにポーリング
   );
 
   // Store check for current date
-  const { data: storeCheckData, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
+  const { data: storeCheckData, error: storeCheckError, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
     { dateKey: currentDateKey },
     { refetchInterval: 30000 }
   );
 
   // Individual handovers (active = not completed)
-  const { data: individualHandoverData, refetch: refetchIndividualHandover } = trpc.task.individualHandover.getActive.useQuery(
+  const { data: individualHandoverData, error: individualHandoverError, refetch: refetchIndividualHandover } = trpc.task.individualHandover.getActive.useQuery(
     { dateKey: currentDateKey },
     { refetchInterval: 30000 }
   );
@@ -466,9 +513,10 @@ export default function Home() {
 
   const upsertTaskState = trpc.task.taskStates.upsert.useMutation();
   const bulkUpsertTaskStates = trpc.task.taskStates.bulkUpsert.useMutation();
-  const upsertStoreCheck = trpc.task.storeCheck.upsert.useMutation();
+  const bulkUpsertStoreCheck = trpc.task.storeCheck.bulkUpsert.useMutation();
   const upsertIndividualHandover = trpc.task.individualHandover.upsert.useMutation();
   const deleteIndividualHandover = trpc.task.individualHandover.delete.useMutation();
+  const restoreIndividualHandover = trpc.task.individualHandover.restore.useMutation();
   const upsertMisoca = trpc.task.misoca.upsert.useMutation();
   const upsertGrayCell = trpc.task.grayCell.upsert.useMutation();
   const upsertStoresShift = trpc.task.storesShift.upsert.useMutation();
@@ -596,98 +644,92 @@ export default function Home() {
 
   // Load task states from DB
   useEffect(() => {
-    if (taskStatesData) {
-      if (!tasksLoadedRef.current) {
-        // 初回load: done/helpをDBから設定し、フラグを立てる
-        setTasks(prev => {
-          return activeTasks.map(t => {
-            const dbState = taskStatesData.find(s => s.taskId === t.id);
-            const existing = prev.find(p => p.id === t.id);
-            const rawNote = dbState?.note ?? "";
-            const completedDateKey = extractCompletedDate(rawNote);
-            const completedBy = extractCompletedBy(rawNote);
-            // __completedDate・__completedByタグをnoteから除去して表示用にクリーン化
-            const cleanNote = rawNote
-              .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
-              .replace(/\n?__completedBy:[^\n]+/g, "")
-              .trim();
-            const isDone = dbState?.done ?? false;
-            // done=trueなのにcompletedDateKeyがない場合はDBレコードのdateKey（実際に完了した日）をフォールバック
-            const resolvedCompletedDateKey = completedDateKey ?? (isDone ? (dbState?.dateKey ?? currentDateKeyRef.current) : undefined);
-            return {
-              ...t,
-              planned: existing?.planned ?? (t.defaultPlanned ?? "当日事務担当"),
-              actual: existing?.actual ?? "",
-              done: isDone,
-              help: dbState?.help ?? false,
-              note: cleanNote,
-              completedDateKey: resolvedCompletedDateKey,
-              completedBy,
-            };
-          });
-        });
-        setTimeout(() => { tasksLoadedRef.current = true; }, 0);
-      } else {
-        // ポーリング更新: 保存タイマーが起動中の場合のみブロック（保存完了後のinvalidate由来の更新は通す）
-        if (!(isSavingTasksRef.current && taskSaveTimerRef.current !== null)) {
-          setTasks(prev => {
-            return prev.map(t => {
-              const dbState = taskStatesData.find(s => s.taskId === t.id);
-              if (!dbState) return t;
-              const rawNote = dbState.note ?? t.note;
-              const completedDateKey = extractCompletedDate(rawNote);
-              const completedBy = extractCompletedBy(rawNote);
-              const cleanNote = rawNote
-                .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
-                .replace(/\n?__completedBy:[^\n]+/g, "")
-                .trim();
-              // doneFlagsRefに登録済みの場合はボタン操作の値を優先（ポーリングが古い値を返しても上書きしない）
-              const isDone = (t.id in doneFlagsRef.current) ? doneFlagsRef.current[t.id] : (dbState.done ?? t.done);
-              // done=trueなのにcompletedDateKeyがない場合はDBレコードのdateKey（実際に完了した日）をフォールバック
-              const resolvedCompletedDateKey = completedDateKey ?? (isDone ? (dbState.dateKey ?? currentDateKeyRef.current) : undefined);
-              return {
-                ...t,
-                done: isDone,
-                help: dbState.help ?? t.help,
-                note: cleanNote,
-                completedDateKey: resolvedCompletedDateKey,
-                completedBy,
-              };
-            });
-          });
-        }
-      }
+    if (taskStatesData === undefined) return;
+    if (tasksLoadedRef.current && taskStatesData.length === 0 && Object.keys(taskSnapshotRef.current).length > 0) {
+      return;
     }
-  }, [taskStatesData]);
+    const fromDatabase = activeTasks.map(base => {
+      const dbState = taskStatesData.find(state => state.taskId === base.id);
+      const rawNote = dbState?.note ?? "";
+      const done = dbState?.done ?? false;
+      return {
+        ...base,
+        planned: dbState?.planned ?? base.defaultPlanned ?? "当日事務担当",
+        actual: "",
+        done,
+        help: dbState?.help ?? false,
+        note: rawNote
+          .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
+          .replace(/\n?__completedBy:[^\n]+/g, "")
+          .trim(),
+        completedDateKey: extractCompletedDate(rawNote) ?? (done ? (dbState?.dateKey ?? currentDateKeyRef.current) : undefined),
+        completedBy: extractCompletedBy(rawNote),
+        revision: dbState?.revision,
+      } satisfies Task;
+    });
+    const nextSnapshot = Object.fromEntries(fromDatabase.map(task => [task.id, task]));
+
+    if (!tasksLoadedRef.current) {
+      taskSnapshotRef.current = nextSnapshot;
+      taskDirtyIdsRef.current.clear();
+      setTasks(fromDatabase);
+      tasksLoadedRef.current = true;
+      return;
+    }
+
+    // A polling response may update only records that have no local edits.
+    setTasks(current => current.map(task => {
+      const serverTask = nextSnapshot[task.id];
+      return !serverTask || taskDirtyIdsRef.current.has(task.id) ? task : serverTask;
+    }));
+    Object.entries(nextSnapshot).forEach(([id, task]) => {
+      if (!taskDirtyIdsRef.current.has(id)) taskSnapshotRef.current[id] = task;
+    });
+  }, [taskStatesData, activeTasks]);
 
   // Load store check from DB
   useEffect(() => {
-    if (storeCheckData) {
-      if (!storeCheckLoadedRef.current) {
-        // 初回ロード: DBの値を無条件に反映
-        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
-        for (const row of storeCheckData) {
-          if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
-          else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
-          else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
-          else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
-          else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
-          else if (row.checkType === "ai_voicemail") newState.aiVoicemail = (row.checkedStores as string[]).length > 0;
-        }
-        setStoreCheck(newState);
-        setTimeout(() => { storeCheckLoadedRef.current = true; }, 0);
-      } else if (!isSavingStoreCheckRef.current) {
-        // ポーリング更新: 保存タイマー動作中でなければDBの値を反映
-        const newState: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
-        for (const row of storeCheckData) {
-          if (row.checkType === "line_morning") newState.lineMorning = row.checkedStores as string[];
-          else if (row.checkType === "line_afternoon") newState.lineAfternoon = row.checkedStores as string[];
-          else if (row.checkType === "line") newState.lineMorning = row.checkedStores as string[]; // 旧データ互換
-          else if (row.checkType === "pos") newState.pos = row.checkedStores as string[];
-          else if (row.checkType === "raccoon") newState.raccoon = row.checkedStores as string[];
-          else if (row.checkType === "ai_voicemail") newState.aiVoicemail = (row.checkedStores as string[]).length > 0;
-        }
-        setStoreCheck(newState);
+    if (storeCheckData === undefined) return;
+    if (storeCheckLoadedRef.current && storeCheckData.length === 0) return;
+    const fromDatabase: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
+    const nextRevisions: Record<string, number | undefined> = {};
+    for (const row of storeCheckData) {
+      nextRevisions[row.checkType] = row.revision;
+      if (row.checkType === "line_morning" || row.checkType === "line") fromDatabase.lineMorning = row.checkedStores as string[];
+      else if (row.checkType === "line_afternoon") fromDatabase.lineAfternoon = row.checkedStores as string[];
+      else if (row.checkType === "pos") fromDatabase.pos = row.checkedStores as string[];
+      else if (row.checkType === "raccoon") fromDatabase.raccoon = row.checkedStores as string[];
+      else if (row.checkType === "ai_voicemail") fromDatabase.aiVoicemail = (row.checkedStores as string[]).length > 0;
+    }
+
+    if (!storeCheckLoadedRef.current) {
+      storeCheckSnapshotRef.current = fromDatabase;
+      storeCheckRevisionsRef.current = nextRevisions;
+      storeCheckDirtyTypesRef.current.clear();
+      setStoreCheck(fromDatabase);
+      storeCheckLoadedRef.current = true;
+      return;
+    }
+
+    setStoreCheck(current => {
+      const merged = { ...current };
+      const mappings: Array<[keyof StoreCheckState, string]> = [
+        ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
+        ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
+      ];
+      for (const [key, dbKey] of mappings) {
+        if (!storeCheckDirtyTypesRef.current.has(dbKey)) merged[key] = fromDatabase[key] as never;
+      }
+      return merged;
+    });
+    const mappings: Array<[keyof StoreCheckState, string]> = [
+      ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
+      ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
+    ];
+    for (const [key, dbKey] of mappings) {
+      if (!storeCheckDirtyTypesRef.current.has(dbKey)) {
+        storeCheckSnapshotRef.current = { ...storeCheckSnapshotRef.current, [key]: fromDatabase[key] };
+        storeCheckRevisionsRef.current[dbKey] = nextRevisions[dbKey];
       }
     }
   }, [storeCheckData]);
@@ -695,11 +737,9 @@ export default function Home() {
   // Load individual handovers from DB
   useEffect(() => {
     if (individualHandoverData !== undefined) {
-      if (isEditingIndividualRef.current) return; // 入力中は上書きしない
-      // 保存タイマーが起動中の場合のみ上書きをブロック（保存完了後のinvalidate由来の更新は通す）
-      if (isSavingIndividualRef.current && individualHandoverSaveTimerRef.current !== null) return;
       const records: IndividualHandoverRecord[] = individualHandoverData.map(r => ({
         id: r.id,
+        revision: r.revision,
         author: r.author,
         target: r.target,
         tasks: (r.tasks as Array<{ id: string; content: string; done: boolean; deadline?: string }>).map(t => ({
@@ -711,27 +751,28 @@ export default function Home() {
         inherited: r.dateKey !== currentDateKey,
         important: r.important ?? false,
       }));
-      // importantFlagsRefに未登録のカードのみ初期値を設定（既にボタン操作で設定済みのフラグは上書きしない）
-      records.forEach(r => {
-        if (!(r.id in importantFlagsRef.current)) {
-          importantFlagsRef.current[r.id] = r.important ?? false;
-        }
-      });
-      // importantFlagsRefの値でrecordsのimportantを上書き（ポーリングが古い値を返してもボタン操作の値を優先）
-      const recordsWithFlags = records.map(r => ({
-        ...r,
-        important: importantFlagsRef.current[r.id] ?? r.important ?? false,
-      }));
-      // 重要フラグ付きを先頭に並び替え
-      recordsWithFlags.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
-      // DBロードによるstate変更は自動保存をトリガーするのでスキップフラグを立てる
-      skipAutoSaveRef.current = true;
-      // Refも同時に更新して自動保存タイマーが古い値を使わないようにする
-      individualHandoversRef.current = recordsWithFlags;
-      setIndividualHandovers(recordsWithFlags);
+      const sorted = [...records].sort((a, b) => Number(b.important) - Number(a.important));
+      const snapshot = Object.fromEntries(sorted.map(record => [record.id, record]));
       if (!individualHandoverLoadedRef.current) {
-        setTimeout(() => { individualHandoverLoadedRef.current = true; }, 0);
+        individualSnapshotRef.current = snapshot;
+        individualDirtyIdsRef.current.clear();
+        individualHandoversRef.current = sorted;
+        setIndividualHandovers(sorted);
+        individualHandoverLoadedRef.current = true;
+        return;
       }
+      // An empty polling result cannot erase the cards on screen. Local edits also win.
+      if (sorted.length === 0) return;
+      setIndividualHandovers(current => {
+        const existingById = new Map(current.map(record => [record.id, record]));
+        const merged = sorted.map(record => individualDirtyIdsRef.current.has(record.id)
+          ? existingById.get(record.id) ?? record
+          : record);
+        return merged.concat(current.filter(record => !snapshot[record.id] && individualDirtyIdsRef.current.has(record.id)));
+      });
+      Object.entries(snapshot).forEach(([id, record]) => {
+        if (!individualDirtyIdsRef.current.has(id)) individualSnapshotRef.current[id] = record;
+      });
     }
   }, [individualHandoverData, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -769,6 +810,7 @@ export default function Home() {
           done: dbState?.done ?? false,
           help: false,
           note: dbState?.note ?? "",
+          revision: dbState?.revision,
         };
       });
       setPrevDayTasks(prevTasks);
@@ -780,6 +822,13 @@ export default function Home() {
     tasksLoadedRef.current = false;
     storeCheckLoadedRef.current = false;
     individualHandoverLoadedRef.current = false;
+    taskSnapshotRef.current = {};
+    taskDirtyIdsRef.current.clear();
+    storeCheckSnapshotRef.current = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
+    storeCheckRevisionsRef.current = {};
+    storeCheckDirtyTypesRef.current.clear();
+    individualSnapshotRef.current = {};
+    individualDirtyIdsRef.current.clear();
     // 日付変更時はdoneFlagsRefもリセット（新しい日付のチェック状態はDBから取得）
     doneFlagsRef.current = {};
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
@@ -791,96 +840,155 @@ export default function Home() {
 
   // ─── Auto-save via useEffect (debounced) ──────────────────────────────────
 
-  // タスク自動保存
+  // DB hydration updates the snapshots first, therefore this only tracks user edits.
+  useEffect(() => {
+    if (!tasksLoadedRef.current) return;
+    for (const task of tasks) {
+      const snapshot = taskSnapshotRef.current[task.id];
+      if (!snapshot || !sameTaskState(task, snapshot)) taskDirtyIdsRef.current.add(task.id);
+      else taskDirtyIdsRef.current.delete(task.id);
+    }
+  }, [tasks]);
+
+  useEffect(() => {
+    if (!storeCheckLoadedRef.current) return;
+    const mappings: Array<[keyof StoreCheckState, string]> = [
+      ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
+      ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
+    ];
+    for (const [key, dbKey] of mappings) {
+      if (sameStoreCheck(storeCheck, storeCheckSnapshotRef.current, key)) storeCheckDirtyTypesRef.current.delete(dbKey);
+      else storeCheckDirtyTypesRef.current.add(dbKey);
+    }
+  }, [storeCheck]);
+
+  useEffect(() => {
+    if (!individualHandoverLoadedRef.current) return;
+    for (const record of individualHandovers) {
+      const snapshot = individualSnapshotRef.current[record.id];
+      if (!snapshot || !sameIndividualHandover(record, snapshot)) individualDirtyIdsRef.current.add(record.id);
+      else individualDirtyIdsRef.current.delete(record.id);
+    }
+  }, [individualHandovers]);
+
+  // Task saves only send the records changed by the user, never a whole screen snapshot.
   const taskSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bulkUpsertTaskStatesRef = useRef(bulkUpsertTaskStates);
   useEffect(() => { bulkUpsertTaskStatesRef.current = bulkUpsertTaskStates; });
   useEffect(() => {
-    if (!tasksLoadedRef.current) return; // DB読み込み中は保存しない
+    if (!tasksLoadedRef.current || taskDirtyIdsRef.current.size === 0) return;
     if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current);
-    isSavingTasksRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     taskSaveTimerRef.current = setTimeout(async () => {
+      const dateKey = currentDateKeyRef.current;
+      const dirtyIds = new Set(taskDirtyIdsRef.current);
+      const records = tasksRef.current.filter(task => dirtyIds.has(task.id));
+      if (records.length === 0) return;
+      isSavingTasksRef.current = true;
       try {
-        // stale closure防止: Refから最新値を取得
-        const latestTasks = tasksRef.current;
-        const latestDateKey = currentDateKeyRef.current;
-        await bulkUpsertTaskStatesRef.current.mutateAsync(
-          latestTasks.map(t => {
-            // showOnDaysタスクで完了済みの場合、completedDateKey・completedByタグをnoteに必ず含めて保存
-            // これにより、更新・再訪問後もサーバー側が正しい完了日・完了者を返せる
-            let note = t.note ?? "";
-            if (t.done && t.completedDateKey) {
-              // 既存のタグを一度クリアしてから再構築
-              const cleanNote = note
-                .replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "")
-                .replace(/\n?__completedBy:[^\n]+/g, "")
-                .trim();
-              const dateTag = `__completedDate:${t.completedDateKey}`;
-              const byTag = t.completedBy ? `\n__completedBy:${t.completedBy}` : "";
-              note = cleanNote ? `${cleanNote}\n${dateTag}${byTag}` : `${dateTag}${byTag}`;
-            }
-            return { dateKey: latestDateKey, taskId: t.id, done: t.done, help: t.help, note };
-          })
-        );
+        const saved = await bulkUpsertTaskStatesRef.current.mutateAsync(records.map(task => ({
+          dateKey,
+          taskId: task.id,
+          done: task.done,
+          help: task.help,
+          note: persistedTaskNote(task),
+          planned: task.planned,
+          expectedRevision: task.revision && task.revision > 0 ? task.revision : undefined,
+        })));
+        const byId = new Map(records.map(task => [task.id, task]));
+        setTasks(current => current.map(task => {
+          const savedState = saved.find(state => state.taskId === task.id);
+          const submitted = byId.get(task.id);
+          if (!savedState || !submitted || !sameTaskState(task, submitted)) return task;
+          const persisted = { ...task, revision: savedState.revision };
+          taskSnapshotRef.current[task.id] = persisted;
+          taskDirtyIdsRef.current.delete(task.id);
+          return persisted;
+        }));
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
-        // 保存完了後にキャッシュを無効化してポーリングデータを最新化（フラグ解除前に実行）
         await utils.task.taskStates.getByDateWithMonthly.invalidate();
       } catch (e) {
         console.error("Task save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+        toast.error("接続できません。データは変更されていません。再試行してください。", { id: "save-error", duration: 5000 });
       } finally {
-        isSavingTasksRef.current = false; // 保存完了後にフラグを解除
+        isSavingTasksRef.current = false;
+        taskSaveTimerRef.current = null;
       }
     }, 800);
     return () => { if (taskSaveTimerRef.current) clearTimeout(taskSaveTimerRef.current); };
   }, [tasks, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 店舗チェック自動保存
+  // Store checks use the same per-field dirty strategy.
   const storeCheckSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!storeCheckLoadedRef.current) return; // DB読み込み中は保存しない
+    if (!storeCheckLoadedRef.current || storeCheckDirtyTypesRef.current.size === 0) return;
     if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current);
-    isSavingStoreCheckRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     storeCheckSaveTimerRef.current = setTimeout(async () => {
+      const dirtyTypes = new Set(storeCheckDirtyTypesRef.current);
+      if (dirtyTypes.size === 0) return;
+      const latestStoreCheck = storeCheckRef.current;
+      const values: Record<string, string[]> = {
+        line_morning: latestStoreCheck.lineMorning,
+        line_afternoon: latestStoreCheck.lineAfternoon,
+        pos: latestStoreCheck.pos,
+        raccoon: latestStoreCheck.raccoon,
+        ai_voicemail: latestStoreCheck.aiVoicemail ? ["done"] : [],
+      };
+      isSavingStoreCheckRef.current = true;
       try {
-        await Promise.all([
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line_morning", checkedStores: storeCheck.lineMorning }),
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "line_afternoon", checkedStores: storeCheck.lineAfternoon }),
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "pos", checkedStores: storeCheck.pos }),
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "raccoon", checkedStores: storeCheck.raccoon }),
-          upsertStoreCheck.mutateAsync({ dateKey: currentDateKey, checkType: "ai_voicemail", checkedStores: storeCheck.aiVoicemail ? ["done"] : [] }),
-        ]);
+        const saved = await bulkUpsertStoreCheck.mutateAsync(Array.from(dirtyTypes).map(checkType => ({
+          dateKey: currentDateKey,
+          checkType,
+          checkedStores: values[checkType],
+          expectedRevision: storeCheckRevisionsRef.current[checkType],
+        })));
+        for (const savedState of saved) {
+          storeCheckRevisionsRef.current[savedState.checkType] = savedState.revision;
+          const fieldByCheckType: Record<string, keyof StoreCheckState> = {
+            line_morning: "lineMorning",
+            line_afternoon: "lineAfternoon",
+            pos: "pos",
+            raccoon: "raccoon",
+            ai_voicemail: "aiVoicemail",
+          };
+          const field = fieldByCheckType[savedState.checkType];
+          if (!field) continue;
+          const savedValue = savedState.checkType === "ai_voicemail"
+            ? values[savedState.checkType].length > 0
+            : values[savedState.checkType];
+          storeCheckSnapshotRef.current = { ...storeCheckSnapshotRef.current, [field]: savedValue };
+          if (sameStoreCheck(storeCheckRef.current, storeCheckSnapshotRef.current, field)) {
+            storeCheckDirtyTypesRef.current.delete(savedState.checkType);
+          }
+        }
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
       } catch (e) {
         console.error("Store check save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+        toast.error("接続できません。データは変更されていません。再試行してください。", { id: "save-error", duration: 5000 });
       } finally {
-        isSavingStoreCheckRef.current = false; // 保存完了後にフラグを解除
+        isSavingStoreCheckRef.current = false;
+        storeCheckSaveTimerRef.current = null;
       }
     }, 500);
     return () => { if (storeCheckSaveTimerRef.current) clearTimeout(storeCheckSaveTimerRef.current); };
   }, [storeCheck, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 個別引き継ぎ自動保存
-  // 重要フラグ変更は即時保存（onClickで直接upsert）するため、自動保存から除外するためのフラグ
-  const skipAutoSaveRef = useRef(false);
+  // Individual handovers are saved one record at a time. Completed records are archived,
+  // never physically removed, and can be restored from the confirmation toast.
   const individualHandoverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!individualHandoverLoadedRef.current) return; // DB読み込み中は保存しない
-    if (skipAutoSaveRef.current) {
-      // 重要フラグ変更による再レンダリングは自動保存をスキップ（即時保存済みのため）
-      skipAutoSaveRef.current = false;
-      return;
-    }
+    if (!individualHandoverLoadedRef.current || individualDirtyIdsRef.current.size === 0) return;
     if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current);
-    isSavingIndividualRef.current = true; // 保存タイマー起動中はポーリング上書きを防ぐ
     individualHandoverSaveTimerRef.current = setTimeout(async () => {
+      const dirtyIds = new Set(individualDirtyIdsRef.current);
+      const records = individualHandoversRef.current.filter(record => dirtyIds.has(record.id));
+      if (records.length === 0) return;
+      isSavingIndividualRef.current = true;
       try {
-        for (const record of individualHandoversRef.current) {
+        for (const record of records) {
           const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
-          await upsertIndividualHandover.mutateAsync({
+          const saved = await upsertIndividualHandover.mutateAsync({
             id: record.id,
             dateKey: currentDateKey,
             author: record.author,
@@ -888,21 +996,55 @@ export default function Home() {
             tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
             completed: allDone,
             important: record.important ?? false,
+            expectedRevision: record.revision,
           });
+          individualSnapshotRef.current[record.id] = { ...record, revision: saved.revision };
+          individualDirtyIdsRef.current.delete(record.id);
+          if (allDone) {
+            setIndividualHandovers(current => current.filter(item => item.id !== record.id));
+            toast.success("個別引き継ぎを完了として保存しました。", {
+              action: {
+                label: "元に戻す",
+                onClick: async () => {
+                  try {
+                    const restored = await restoreIndividualHandover.mutateAsync({ id: record.id, expectedRevision: saved.revision });
+                    const restoredRecord = { ...record, revision: restored.revision };
+                    individualSnapshotRef.current[record.id] = restoredRecord;
+                    setIndividualHandovers(current => [...current, restoredRecord]);
+                  } catch {
+                    toast.error("復元に失敗しました。画面を更新して確認してください。");
+                  }
+                },
+              },
+            });
+          } else {
+            setIndividualHandovers(current => current.map(item => item.id === record.id ? { ...item, revision: saved.revision } : item));
+          }
         }
         const now = new Date();
         setLastSaved(`同期済み ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
-        // 保存完了後にキャッシュを無効化してポーリングデータを最新化（フラグ解除前に実行）
         await utils.task.individualHandover.getActive.invalidate();
       } catch (e) {
         console.error("Individual handover save failed:", e);
-        toast.error("保存に失敗しました。再試行してください。", { id: "save-error", duration: 4000 });
+        toast.error("接続できません。データは変更されていません。再試行してください。", { id: "save-error", duration: 5000 });
       } finally {
-        isSavingIndividualRef.current = false; // 保存完了後にフラグを解除
+        isSavingIndividualRef.current = false;
+        individualHandoverSaveTimerRef.current = null;
       }
     }, 800);
     return () => { if (individualHandoverSaveTimerRef.current) clearTimeout(individualHandoverSaveTimerRef.current); };
   }, [individualHandovers, currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (taskSaveTimerRef.current || storeCheckSaveTimerRef.current || individualHandoverSaveTimerRef.current) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, []);
 
 
   // ─── Handover Handlers ─────────────────────────────────────────────────────
@@ -915,13 +1057,32 @@ export default function Home() {
   };
 
   const handleDeleteIndividualHandover = async (id: string) => {
-    // 専用Refからも削除
-    delete importantFlagsRef.current[id];
-    setIndividualHandovers(prev => prev.filter(r => r.id !== id));
+    const record = individualHandoversRef.current.find(item => item.id === id);
+    if (!record?.revision) {
+      toast.error("まだ保存されていない引き継ぎは、入力を戻してから削除してください。");
+      return;
+    }
     try {
-      await deleteIndividualHandover.mutateAsync({ id });
+      const deleted = await deleteIndividualHandover.mutateAsync({ id, expectedRevision: record.revision });
+      setIndividualHandovers(prev => prev.filter(item => item.id !== id));
+      toast.success("引き継ぎをアーカイブしました。", {
+        action: {
+          label: "元に戻す",
+          onClick: async () => {
+            try {
+              const restored = await restoreIndividualHandover.mutateAsync({ id, expectedRevision: deleted.revision });
+              const restoredRecord = { ...record, revision: restored.revision };
+              individualSnapshotRef.current[id] = restoredRecord;
+              setIndividualHandovers(prev => [...prev, restoredRecord]);
+            } catch {
+              toast.error("復元に失敗しました。画面を更新して確認してください。");
+            }
+          },
+        },
+      });
     } catch (e) {
       console.error("Individual handover delete failed:", e);
+      toast.error("削除できませんでした。データは変更されていません。");
     }
   };
 
@@ -936,31 +1097,11 @@ export default function Home() {
   };
 
   const updateIndividualTask = (recordId: string, taskId: string, field: keyof IndividualHandoverTask, value: string | boolean) => {
-    setIndividualHandovers(prev => {
-      const updated = prev.map(r =>
-        r.id === recordId
-          ? { ...r, tasks: r.tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t) }
-          : r
-      );
-      // 全項目完了時に1秒後自動削除
-      if (field === "done" && value === true) {
-        const record = updated.find(r => r.id === recordId);
-        if (record && record.tasks.every(t => t.done)) {
-          setTimeout(async () => {
-            // 専用Refからも削除
-            delete importantFlagsRef.current[recordId];
-            setIndividualHandovers(p => p.filter(r => r.id !== recordId));
-            try {
-              await deleteIndividualHandover.mutateAsync({ id: recordId });
-            } catch (e) {
-              console.error("Individual handover delete failed:", e);
-            }
-            toast.success("✅ 個別引き継ぎを全項目完了しました");
-          }, 800);
-        }
-      }
-      return updated;
-    });
+    setIndividualHandovers(prev => prev.map(record =>
+      record.id === recordId
+        ? { ...record, tasks: record.tasks.map(task => task.id === taskId ? { ...task, [field]: value } : task) }
+        : record
+    ));
   };
 
   const deleteIndividualTask = (recordId: string, taskId: string) => {
@@ -1027,7 +1168,15 @@ export default function Home() {
   const markAllPrevDone = async () => {
     try {
       await bulkUpsertTaskStates.mutateAsync(
-        activeTasks.map(t => ({ dateKey: prevDayKey, taskId: t.id, done: true }))
+        prevDayTasks.map(task => ({
+          dateKey: prevDayKey,
+          taskId: task.id,
+          done: true,
+          help: task.help,
+          note: persistedTaskNote({ ...task, done: true }),
+          planned: task.planned,
+          expectedRevision: task.revision && task.revision > 0 ? task.revision : undefined,
+        }))
       );
       setPrevDayTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: true, help: false, note: "" })));
       toast.success("前日の未完了タスクをすべて完了にしました");
@@ -1038,15 +1187,16 @@ export default function Home() {
 
   const handleReset = async () => {
     if (!confirm("この日の全設定をリセットしますか？")) return;
-    const initial = activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" }));
+    const initial = activeTasks.map(task => ({
+      ...task,
+      planned: task.defaultPlanned ?? "当日事務担当",
+      actual: "",
+      done: false,
+      help: false,
+      note: "",
+      revision: tasksRef.current.find(current => current.id === task.id)?.revision,
+    }));
     setTasks(initial);
-    try {
-      await bulkUpsertTaskStates.mutateAsync(
-        initial.map(t => ({ dateKey: currentDateKey, taskId: t.id, done: false }))
-      );
-    } catch (e) {
-      console.error("Reset failed:", e);
-    }
     setLastSaved(null);
     toast.info("リセットしました");
   };
@@ -1323,6 +1473,7 @@ export default function Home() {
 
   const prevDayUndoneTasks = prevDayTasks.filter(t => !t.done);
   const { main: prevDateMain } = formatDateLabel(prevDayKey);
+  const hasDataLoadError = Boolean(taskStatesError || storeCheckError || individualHandoverError);
 
   return (
     <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #f0fdf4 0%, #f7fef9 40%, #ecfdf5 100%)" }}>
@@ -1516,6 +1667,11 @@ export default function Home() {
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${individualHandoverOpen ? "rotate-180" : ""}`} />
             </div>
           </div>
+          {hasDataLoadError && (
+            <p className="mt-2 text-center text-xs font-medium text-rose-600">
+              接続できません。表示中のデータは変更されていません。
+            </p>
+          )}
 
           {/* 個別引き継ぎ一覧（アコーディオン本体） */}
           {individualHandoverOpen && (
@@ -1531,41 +1687,10 @@ export default function Home() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* 重要トグルボタン */}
                     <button
-                      onClick={async () => {
-                        const newImportant = !record.important;
-                        // タイマーが起動中ならキャンセル（即時保存が優先）
-                        if (individualHandoverSaveTimerRef.current) {
-                          clearTimeout(individualHandoverSaveTimerRef.current);
-                          individualHandoverSaveTimerRef.current = null;
-                        }
-                        // 重要フラグを専用Refに即座に記録（ポーリング・自動保存の競合を完全排除）
-                        importantFlagsRef.current[record.id] = newImportant;
-                        // 自動保存との競合を防ぐ：次の自動保存useEffectをスキップ
-                        skipAutoSaveRef.current = true;
-                        isSavingIndividualRef.current = true; // 即時保存中はポーリング上書きを防ぐ
-                        const updated = individualHandoversRef.current.map(r => r.id === record.id ? { ...r, important: newImportant } : r);
-                        // Reactのstate更新は非同期のため、Refも即座に更新して自動保存タイマーが古い値を使わないようにする
-                        individualHandoversRef.current = updated;
-                        setIndividualHandovers(updated);
-                        try {
-                          const allDone = record.tasks.length > 0 && record.tasks.every(t => t.done);
-                          await upsertIndividualHandover.mutateAsync({
-                            id: record.id,
-                            dateKey: currentDateKey,
-                            author: record.author,
-                            target: record.target,
-                            tasks: record.tasks.map(t => ({ id: t.id, content: t.text, done: t.done, deadline: t.deadline })),
-                            completed: allDone,
-                            important: newImportant,
-                          });
-                          // 保存成功後にキャッシュを無効化してポーリングデータを最新化
-                          await utils.task.individualHandover.getActive.invalidate();
-                        } catch (e) {
-                          console.error('important save failed:', e);
-                          toast.error('重要フラグの保存に失敗しました');
-                        } finally {
-                          isSavingIndividualRef.current = false;
-                        }
+                      onClick={() => {
+                        setIndividualHandovers(current => current.map(item =>
+                          item.id === record.id ? { ...item, important: !item.important } : item
+                        ));
                       }}
                       className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border-2 transition-all ${
                         record.important
@@ -3201,6 +3326,11 @@ export default function Home() {
                   if (!completedByInput) { toast.error("完了者を選択してください"); return; }
                   try {
                     const task = tasks.find(t => t.id === completedByDialog.taskId);
+                    if (!task) return;
+                    if (taskSaveTimerRef.current) {
+                      clearTimeout(taskSaveTimerRef.current);
+                      taskSaveTimerRef.current = null;
+                    }
                     // task.noteはクリーン化済み（タグなし）なので、タグを再構築する
                     const cleanNote = (task?.note ?? "").replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim();
                     const completedDateTag = `__completedDate:${completedByDialog.completedDateKey}`;
@@ -3209,18 +3339,23 @@ export default function Home() {
                       ? `${cleanNote}\n${completedDateTag}\n${completedByTag}`
                       : `${completedDateTag}\n${completedByTag}`;
                     // currentDateKeyでupsert（今日のレコードを更新）
-                    await upsertTaskState.mutateAsync({
+                    const saved = await upsertTaskState.mutateAsync({
                       dateKey: currentDateKey,
                       taskId: completedByDialog.taskId,
                       done: true,
-                      help: task?.help ?? false,
+                      help: task.help,
                       note: newNote,
+                      planned: task.planned,
+                      expectedRevision: task.revision && task.revision > 0 ? task.revision : undefined,
                     });
                     // ローカルstateも更新（noteにタグを含めて保存、completedByを反映）
                     setTasks(prev => prev.map(t => t.id === completedByDialog.taskId
-                      ? { ...t, completedBy: completedByInput, note: newNote }
+                      ? { ...t, completedBy: completedByInput, note: newNote, revision: saved.revision }
                       : t
                     ));
+                    const savedTask = { ...task, completedBy: completedByInput, note: newNote, revision: saved.revision };
+                    taskSnapshotRef.current[task.id] = savedTask;
+                    taskDirtyIdsRef.current.delete(task.id);
                     toast.success(`完了者を「${completedByInput}」として記録しました`);
                     setCompletedByDialog(null);
                   } catch (e) {
