@@ -11,16 +11,22 @@
  * - reorderTasks: タスク並び替え
  */
 import { z } from "zod";
-import { adminProcedure, protectedProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
+import { publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { taskCategories, taskDefinitions, TaskCategory, TaskDefinition } from "../drizzle/schema";
 import { eq, asc, and } from "drizzle-orm";
 
 export const taskDefinitionRouter = router({
   // カテゴリ一覧＋各カテゴリのタスク定義を取得
-  getAll: protectedProcedure.query(async () => {
+  getAll: publicProcedure.query(async () => {
     const db = await getDb();
-    if (!db) return [];
+    if (!db) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "データベースに接続できません。データは変更されていません。",
+      });
+    }
 
     const categories: TaskCategory[] = await db
       .select()
@@ -43,7 +49,7 @@ export const taskDefinitionRouter = router({
   // ─── カテゴリ管理 ────────────────────────────────────────────────────────
 
   // カテゴリ追加
-  addCategory: adminProcedure
+  addCategory: publicProcedure
     .input(
       z.object({
         name: z.string().min(1).max(128),
@@ -70,7 +76,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ名変更
-  updateCategory: adminProcedure
+  updateCategory: publicProcedure
     .input(
       z.object({
         id: z.number(),
@@ -88,7 +94,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ削除（配下のタスクも論理削除）
-  deleteCategory: adminProcedure
+  deleteCategory: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -105,7 +111,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ並び替え（sortOrderを一括更新）
-  reorderCategories: adminProcedure
+  reorderCategories: publicProcedure
     .input(
       z.object({
         categories: z.array(z.object({ id: z.number(), sortOrder: z.number() })),
@@ -128,7 +134,7 @@ export const taskDefinitionRouter = router({
   // ─── タスク管理 ────────────────────────────────────────────────────────
 
   // タスク追加
-  addTask: adminProcedure
+  addTask: publicProcedure
     .input(
       z.object({
         categoryId: z.number(),
@@ -171,7 +177,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク編集
-  updateTask: adminProcedure
+  updateTask: publicProcedure
     .input(
       z.object({
         id: z.number(),
@@ -193,7 +199,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク論理削除
-  deleteTask: adminProcedure
+  deleteTask: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -206,7 +212,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク並び替え（同カテゴリ内のsortOrderを一括更新）
-  reorderTasks: adminProcedure
+  reorderTasks: publicProcedure
     .input(
       z.object({
         // [{id, sortOrder}] の配列
