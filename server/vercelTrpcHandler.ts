@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { nodeHTTPRequestHandler } from "@trpc/server/adapters/node-http";
 import { appRouter } from "./routers";
-import { sdk } from "./_core/sdk";
+import { authenticateSupabaseRequest } from "./_core/supabaseAuth";
 import type { TrpcContext } from "./_core/context";
 import type { User } from "../drizzle/schema";
 
@@ -53,7 +53,9 @@ function serializeClearedCookie(name: string, options: CookieOptions) {
   if (options.secure) parts.push("Secure");
   if (options.sameSite) {
     const sameSite = options.sameSite === true ? "Strict" : options.sameSite;
-    parts.push(`SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`);
+    parts.push(
+      `SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`
+    );
   }
 
   return parts.join("; ");
@@ -97,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let user: User | null = null;
 
       try {
-        user = await sdk.authenticateRequest(req as any);
+        user = await authenticateSupabaseRequest(req as any);
       } catch {
         user = null;
       }

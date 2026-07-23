@@ -12,14 +12,14 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { taskCategories, taskDefinitions, TaskCategory, TaskDefinition } from "../drizzle/schema";
 import { eq, asc, and } from "drizzle-orm";
 
 export const taskDefinitionRouter = router({
   // カテゴリ一覧＋各カテゴリのタスク定義を取得
-  getAll: publicProcedure.query(async () => {
+  getAll: protectedProcedure.query(async () => {
     const db = await getDb();
     if (!db) {
       throw new TRPCError({
@@ -49,7 +49,7 @@ export const taskDefinitionRouter = router({
   // ─── カテゴリ管理 ────────────────────────────────────────────────────────
 
   // カテゴリ追加
-  addCategory: publicProcedure
+  addCategory: adminProcedure
     .input(
       z.object({
         name: z.string().min(1).max(128),
@@ -76,7 +76,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ名変更
-  updateCategory: publicProcedure
+  updateCategory: adminProcedure
     .input(
       z.object({
         id: z.number(),
@@ -94,7 +94,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ削除（配下のタスクも論理削除）
-  deleteCategory: publicProcedure
+  deleteCategory: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -111,7 +111,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // カテゴリ並び替え（sortOrderを一括更新）
-  reorderCategories: publicProcedure
+  reorderCategories: adminProcedure
     .input(
       z.object({
         categories: z.array(z.object({ id: z.number(), sortOrder: z.number() })),
@@ -134,7 +134,7 @@ export const taskDefinitionRouter = router({
   // ─── タスク管理 ────────────────────────────────────────────────────────
 
   // タスク追加
-  addTask: publicProcedure
+  addTask: adminProcedure
     .input(
       z.object({
         categoryId: z.number(),
@@ -177,7 +177,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク編集
-  updateTask: publicProcedure
+  updateTask: adminProcedure
     .input(
       z.object({
         id: z.number(),
@@ -199,7 +199,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク論理削除
-  deleteTask: publicProcedure
+  deleteTask: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -212,7 +212,7 @@ export const taskDefinitionRouter = router({
     }),
 
   // タスク並び替え（同カテゴリ内のsortOrderを一括更新）
-  reorderTasks: publicProcedure
+  reorderTasks: adminProcedure
     .input(
       z.object({
         // [{id, sortOrder}] の配列

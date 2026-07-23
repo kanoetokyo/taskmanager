@@ -6,7 +6,6 @@ import { nodeHTTPRequestHandler } from "@trpc/server/adapters/node-http";
 // shared/const.ts
 var COOKIE_NAME = "app_session_id";
 var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
-var AXIOS_TIMEOUT_MS = 3e4;
 var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 
@@ -364,62 +363,6 @@ async function getDb() {
   }
   return _db;
 }
-async function upsertUser(user) {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database is not available for user upsert");
-  }
-  try {
-    const values = {
-      openId: user.openId
-    };
-    const updateSet = {};
-    const textFields = ["name", "email", "loginMethod"];
-    const assignNullable = (field) => {
-      const value = user[field];
-      if (value === void 0) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-    textFields.forEach(assignNullable);
-    if (user.lastSignedIn !== void 0) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== void 0) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = /* @__PURE__ */ new Date();
-    }
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = /* @__PURE__ */ new Date();
-    }
-    await db.insert(users).values(values).onConflictDoUpdate({
-      target: users.openId,
-      set: updateSet
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-async function getUserByOpenId(openId) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database is not available for user lookup");
-  }
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
 
 // server/taskRouter.ts
 var expectedRevision = z2.number().int().positive().nullable().optional();
@@ -508,11 +451,11 @@ async function saveTaskState(tx, input, actor) {
   return updated;
 }
 var taskStatesRouter = router({
-  getByDate: publicProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDate: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     return db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
   }),
-  getByDateWithMonthly: publicProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDateWithMonthly: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     const todayStates = await db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
     const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(and(eq2(taskDefinitions.isActive, true), gte(taskDefinitions.showOnDays, "1")));
@@ -561,11 +504,11 @@ ${completedDateTag}${completedByTag}` : `${completedDateTag}${completedByTag}`
     }
     return result;
   }),
-  upsert: publicProcedure.input(taskStateInput).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(taskStateInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction((tx) => saveTaskState(tx, input, getAuditActor(ctx, input.requestId)));
   }),
-  bulkUpsert: publicProcedure.input(z2.array(taskStateInput).min(1)).mutation(async ({ ctx, input }) => {
+  bulkUpsert: protectedProcedure.input(z2.array(taskStateInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
@@ -605,15 +548,15 @@ async function saveStoreCheck(tx, input, actor) {
   return updated;
 }
 var storeCheckRouter = router({
-  getByDate: publicProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDate: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     return db.select().from(storeCheckStates).where(eq2(storeCheckStates.dateKey, input.dateKey));
   }),
-  upsert: publicProcedure.input(storeCheckInput).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(storeCheckInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction((tx) => saveStoreCheck(tx, input, getAuditActor(ctx, input.requestId)));
   }),
-  bulkUpsert: publicProcedure.input(z2.array(storeCheckInput).min(1)).mutation(async ({ ctx, input }) => {
+  bulkUpsert: protectedProcedure.input(z2.array(storeCheckInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
@@ -634,11 +577,11 @@ var individualInput = z2.object({
   requestId: requestIdInput
 });
 var individualHandoverRouter = router({
-  getActive: publicProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async () => {
+  getActive: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async () => {
     const db = await requireDb();
     return db.select().from(individualHandovers).where(and(eq2(individualHandovers.completed, false), isNull(individualHandovers.deletedAt)));
   }),
-  upsert: publicProcedure.input(individualInput).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(individualInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -679,7 +622,7 @@ var individualHandoverRouter = router({
       return updated;
     });
   }),
-  delete: publicProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -692,7 +635,7 @@ var individualHandoverRouter = router({
       return updated;
     });
   }),
-  restore: publicProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -745,11 +688,11 @@ var customerPatchInput = z2.object({
   requestId: requestIdInput
 });
 var customerHandoverRouter = router({
-  getActive: publicProcedure.query(async () => {
+  getActive: protectedProcedure.query(async () => {
     const db = await requireDb();
     return db.select().from(customerHandovers).where(and(isNull(customerHandovers.deletedAt), ne(customerHandovers.status, "\u5B8C\u4E86")));
   }),
-  upsert: publicProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -785,7 +728,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  patch: publicProcedure.input(customerPatchInput).mutation(async ({ ctx, input }) => {
+  patch: protectedProcedure.input(customerPatchInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -809,7 +752,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  delete: publicProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -822,7 +765,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  restore: publicProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), status: z2.string().max(32).optional(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), status: z2.string().max(32).optional(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -870,23 +813,23 @@ async function upsertSingletonStatus(db, table, field, value, actor, entityType)
   });
 }
 var misocaRouter = router({
-  get: publicProcedure.query(async () => {
+  get: protectedProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(misocaStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: publicProcedure.input(z2.object({ completedUntil: z2.string().max(16), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(z2.object({ completedUntil: z2.string().max(16), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return upsertSingletonStatus(db, misocaStatus, "completedUntil", input.completedUntil, getAuditActor(ctx, input.requestId), "misoca_status");
   })
 });
 var grayCellRouter = router({
-  get: publicProcedure.query(async () => {
+  get: protectedProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(grayCellStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: publicProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(grayCellStatus).limit(1);
@@ -904,12 +847,12 @@ var grayCellRouter = router({
   })
 });
 var storesShiftRouter = router({
-  get: publicProcedure.query(async () => {
+  get: protectedProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(storesShiftStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: publicProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: protectedProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(storesShiftStatus).limit(1);
@@ -942,7 +885,7 @@ import { TRPCError as TRPCError4 } from "@trpc/server";
 import { eq as eq3, asc, and as and2 } from "drizzle-orm";
 var taskDefinitionRouter = router({
   // カテゴリ一覧＋各カテゴリのタスク定義を取得
-  getAll: publicProcedure.query(async () => {
+  getAll: protectedProcedure.query(async () => {
     const db = await getDb();
     if (!db) {
       throw new TRPCError4({
@@ -959,7 +902,7 @@ var taskDefinitionRouter = router({
   }),
   // ─── カテゴリ管理 ────────────────────────────────────────────────────────
   // カテゴリ追加
-  addCategory: publicProcedure.input(
+  addCategory: adminProcedure.input(
     z3.object({
       name: z3.string().min(1).max(128)
     })
@@ -976,7 +919,7 @@ var taskDefinitionRouter = router({
     return { id: result.id };
   }),
   // カテゴリ名変更
-  updateCategory: publicProcedure.input(
+  updateCategory: adminProcedure.input(
     z3.object({
       id: z3.number(),
       name: z3.string().min(1).max(128)
@@ -988,7 +931,7 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // カテゴリ削除（配下のタスクも論理削除）
-  deleteCategory: publicProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+  deleteCategory: adminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB not available");
     await db.update(taskDefinitions).set({ isActive: false }).where(eq3(taskDefinitions.categoryId, input.id));
@@ -996,7 +939,7 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // カテゴリ並び替え（sortOrderを一括更新）
-  reorderCategories: publicProcedure.input(
+  reorderCategories: adminProcedure.input(
     z3.object({
       categories: z3.array(z3.object({ id: z3.number(), sortOrder: z3.number() }))
     })
@@ -1012,7 +955,7 @@ var taskDefinitionRouter = router({
   }),
   // ─── タスク管理 ────────────────────────────────────────────────────────
   // タスク追加
-  addTask: publicProcedure.input(
+  addTask: adminProcedure.input(
     z3.object({
       categoryId: z3.number(),
       label: z3.string().min(1).max(512),
@@ -1040,7 +983,7 @@ var taskDefinitionRouter = router({
     return { id: result.id };
   }),
   // タスク編集
-  updateTask: publicProcedure.input(
+  updateTask: adminProcedure.input(
     z3.object({
       id: z3.number(),
       label: z3.string().min(1).max(512).optional(),
@@ -1057,14 +1000,14 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // タスク論理削除
-  deleteTask: publicProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+  deleteTask: adminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB not available");
     await db.update(taskDefinitions).set({ isActive: false }).where(eq3(taskDefinitions.id, input.id));
     return { success: true };
   }),
   // タスク並び替え（同カテゴリ内のsortOrderを一括更新）
-  reorderTasks: publicProcedure.input(
+  reorderTasks: adminProcedure.input(
     z3.object({
       // [{id, sortOrder}] の配列
       tasks: z3.array(z3.object({ id: z3.number(), sortOrder: z3.number() }))
@@ -1105,232 +1048,57 @@ var appRouter = router({
   // }),
 });
 
-// shared/_core/errors.ts
-var HttpError = class extends Error {
-  constructor(statusCode, message) {
-    super(message);
-    this.statusCode = statusCode;
-    this.name = "HttpError";
-  }
-};
-var ForbiddenError = (msg) => new HttpError(403, msg);
-
-// server/_core/sdk.ts
-import axios from "axios";
-import { parse as parseCookieHeader } from "cookie";
-import { SignJWT, jwtVerify } from "jose";
-var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
-var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
-var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
-var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
-var OAuthService = class {
-  constructor(client) {
-    this.client = client;
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
+// server/_core/supabaseAuth.ts
+import { createClient } from "@supabase/supabase-js";
+function getHeaderValue(headers, name) {
+  const value = headers?.[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+function getAccessToken(req) {
+  const authorization = getHeaderValue(req.headers, "authorization");
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  return token || null;
+}
+function getAdminEmails() {
+  return new Set(
+    (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean)
+  );
+}
+function getSupabaseAuthConfig() {
+  const url = process.env.VITE_SUPABASE_URL ?? "";
+  const publishableKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
+  return { url, publishableKey };
+}
+async function authenticateSupabaseRequest(req) {
+  const token = getAccessToken(req);
+  const { url, publishableKey } = getSupabaseAuthConfig();
+  if (!token || !url || !publishableKey) return null;
+  const supabase = createClient(url, publishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
     }
-  }
-  decodeState(state) {
-    const redirectUri = atob(state);
-    return redirectUri;
-  }
-  async getTokenByCode(code, state) {
-    const payload = {
-      clientId: ENV.appId,
-      grantType: "authorization_code",
-      code,
-      redirectUri: this.decodeState(state)
-    };
-    const { data } = await this.client.post(
-      EXCHANGE_TOKEN_PATH,
-      payload
-    );
-    return data;
-  }
-  async getUserInfoByToken(token) {
-    const { data } = await this.client.post(
-      GET_USER_INFO_PATH,
-      {
-        accessToken: token.accessToken
-      }
-    );
-    return data;
-  }
-};
-var createOAuthHttpClient = () => axios.create({
-  baseURL: ENV.oAuthServerUrl,
-  timeout: AXIOS_TIMEOUT_MS
-});
-var SDKServer = class {
-  client;
-  oauthService;
-  constructor(client = createOAuthHttpClient()) {
-    this.client = client;
-    this.oauthService = new OAuthService(this.client);
-  }
-  deriveLoginMethod(platforms, fallback) {
-    if (fallback && fallback.length > 0) return fallback;
-    if (!Array.isArray(platforms) || platforms.length === 0) return null;
-    const set = new Set(
-      platforms.filter((p) => typeof p === "string")
-    );
-    if (set.has("REGISTERED_PLATFORM_EMAIL")) return "email";
-    if (set.has("REGISTERED_PLATFORM_GOOGLE")) return "google";
-    if (set.has("REGISTERED_PLATFORM_APPLE")) return "apple";
-    if (set.has("REGISTERED_PLATFORM_MICROSOFT") || set.has("REGISTERED_PLATFORM_AZURE"))
-      return "microsoft";
-    if (set.has("REGISTERED_PLATFORM_GITHUB")) return "github";
-    const first = Array.from(set)[0];
-    return first ? first.toLowerCase() : null;
-  }
-  /**
-   * Exchange OAuth authorization code for access token
-   * @example
-   * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-   */
-  async exchangeCodeForToken(code, state) {
-    return this.oauthService.getTokenByCode(code, state);
-  }
-  /**
-   * Get user information using access token
-   * @example
-   * const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-   */
-  async getUserInfo(accessToken) {
-    const data = await this.oauthService.getUserInfoByToken({
-      accessToken
-    });
-    const loginMethod = this.deriveLoginMethod(
-      data?.platforms,
-      data?.platform ?? data.platform ?? null
-    );
-    return {
-      ...data,
-      platform: loginMethod,
-      loginMethod
-    };
-  }
-  parseCookies(cookieHeader) {
-    if (!cookieHeader) {
-      return /* @__PURE__ */ new Map();
-    }
-    const parsed = parseCookieHeader(cookieHeader);
-    return new Map(Object.entries(parsed));
-  }
-  getSessionSecret() {
-    const secret = ENV.cookieSecret;
-    return new TextEncoder().encode(secret);
-  }
-  /**
-   * Create a session token for a Manus user openId
-   * @example
-   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
-   */
-  async createSessionToken(openId, options = {}) {
-    return this.signSession(
-      {
-        openId,
-        appId: ENV.appId,
-        name: options.name || ""
-      },
-      options
-    );
-  }
-  async signSession(payload, options = {}) {
-    const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
-    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
-    const secretKey = this.getSessionSecret();
-    return new SignJWT({
-      openId: payload.openId,
-      appId: payload.appId,
-      name: payload.name
-    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey);
-  }
-  async verifySession(cookieValue) {
-    if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
-      return null;
-    }
-    try {
-      const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
-        algorithms: ["HS256"]
-      });
-      const { openId, appId, name } = payload;
-      if (!isNonEmptyString2(openId) || !isNonEmptyString2(appId) || !isNonEmptyString2(name)) {
-        console.warn("[Auth] Session payload missing required fields");
-        return null;
-      }
-      return {
-        openId,
-        appId,
-        name
-      };
-    } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
-      return null;
-    }
-  }
-  async getUserInfoWithJwt(jwtToken) {
-    const payload = {
-      jwtToken,
-      projectId: ENV.appId
-    };
-    const { data } = await this.client.post(
-      GET_USER_INFO_WITH_JWT_PATH,
-      payload
-    );
-    const loginMethod = this.deriveLoginMethod(
-      data?.platforms,
-      data?.platform ?? data.platform ?? null
-    );
-    return {
-      ...data,
-      platform: loginMethod,
-      loginMethod
-    };
-  }
-  async authenticateRequest(req) {
-    const cookies = this.parseCookies(req.headers.cookie);
-    const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
-    if (!session) {
-      throw ForbiddenError("Invalid session cookie");
-    }
-    const sessionUserId = session.openId;
-    const signedInAt = /* @__PURE__ */ new Date();
-    let user = await getUserByOpenId(sessionUserId);
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt
-        });
-        user = await getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
-    }
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-    await upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt
-    });
-    return user;
-  }
-};
-var sdk = new SDKServer();
+  });
+  const { data, error } = await supabase.auth.getUser(token);
+  const email = data.user?.email?.trim().toLowerCase();
+  if (error || !data.user || !email || !getAdminEmails().has(email))
+    return null;
+  const createdAt = data.user.created_at ? new Date(data.user.created_at) : /* @__PURE__ */ new Date();
+  const updatedAt = data.user.updated_at ? new Date(data.user.updated_at) : createdAt;
+  const displayName = typeof data.user.user_metadata.full_name === "string" ? data.user.user_metadata.full_name : email;
+  return {
+    id: 0,
+    openId: `supabase:${data.user.id}`,
+    name: displayName,
+    email,
+    loginMethod: "supabase",
+    role: "admin",
+    createdAt,
+    updatedAt,
+    lastSignedIn: /* @__PURE__ */ new Date()
+  };
+}
 
 // server/vercelTrpcHandler.ts
 var config = {
@@ -1359,7 +1127,9 @@ function serializeClearedCookie(name, options) {
   if (options.secure) parts.push("Secure");
   if (options.sameSite) {
     const sameSite = options.sameSite === true ? "Strict" : options.sameSite;
-    parts.push(`SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`);
+    parts.push(
+      `SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`
+    );
   }
   return parts.join("; ");
 }
@@ -1395,7 +1165,7 @@ async function handler(req, res) {
     createContext: async () => {
       let user = null;
       try {
-        user = await sdk.authenticateRequest(req);
+        user = await authenticateSupabaseRequest(req);
       } catch {
         user = null;
       }

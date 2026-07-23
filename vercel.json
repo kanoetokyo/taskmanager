@@ -7,6 +7,10 @@
     {
       "source": "/show-on-days",
       "destination": "/"
+    },
+    {
+      "source": "/auth/callback",
+      "destination": "/"
     }
   ]
 }
