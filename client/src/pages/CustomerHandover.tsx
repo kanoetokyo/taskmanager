@@ -599,12 +599,14 @@ export default function CustomerHandover() {
   const restoreCustomer = trpc.task.customerHandover.restore.useMutation();
 
   const updateCustomerRevision = useCallback((id: string, revision: number) => {
+    const nextCustomers = customersRef.current.map(record => (
+      record.id === id ? { ...record, revision } : record
+    ));
+    customersRef.current = nextCustomers;
     setCustomers(current => {
-      const updated = current.map(record => (
+      return current.map(record => (
         record.id === id ? { ...record, revision } : record
       ));
-      customersRef.current = updated;
-      return updated;
     });
   }, []);
 
