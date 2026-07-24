@@ -16,12 +16,9 @@ Set these in Vercel Project Settings -> Environment Variables:
 
 - `DATABASE_URL`
 - `JWT_SECRET`
-
-If OAuth login is used, also set:
-
-- `OAUTH_SERVER_URL`
-- `OWNER_OPEN_ID`
-- `VITE_APP_ID`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `ADMIN_EMAILS` - comma-separated administrator email addresses; do not commit this value to Git.
 
 Optional analytics placeholders:
 
@@ -101,6 +98,27 @@ If you already ran `supabase/seed-task-definitions.sql` in Supabase SQL Editor, 
 ## 5. Redeploy Vercel
 
 After adding or changing Vercel environment variables, redeploy the latest deployment so the running app receives the new values.
+
+## 6. Administrator Login
+
+The deployed application uses Supabase Auth email magic links. Before enabling
+the protected deployment:
+
+1. In **Authentication -> URL Configuration**, set the Site URL to the stable
+   Vercel URL and add the root URL plus `/auth/callback` to Redirect URLs.
+2. In **Authentication -> Sign In / Providers**, confirm that Email is enabled.
+3. In Vercel, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from
+   Supabase **Project Settings -> API**. These values are public browser
+   configuration; never use a service-role key in a `VITE_` variable.
+4. Set `ADMIN_EMAILS` in Vercel to the approved administrator addresses. The
+   application accepts a valid Supabase session only when its email is on this
+   allowlist. Other addresses can complete the email flow but cannot view or
+   change application data.
+5. Redeploy, open `/login`, and request a magic link using an allowlisted email.
+
+Do not enable the protected deployment until all three Vercel variables are set.
+Without them, the login page intentionally blocks access rather than exposing
+task or customer data.
 
 ## Notes
 

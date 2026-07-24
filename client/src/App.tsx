@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthCallback, AuthGate, LoginPage } from "@/components/AuthGate";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -9,7 +10,7 @@ import CustomerHandover from "./pages/CustomerHandover";
 import Home from "./pages/Home";
 import ShowOnDaysPage from "./pages/ShowOnDaysPage";
 
-function Router() {
+function AppRoutes() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
@@ -38,7 +39,15 @@ function App() {
         <TooltipProvider>
           <SakuraPetals />
           <Toaster />
-          <Router />
+          <Switch>
+            <Route path="/login" component={LoginPage} />
+            <Route path="/auth/callback" component={AuthCallback} />
+            <Route>
+              <AuthGate>
+                <AppRoutes />
+              </AuthGate>
+            </Route>
+          </Switch>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

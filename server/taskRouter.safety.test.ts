@@ -43,14 +43,12 @@ describe("task data safety guards", () => {
     });
   });
 
-  it("allows legacy unauthenticated task reads while authentication is not configured", async () => {
-    const where = vi.fn().mockResolvedValue([]);
-    const from = vi.fn(() => ({ where }));
-    const select = vi.fn(() => ({ from }));
-    getDbMock.mockResolvedValue({ select });
+  it("rejects task data access without an authenticated user", async () => {
     const caller = taskRouter.createCaller(createContext(false));
 
-    await expect(caller.taskStates.getByDate({ dateKey: "2026-07-22" })).resolves.toEqual([]);
+    await expect(caller.taskStates.getByDate({ dateKey: "2026-07-22" })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
   });
 
   it("customer list reads never invoke a delete operation", async () => {
