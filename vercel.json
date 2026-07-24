@@ -9,6 +9,10 @@
       "destination": "/"
     },
     {
+      "source": "/login",
+      "destination": "/"
+    },
+    {
       "source": "/auth/callback",
       "destination": "/"
     }
