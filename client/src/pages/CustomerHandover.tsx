@@ -30,6 +30,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,14 @@ const CUSTOMER_STATUSES_ALL = [
   "完了",
 ] as const;
 type CustomerStatus = (typeof CUSTOMER_STATUSES_ALL)[number];
+
+function getTrpcErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const data = (error as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return undefined;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
 
 // カンバン列定義（3列）
 const KANBAN_COLUMNS: {
@@ -576,8 +585,10 @@ export default function CustomerHandover() {
   const customerSnapshotRef = useRef<Record<string, CustomerRecord>>({});
   const dirtyFieldsRef = useRef<Map<string, Set<keyof CustomerRecord>>>(new Map());
   const changeVersionRef = useRef<Map<string, number>>(new Map());
+  const saveRunnerRef = useRef<(id: string) => Promise<boolean>>(async () => true);
+  const saveQueueRef = useRef(createSerialSaveQueue(id => saveRunnerRef.current(id)));
 
-  const { data: customerData, error: customerError } = trpc.task.customerHandover.getActive.useQuery(
+  const { data: customerData, error: customerError, refetch: refetchCustomers } = trpc.task.customerHandover.getActive.useQuery(
     undefined,
     { refetchInterval: 30000 }
   );
@@ -586,6 +597,33 @@ export default function CustomerHandover() {
   const patchCustomer = trpc.task.customerHandover.patch.useMutation();
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
   const restoreCustomer = trpc.task.customerHandover.restore.useMutation();
+
+  const updateCustomerRevision = useCallback((id: string, revision: number) => {
+    const nextCustomers = customersRef.current.map(record => (
+      record.id === id ? { ...record, revision } : record
+    ));
+    customersRef.current = nextCustomers;
+    setCustomers(current => {
+      return current.map(record => (
+        record.id === id ? { ...record, revision } : record
+      ));
+    });
+  }, []);
+
+  const refreshCustomerRevision = useCallback(async (id: string) => {
+    try {
+      const result = await refetchCustomers();
+      const latest = result.data?.find(record => record.id === id);
+      if (!latest) return;
+      const serverRecord = toCustomerRecord(latest);
+      customerSnapshotRef.current[id] = serverRecord;
+      if (serverRecord.revision !== undefined) {
+        updateCustomerRevision(id, serverRecord.revision);
+      }
+    } catch {
+      // The current card stays untouched when the follow-up read also fails.
+    }
+  }, [refetchCustomers, updateCustomerRevision]);
 
   // customersが変わるたびにrefを同期
   useEffect(() => {
@@ -624,11 +662,12 @@ export default function CustomerHandover() {
   useEffect(() => () => {
     debounceTimers.current.forEach(timer => clearTimeout(timer));
     debounceTimers.current.clear();
+    saveQueueRef.current.dispose();
   }, []);
 
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (debounceTimers.current.size > 0) {
+      if (debounceTimers.current.size > 0 || dirtyFieldsRef.current.size > 0) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -638,11 +677,11 @@ export default function CustomerHandover() {
   }, []);
 
   const saveToDb = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<boolean> => {
       const c = customersRef.current.find(r => r.id === id);
-      if (!c) return;
+      if (!c) return true;
       const fields = new Set(dirtyFieldsRef.current.get(id) ?? []);
-      if (fields.size === 0) return;
+      if (fields.size === 0) return true;
       const version = changeVersionRef.current.get(id) ?? 0;
       try {
         const saved = c.revision
@@ -676,21 +715,39 @@ export default function CustomerHandover() {
         if ((changeVersionRef.current.get(id) ?? 0) === version) {
           dirtyFieldsRef.current.delete(id);
         }
-        setCustomers(current => current.map(record => record.id === id
-          ? { ...record, revision: serverRecord.revision }
-          : record
-        ));
+        if (serverRecord.revision !== undefined) {
+          updateCustomerRevision(id, serverRecord.revision);
+        }
         const now = new Date();
         setLastSaved(
           `同期済み ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
         );
+        return true;
       } catch (e) {
         console.error("Customer save failed:", e);
-        toast.error("接続できません。データは変更されていません。再試行してください。");
+        void refreshCustomerRevision(id);
+        if (getTrpcErrorCode(e) === "CONFLICT") {
+          toast.error("他の端末で先に更新されています。入力内容は画面に保持され、自動上書きはしていません。");
+        } else {
+          toast.error("保存結果を確認できません。入力内容は画面に保持されています。", {
+            action: {
+              label: "再試行",
+              onClick: () => {
+                void refreshCustomerRevision(id).finally(() => saveQueueRef.current.request(id));
+              },
+            },
+          });
+        }
+        return false;
       }
     },
-    [patchCustomer, upsertCustomer]
+    [patchCustomer, refreshCustomerRevision, updateCustomerRevision, upsertCustomer]
   );
+
+  saveRunnerRef.current = saveToDb;
+  const requestCustomerSave = useCallback((id: string) => {
+    saveQueueRef.current.request(id);
+  }, []);
 
   // テキストフィールド用デバウンス送信（300ms）
   const saveToDbDebounced = useCallback(
@@ -699,11 +756,11 @@ export default function CustomerHandover() {
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
         debounceTimers.current.delete(id);
-        saveToDb(id);
+        requestCustomerSave(id);
       }, 300);
       debounceTimers.current.set(id, timer);
     },
-    [saveToDb]
+    [requestCustomerSave]
   );
 
   const updateCustomer = useCallback(
@@ -752,12 +809,12 @@ export default function CustomerHandover() {
         fields.add(field);
         dirtyFieldsRef.current.set(id, fields);
         changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
-        if (field === "status" || field === "contact" || field === "assignee") setTimeout(() => saveToDb(id), 0);
+        if (field === "status" || field === "contact" || field === "assignee") setTimeout(() => requestCustomerSave(id), 0);
         else setTimeout(() => saveToDbDebounced(id), 0);
         return updated;
       });
     },
-    [patchCustomer, restoreCustomer, saveToDb, saveToDbDebounced, upsertCustomer]
+    [patchCustomer, requestCustomerSave, restoreCustomer, saveToDbDebounced, upsertCustomer]
   );
 
   // 期限更新（即時DB送信）
@@ -768,11 +825,11 @@ export default function CustomerHandover() {
         customersRef.current = updated;
         dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "dueDate"]));
         changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
-        setTimeout(() => saveToDb(id), 0);
+        setTimeout(() => requestCustomerSave(id), 0);
         return updated;
       });
     },
-    [saveToDb]
+    [requestCustomerSave]
   );
 
   // リンク更新（デバウンス送信）
@@ -805,11 +862,11 @@ export default function CustomerHandover() {
         customersRef.current = updated;
         dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "callCount"]));
         changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
-        setTimeout(() => saveToDb(id), 0);
+        setTimeout(() => requestCustomerSave(id), 0);
         return updated;
       });
     },
-    [saveToDb]
+    [requestCustomerSave]
   );
 
   const handleDelete = useCallback(
@@ -861,9 +918,9 @@ export default function CustomerHandover() {
       });
       dirtyFieldsRef.current.set(rec.id, new Set<keyof CustomerRecord>(["name", "status", "contact", "memo", "assignee", "links", "dueDate", "callCount"]));
       changeVersionRef.current.set(rec.id, 1);
-      setTimeout(() => saveToDb(rec.id), 0);
+      setTimeout(() => requestCustomerSave(rec.id), 0);
     },
-    [saveToDb]
+    [requestCustomerSave]
   );
 
   const totalCount = customers.filter(c => c.status !== "完了").length;
