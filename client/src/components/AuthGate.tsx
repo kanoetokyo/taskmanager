@@ -3,7 +3,13 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { isSupabaseAuthConfigured, supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
-import { LoaderCircle, LogIn, MailCheck, ShieldAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  LoaderCircle,
+  LogIn,
+  MailCheck,
+  ShieldAlert,
+} from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
 
 function AuthPanel({ children }: { children: ReactNode }) {
@@ -111,23 +117,30 @@ export function LoginPage() {
 
 export function AuthCallback() {
   const [message, setMessage] = useState("ログインを確認しています。");
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     const completeLogin = async () => {
       if (!supabase) {
         setMessage("ログイン設定を確認中です。");
+        setHasError(true);
         return;
       }
 
       const code = new URLSearchParams(window.location.search).get("code");
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          setMessage(
-            "ログインの確認に失敗しました。もう一度ログインしてください。"
-          );
-          return;
-        }
+      if (!code) {
+        setMessage("ログインリンクが確認できません。もう一度ログインしてください。");
+        setHasError(true);
+        return;
+      }
+
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        setMessage(
+          "ログインの確認に失敗しました。もう一度ログインしてください。"
+        );
+        setHasError(true);
+        return;
       }
 
       window.location.replace("/");
@@ -138,13 +151,23 @@ export function AuthCallback() {
 
   return (
     <AuthPanel>
-      <LoaderCircle
-        className="size-7 animate-spin text-blue-600"
-        aria-hidden="true"
-      />
+      {hasError ? (
+        <ShieldAlert className="size-7 text-rose-600" aria-hidden="true" />
+      ) : (
+        <LoaderCircle
+          className="size-7 animate-spin text-blue-600"
+          aria-hidden="true"
+        />
+      )}
       <p className="text-sm text-slate-700" role="status">
         {message}
       </p>
+      {hasError && (
+        <Button variant="outline" onClick={() => window.location.replace("/login")}>
+          <ArrowLeft aria-hidden="true" />
+          ログイン画面へ戻る
+        </Button>
+      )}
     </AuthPanel>
   );
 }

@@ -12,7 +12,9 @@ export const isSupabaseAuthConfigured = Boolean(
 export const supabase = isSupabaseAuthConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {
       auth: {
-        detectSessionInUrl: true,
+        // AuthCallback exchanges the one-time PKCE code. Letting the client
+        // auto-detect it here would race with that explicit exchange.
+        detectSessionInUrl: false,
         flowType: "pkce",
         persistSession: true,
       },
