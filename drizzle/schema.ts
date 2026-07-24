@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -70,6 +71,45 @@ export const taskStates = pgTable(
 );
 export type TaskState = typeof taskStates.$inferSelect;
 export type InsertTaskState = typeof taskStates.$inferInsert;
+
+// One-time tasks derived from a read-only calendar rule. The rule configuration
+// stays in a private server environment variable; this table keeps only the
+// generated task and the source event reference needed for safe reconciliation.
+export const calendarAutoTasks = pgTable(
+  "calendar_auto_tasks",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    ruleId: varchar("ruleId", { length: 128 }).notNull(),
+    targetMonth: varchar("targetMonth", { length: 7 }).notNull(),
+    sourceEventId: varchar("sourceEventId", { length: 512 }),
+    dateKey: varchar("dateKey", { length: 10 }).notNull(),
+    category: varchar("category", { length: 128 }).notNull(),
+    label: varchar("label", { length: 512 }).notNull(),
+    defaultPlanned: varchar("defaultPlanned", { length: 64 })
+      .notNull()
+      .default(""),
+    status: varchar("status", { length: 32 }).notNull().default("scheduled"),
+    details: jsonb("details").notNull().default({}),
+    revision: integer("revision").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  table => ({
+    ruleMonthIdx: uniqueIndex("calendar_auto_tasks_rule_month_unique").on(
+      table.ruleId,
+      table.targetMonth
+    ),
+    dateStatusIdx: index("calendar_auto_tasks_date_status_idx").on(
+      table.dateKey,
+      table.status
+    ),
+  })
+);
+export type CalendarAutoTask = typeof calendarAutoTasks.$inferSelect;
+export type InsertCalendarAutoTask = typeof calendarAutoTasks.$inferInsert;
 
 // ─── Store Check States (per date) ────────────────────────────────────────
 export const storeCheckStates = pgTable(

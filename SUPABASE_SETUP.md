@@ -19,6 +19,8 @@ Set these in Vercel Project Settings -> Environment Variables:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `ADMIN_EMAILS` - comma-separated administrator email addresses; do not commit this value to Git.
+- `AUTH_REQUIRED` and `VITE_AUTH_REQUIRED` - set both to `true` only when the
+  email-login gate should be enabled. The current shared deployment uses `false`.
 
 Optional analytics placeholders:
 
@@ -82,6 +84,23 @@ attempt a production restore from the application UI.
 Customer and individual handovers are logically deleted after the data-safety
 migration. Restore them through the application undo action or the protected restore
 API; physical deletion is reserved for an administrator-only maintenance operation.
+
+### Calendar automation migration
+
+`drizzle/migrations/0003_calendar_auto_tasks.sql` is also additive. It creates a
+separate table for generated calendar tasks, with an audit trail and a unique rule
+and month key. It never changes or deletes existing task, store-check, or handover
+records.
+
+Apply it to a Preview Branch with data before production:
+
+```bash
+# DATABASE_URL must point to the Preview Branch, not production.
+node scripts/apply-sql-migration.mjs drizzle/migrations/0003_calendar_auto_tasks.sql
+```
+
+Complete the staging dry run in `CALENDAR_AUTOMATION_SETUP.md` before enabling the
+production cron job.
 
 ## 4. Seed Initial Task Definitions
 

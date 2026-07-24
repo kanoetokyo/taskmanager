@@ -49,6 +49,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { isCalendarAutomationEnabled } from "@/lib/calendarAutomation";
 import {
   DndContext,
   closestCenter,
@@ -471,6 +472,12 @@ export default function Home() {
     { refetchInterval: 30000 } // 30秒ごとにポーリング
   );
 
+  // Calendar-derived tasks are loaded independently from per-day task state.
+  const { data: calendarAutoTasksData } = trpc.task.calendarAutoTasks.getByDate.useQuery(
+    { dateKey: currentDateKey },
+    { enabled: isCalendarAutomationEnabled, refetchInterval: 30000 }
+  );
+
   // Store check for current date
   const { data: storeCheckData, error: storeCheckError, refetch: refetchStoreCheck } = trpc.task.storeCheck.getByDate.useQuery(
     { dateKey: currentDateKey },
@@ -564,7 +571,7 @@ export default function Home() {
 
   // ─── DBタスク定義からTaskDef配列を生成 ─────────────────────────────────────
   // taskDefinitionDataがロード済みならDBデータを使用、未ロード中はBASE_TASKSをフォールバック
-  const activeTasks: TaskDef[] = useMemo(() => {
+  const masterActiveTasks: TaskDef[] = useMemo(() => {
     if (!taskDefinitionData || taskDefinitionData.length === 0) return BASE_TASKS;
     // 現在表示中の日付の「日」を取得（showOnDaysフィルタリング用）
     const currentDate = keyToDate(currentDateKey);
@@ -626,6 +633,22 @@ export default function Home() {
     return result;
   }, [taskDefinitionData, currentDateKey, taskStatesData]);
 
+  const activeTasks: TaskDef[] = useMemo(() => {
+    const taskIds = new Set(masterActiveTasks.map(task => task.id));
+    const generated = (calendarAutoTasksData ?? [])
+      .map(calendarTask => ({
+        id: `calendar:${calendarTask.id}`,
+        category: calendarTask.category,
+        label: calendarTask.label,
+        icon: <FileText className={iconSize} />,
+        defaultPlanned: calendarTask.defaultPlanned || undefined,
+        isOverdue: calendarTask.status === "needs_review",
+      } satisfies TaskDef))
+      .filter(task => !taskIds.has(task.id));
+
+    return [...masterActiveTasks, ...generated];
+  }, [calendarAutoTasksData, masterActiveTasks]);
+
   // ─── Data Loading from DB ─────────────────────────────────────────────────
 
   // noteから__completedDateタグを抽出するヘルパー
@@ -645,7 +668,13 @@ export default function Home() {
   // Load task states from DB
   useEffect(() => {
     if (taskStatesData === undefined) return;
-    if (tasksLoadedRef.current && taskStatesData.length === 0 && Object.keys(taskSnapshotRef.current).length > 0) {
+    const hasNewActiveTask = activeTasks.some(task => !taskSnapshotRef.current[task.id]);
+    if (
+      tasksLoadedRef.current &&
+      taskStatesData.length === 0 &&
+      Object.keys(taskSnapshotRef.current).length > 0 &&
+      !hasNewActiveTask
+    ) {
       return;
     }
     const fromDatabase = activeTasks.map(base => {
@@ -678,10 +707,25 @@ export default function Home() {
     }
 
     // A polling response may update only records that have no local edits.
-    setTasks(current => current.map(task => {
-      const serverTask = nextSnapshot[task.id];
-      return !serverTask || taskDirtyIdsRef.current.has(task.id) ? task : serverTask;
-    }));
+    // Map from active tasks rather than current state so newly-generated tasks
+    // appear. A calendar reschedule removes old rows only after their local edits
+    // have been saved, so polling never discards a pending user change.
+    setTasks(current => {
+      const currentById = new Map(current.map(task => [task.id, task]));
+      const currentActiveIds = new Set(activeTasks.map(task => task.id));
+      const hydratedTasks = activeTasks.map(baseTask => {
+        const serverTask = nextSnapshot[baseTask.id];
+        const currentTask = currentById.get(baseTask.id);
+        return currentTask && taskDirtyIdsRef.current.has(baseTask.id)
+          ? currentTask
+          : serverTask;
+      });
+      const pendingRemovedTasks = current.filter(
+        task =>
+          !currentActiveIds.has(task.id) && taskDirtyIdsRef.current.has(task.id)
+      );
+      return [...hydratedTasks, ...pendingRemovedTasks];
+    });
     Object.entries(nextSnapshot).forEach(([id, task]) => {
       if (!taskDirtyIdsRef.current.has(id)) taskSnapshotRef.current[id] = task;
     });
