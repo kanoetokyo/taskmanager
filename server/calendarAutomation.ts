@@ -284,7 +284,16 @@ async function getGoogleAccessToken() {
       assertion,
     }),
   });
-  if (!response.ok) throw new Error("Google Calendar authorization failed.");
+  if (!response.ok) {
+    const failure = (await response.json().catch(() => null)) as
+      | { error?: unknown }
+      | null;
+    const reason =
+      failure && typeof failure.error === "string"
+        ? failure.error
+        : `HTTP ${response.status}`;
+    throw new Error(`Google Calendar authorization failed (${reason}).`);
+  }
 
   const payload = (await response.json()) as { access_token?: string };
   if (!payload.access_token) throw new Error("Google Calendar token is missing.");
