@@ -5,12 +5,14 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import { isLoginRequired } from "./lib/authMode";
 import { supabase } from "./lib/supabase";
 import "./index.css";
 
 const queryClient = new QueryClient();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
+  if (!isLoginRequired) return;
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 

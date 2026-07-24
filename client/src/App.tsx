@@ -1,8 +1,9 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthCallback, AuthGate, LoginPage } from "@/components/AuthGate";
+import { isLoginRequired } from "@/lib/authMode";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SakuraPetals from "./components/SakuraPetals";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -14,6 +15,12 @@ function AppRoutes() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
+      <Route path="/login">
+        <Redirect to="/" />
+      </Route>
+      <Route path="/auth/callback">
+        <Redirect to="/" />
+      </Route>
       <Route path={"/"} component={Home} />
       <Route path={"/customers"} component={CustomerHandover} />
       <Route path={"/show-on-days"} component={ShowOnDaysPage} />
@@ -39,15 +46,19 @@ function App() {
         <TooltipProvider>
           <SakuraPetals />
           <Toaster />
-          <Switch>
-            <Route path="/login" component={LoginPage} />
-            <Route path="/auth/callback" component={AuthCallback} />
-            <Route>
-              <AuthGate>
-                <AppRoutes />
-              </AuthGate>
-            </Route>
-          </Switch>
+          {isLoginRequired ? (
+            <Switch>
+              <Route path="/login" component={LoginPage} />
+              <Route path="/auth/callback" component={AuthCallback} />
+              <Route>
+                <AuthGate>
+                  <AppRoutes />
+                </AuthGate>
+              </Route>
+            </Switch>
+          ) : (
+            <AppRoutes />
+          )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

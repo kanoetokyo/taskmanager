@@ -133,6 +133,9 @@ var t = initTRPC.context().create({
 });
 var router = t.router;
 var publicProcedure = t.procedure;
+function isApplicationLoginRequired() {
+  return process.env.AUTH_REQUIRED === "true";
+}
 var requireUser = t.middleware(async (opts) => {
   const { ctx, next } = opts;
   if (!ctx.user) {
@@ -160,6 +163,32 @@ var adminProcedure = t.procedure.use(
     });
   })
 );
+var requireUserWhenLoginEnabled = t.middleware(async (opts) => {
+  if (!isApplicationLoginRequired()) return opts.next({ ctx: opts.ctx });
+  if (!opts.ctx.user) {
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return opts.next({
+    ctx: {
+      ...opts.ctx,
+      user: opts.ctx.user
+    }
+  });
+});
+var requireAdminWhenLoginEnabled = t.middleware(async (opts) => {
+  if (!isApplicationLoginRequired()) return opts.next({ ctx: opts.ctx });
+  if (!opts.ctx.user || opts.ctx.user.role !== "admin") {
+    throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return opts.next({
+    ctx: {
+      ...opts.ctx,
+      user: opts.ctx.user
+    }
+  });
+});
+var appProcedure = t.procedure.use(requireUserWhenLoginEnabled);
+var appAdminProcedure = t.procedure.use(requireAdminWhenLoginEnabled);
 
 // server/_core/systemRouter.ts
 var systemRouter = router({
@@ -451,11 +480,11 @@ async function saveTaskState(tx, input, actor) {
   return updated;
 }
 var taskStatesRouter = router({
-  getByDate: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDate: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     return db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
   }),
-  getByDateWithMonthly: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDateWithMonthly: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     const todayStates = await db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
     const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(and(eq2(taskDefinitions.isActive, true), gte(taskDefinitions.showOnDays, "1")));
@@ -504,11 +533,11 @@ ${completedDateTag}${completedByTag}` : `${completedDateTag}${completedByTag}`
     }
     return result;
   }),
-  upsert: protectedProcedure.input(taskStateInput).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(taskStateInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction((tx) => saveTaskState(tx, input, getAuditActor(ctx, input.requestId)));
   }),
-  bulkUpsert: protectedProcedure.input(z2.array(taskStateInput).min(1)).mutation(async ({ ctx, input }) => {
+  bulkUpsert: appProcedure.input(z2.array(taskStateInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
@@ -548,15 +577,15 @@ async function saveStoreCheck(tx, input, actor) {
   return updated;
 }
 var storeCheckRouter = router({
-  getByDate: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+  getByDate: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     return db.select().from(storeCheckStates).where(eq2(storeCheckStates.dateKey, input.dateKey));
   }),
-  upsert: protectedProcedure.input(storeCheckInput).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(storeCheckInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction((tx) => saveStoreCheck(tx, input, getAuditActor(ctx, input.requestId)));
   }),
-  bulkUpsert: protectedProcedure.input(z2.array(storeCheckInput).min(1)).mutation(async ({ ctx, input }) => {
+  bulkUpsert: appProcedure.input(z2.array(storeCheckInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
@@ -577,11 +606,11 @@ var individualInput = z2.object({
   requestId: requestIdInput
 });
 var individualHandoverRouter = router({
-  getActive: protectedProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async () => {
+  getActive: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async () => {
     const db = await requireDb();
     return db.select().from(individualHandovers).where(and(eq2(individualHandovers.completed, false), isNull(individualHandovers.deletedAt)));
   }),
-  upsert: protectedProcedure.input(individualInput).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(individualInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -622,7 +651,7 @@ var individualHandoverRouter = router({
       return updated;
     });
   }),
-  delete: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -635,7 +664,7 @@ var individualHandoverRouter = router({
       return updated;
     });
   }),
-  restore: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -648,7 +677,7 @@ var individualHandoverRouter = router({
       return updated;
     });
   }),
-  hardDelete: adminProcedure.input(z2.object({ id: z2.string(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  hardDelete: appAdminProcedure.input(z2.object({ id: z2.string(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -688,11 +717,11 @@ var customerPatchInput = z2.object({
   requestId: requestIdInput
 });
 var customerHandoverRouter = router({
-  getActive: protectedProcedure.query(async () => {
+  getActive: appProcedure.query(async () => {
     const db = await requireDb();
     return db.select().from(customerHandovers).where(and(isNull(customerHandovers.deletedAt), ne(customerHandovers.status, "\u5B8C\u4E86")));
   }),
-  upsert: protectedProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -728,7 +757,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  patch: protectedProcedure.input(customerPatchInput).mutation(async ({ ctx, input }) => {
+  patch: appProcedure.input(customerPatchInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -752,7 +781,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  delete: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -765,7 +794,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  restore: protectedProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), status: z2.string().max(32).optional(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), status: z2.string().max(32).optional(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -785,7 +814,7 @@ var customerHandoverRouter = router({
       return updated;
     });
   }),
-  hardDelete: adminProcedure.input(z2.object({ id: z2.string(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  hardDelete: appAdminProcedure.input(z2.object({ id: z2.string(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -813,23 +842,23 @@ async function upsertSingletonStatus(db, table, field, value, actor, entityType)
   });
 }
 var misocaRouter = router({
-  get: protectedProcedure.query(async () => {
+  get: appProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(misocaStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: protectedProcedure.input(z2.object({ completedUntil: z2.string().max(16), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(z2.object({ completedUntil: z2.string().max(16), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return upsertSingletonStatus(db, misocaStatus, "completedUntil", input.completedUntil, getAuditActor(ctx, input.requestId), "misoca_status");
   })
 });
 var grayCellRouter = router({
-  get: protectedProcedure.query(async () => {
+  get: appProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(grayCellStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: protectedProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(grayCellStatus).limit(1);
@@ -847,12 +876,12 @@ var grayCellRouter = router({
   })
 });
 var storesShiftRouter = router({
-  get: protectedProcedure.query(async () => {
+  get: appProcedure.query(async () => {
     const db = await requireDb();
     const result = await db.select().from(storesShiftStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: protectedProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(storesShiftStatus).limit(1);
@@ -885,7 +914,7 @@ import { TRPCError as TRPCError4 } from "@trpc/server";
 import { eq as eq3, asc, and as and2 } from "drizzle-orm";
 var taskDefinitionRouter = router({
   // カテゴリ一覧＋各カテゴリのタスク定義を取得
-  getAll: protectedProcedure.query(async () => {
+  getAll: appProcedure.query(async () => {
     const db = await getDb();
     if (!db) {
       throw new TRPCError4({
@@ -902,7 +931,7 @@ var taskDefinitionRouter = router({
   }),
   // ─── カテゴリ管理 ────────────────────────────────────────────────────────
   // カテゴリ追加
-  addCategory: adminProcedure.input(
+  addCategory: appAdminProcedure.input(
     z3.object({
       name: z3.string().min(1).max(128)
     })
@@ -919,7 +948,7 @@ var taskDefinitionRouter = router({
     return { id: result.id };
   }),
   // カテゴリ名変更
-  updateCategory: adminProcedure.input(
+  updateCategory: appAdminProcedure.input(
     z3.object({
       id: z3.number(),
       name: z3.string().min(1).max(128)
@@ -931,7 +960,7 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // カテゴリ削除（配下のタスクも論理削除）
-  deleteCategory: adminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+  deleteCategory: appAdminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB not available");
     await db.update(taskDefinitions).set({ isActive: false }).where(eq3(taskDefinitions.categoryId, input.id));
@@ -939,7 +968,7 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // カテゴリ並び替え（sortOrderを一括更新）
-  reorderCategories: adminProcedure.input(
+  reorderCategories: appAdminProcedure.input(
     z3.object({
       categories: z3.array(z3.object({ id: z3.number(), sortOrder: z3.number() }))
     })
@@ -955,7 +984,7 @@ var taskDefinitionRouter = router({
   }),
   // ─── タスク管理 ────────────────────────────────────────────────────────
   // タスク追加
-  addTask: adminProcedure.input(
+  addTask: appAdminProcedure.input(
     z3.object({
       categoryId: z3.number(),
       label: z3.string().min(1).max(512),
@@ -983,7 +1012,7 @@ var taskDefinitionRouter = router({
     return { id: result.id };
   }),
   // タスク編集
-  updateTask: adminProcedure.input(
+  updateTask: appAdminProcedure.input(
     z3.object({
       id: z3.number(),
       label: z3.string().min(1).max(512).optional(),
@@ -1000,14 +1029,14 @@ var taskDefinitionRouter = router({
     return { success: true };
   }),
   // タスク論理削除
-  deleteTask: adminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+  deleteTask: appAdminProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB not available");
     await db.update(taskDefinitions).set({ isActive: false }).where(eq3(taskDefinitions.id, input.id));
     return { success: true };
   }),
   // タスク並び替え（同カテゴリ内のsortOrderを一括更新）
-  reorderTasks: adminProcedure.input(
+  reorderTasks: appAdminProcedure.input(
     z3.object({
       // [{id, sortOrder}] の配列
       tasks: z3.array(z3.object({ id: z3.number(), sortOrder: z3.number() }))

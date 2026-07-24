@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
 const getDbMock = vi.hoisted(() => vi.fn());
@@ -8,6 +8,8 @@ vi.mock("./db", () => ({
 }));
 
 import { taskRouter } from "./taskRouter";
+
+const originalAuthRequired = process.env.AUTH_REQUIRED;
 
 function createContext(user = true): TrpcContext {
   return {
@@ -32,6 +34,15 @@ function createContext(user = true): TrpcContext {
 describe("task data safety guards", () => {
   beforeEach(() => {
     getDbMock.mockReset();
+    process.env.AUTH_REQUIRED = "true";
+  });
+
+  afterEach(() => {
+    if (originalAuthRequired === undefined) {
+      delete process.env.AUTH_REQUIRED;
+    } else {
+      process.env.AUTH_REQUIRED = originalAuthRequired;
+    }
   });
 
   it("returns an error instead of an empty customer list when the database is unavailable", async () => {
@@ -43,7 +54,7 @@ describe("task data safety guards", () => {
     });
   });
 
-  it("rejects task data access without an authenticated user", async () => {
+  it("rejects task data access without an authenticated user when login is enabled", async () => {
     const caller = taskRouter.createCaller(createContext(false));
 
     await expect(caller.taskStates.getByDate({ dateKey: "2026-07-22" })).rejects.toMatchObject({
