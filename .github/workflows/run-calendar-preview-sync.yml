@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: calendar-preview-sync
@@ -32,7 +33,6 @@ jobs:
     timeout-minutes: 2
     env:
       CALENDAR_PREVIEW_SYNC_URL: https://task-kakumei-git-calendar-task-automation-kanoe.vercel.app
-      CALENDAR_PREVIEW_CRON_SECRET: ${{ secrets.CALENDAR_PREVIEW_CRON_SECRET }}
       TARGET_MONTH: ${{ inputs.target_month }}
       MODE: ${{ inputs.mode }}
     steps:
@@ -49,8 +49,8 @@ jobs:
             exit 1
           fi
 
-          if [[ -z "$CALENDAR_PREVIEW_CRON_SECRET" ]]; then
-            echo "Set the CALENDAR_PREVIEW_CRON_SECRET repository Actions secret before running this workflow." >&2
+          if [[ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" || -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]]; then
+            echo "GitHub Actions OIDC is unavailable for this workflow run." >&2
             exit 1
           fi
 
@@ -61,6 +61,14 @@ jobs:
           if [[ "$MODE" == "dry-run" ]]; then
             query="${query}&dryRun=1"
           fi
+
+          oidc_response="$(curl \
+            --silent \
+            --show-error \
+            --fail \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fgithub.com%2Fkanoetokyo")"
+          oidc_token="$(jq -er '.value' <<< "$oidc_response")"
 
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
@@ -73,7 +81,8 @@ jobs:
             --max-time 60 \
             --retry 2 \
             --retry-all-errors \
-            --header "Authorization: Bearer ${CALENDAR_PREVIEW_CRON_SECRET}" \
+            --header "Authorization: Bearer ${oidc_token}" \
+            --header "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
             "${CALENDAR_PREVIEW_SYNC_URL%/}/api/cron/calendar-task-sync?${query}")"
 
           echo "HTTP ${status}"
@@ -81,6 +90,6 @@ jobs:
           echo
 
           if [[ "$status" != "200" ]]; then
-            echo "Preview synchronization failed. No response body above contains the secret." >&2
+            echo "Preview synchronization failed. No long-lived secret is used by this workflow." >&2
             exit 1
           fi
