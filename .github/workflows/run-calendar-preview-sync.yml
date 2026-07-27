@@ -1,0 +1,86 @@
+name: Run Calendar Task Preview Sync
+
+run-name: "Calendar Preview: ${{ inputs.mode }} for ${{ inputs.target_month }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_month:
+        description: "Target month in Japan time (YYYY-MM)"
+        required: true
+        type: string
+      mode:
+        description: "Dry run is read-only. Write creates or updates only the Preview task."
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - write
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calendar-preview-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync Preview calendar task
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      CALENDAR_PREVIEW_SYNC_URL: https://task-kakumei-git-calendar-task-automation-kanoe.vercel.app
+      CALENDAR_PREVIEW_CRON_SECRET: ${{ secrets.CALENDAR_PREVIEW_CRON_SECRET }}
+      TARGET_MONTH: ${{ inputs.target_month }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: Validate request and configuration
+        shell: bash
+        run: |
+          if [[ ! "$TARGET_MONTH" =~ ^[0-9]{4}-(0[1-9]|1[0-2])$ ]]; then
+            echo "target_month must use YYYY-MM, for example 2026-07." >&2
+            exit 1
+          fi
+
+          if [[ "$MODE" != "dry-run" && "$MODE" != "write" ]]; then
+            echo "mode must be dry-run or write." >&2
+            exit 1
+          fi
+
+          if [[ -z "$CALENDAR_PREVIEW_CRON_SECRET" ]]; then
+            echo "Set the CALENDAR_PREVIEW_CRON_SECRET repository Actions secret before running this workflow." >&2
+            exit 1
+          fi
+
+      - name: Run protected Preview synchronization
+        shell: bash
+        run: |
+          query="month=${TARGET_MONTH}"
+          if [[ "$MODE" == "dry-run" ]]; then
+            query="${query}&dryRun=1"
+          fi
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --retry 2 \
+            --retry-all-errors \
+            --header "Authorization: Bearer ${CALENDAR_PREVIEW_CRON_SECRET}" \
+            "${CALENDAR_PREVIEW_SYNC_URL%/}/api/cron/calendar-task-sync?${query}")"
+
+          echo "HTTP ${status}"
+          cat "$response_file"
+          echo
+
+          if [[ "$status" != "200" ]]; then
+            echo "Preview synchronization failed. No response body above contains the secret." >&2
+            exit 1
+          fi
