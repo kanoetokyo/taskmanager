@@ -1,0 +1,94 @@
+name: Run Calendar Task Production Sync
+
+run-name: "Calendar Production: ${{ inputs.mode }} for ${{ inputs.target_month }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_month:
+        description: "Target month in Japan time (YYYY-MM)"
+        required: true
+        type: string
+      mode:
+        description: "Dry run is read-only. Write creates or updates only the Production task."
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - write
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: calendar-production-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync Production calendar task
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      CALENDAR_PRODUCTION_SYNC_URL: https://taskmanager-five-plum.vercel.app
+      TARGET_MONTH: ${{ inputs.target_month }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: Validate request and configuration
+        shell: bash
+        run: |
+          if [[ ! "$TARGET_MONTH" =~ ^[0-9]{4}-(0[1-9]|1[0-2])$ ]]; then
+            echo "target_month must use YYYY-MM, for example 2026-07." >&2
+            exit 1
+          fi
+
+          if [[ "$MODE" != "dry-run" && "$MODE" != "write" ]]; then
+            echo "mode must be dry-run or write." >&2
+            exit 1
+          fi
+
+          if [[ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" || -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]]; then
+            echo "GitHub Actions OIDC is unavailable for this workflow run." >&2
+            exit 1
+          fi
+
+      - name: Run protected Production synchronization
+        shell: bash
+        run: |
+          query="month=${TARGET_MONTH}"
+          if [[ "$MODE" == "dry-run" ]]; then
+            query="${query}&dryRun=1"
+          fi
+
+          oidc_response="$(curl \
+            --silent \
+            --show-error \
+            --fail \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fgithub.com%2Fkanoetokyo")"
+          oidc_token="$(jq -er '.value' <<< "$oidc_response")"
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --retry 2 \
+            --retry-all-errors \
+            --header "Authorization: Bearer ${oidc_token}" \
+            --header "x-vercel-trusted-oidc-idp-token: ${oidc_token}" \
+            "${CALENDAR_PRODUCTION_SYNC_URL%/}/api/cron/calendar-task-sync?${query}")"
+
+          echo "HTTP ${status}"
+          cat "$response_file"
+          echo
+
+          if [[ "$status" != "200" ]]; then
+            echo "Production synchronization failed. No long-lived secret is used by this workflow." >&2
+            exit 1

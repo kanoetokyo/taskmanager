@@ -74,6 +74,29 @@ describe("task data safety guards", () => {
     expect(deleteOperation).not.toHaveBeenCalled();
   });
 
+  it("calendar-generated task reads never invoke a write operation", async () => {
+    const where = vi.fn().mockResolvedValue([]);
+    const from = vi.fn(() => ({ where }));
+    const select = vi.fn(() => ({ from }));
+    const insertOperation = vi.fn();
+    const updateOperation = vi.fn();
+    const deleteOperation = vi.fn();
+    getDbMock.mockResolvedValue({
+      select,
+      insert: insertOperation,
+      update: updateOperation,
+      delete: deleteOperation,
+    });
+    const caller = taskRouter.createCaller(createContext());
+
+    await expect(
+      caller.calendarAutoTasks.getByDate({ dateKey: "2026-07-22" })
+    ).resolves.toEqual([]);
+    expect(insertOperation).not.toHaveBeenCalled();
+    expect(updateOperation).not.toHaveBeenCalled();
+    expect(deleteOperation).not.toHaveBeenCalled();
+  });
+
   it("rejects a stale task update before it can overwrite a newer revision", async () => {
     const update = vi.fn();
     const limit = vi.fn().mockResolvedValue([

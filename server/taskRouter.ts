@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   auditLogs,
+  calendarAutoTasks,
   customerHandovers,
   grayCellStatus,
   individualHandovers,
@@ -678,6 +679,23 @@ const storesShiftRouter = router({
   }),
 });
 
+const calendarAutoTasksRouter = router({
+  getByDate: appProcedure
+    .input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await requireDb();
+      return db
+        .select()
+        .from(calendarAutoTasks)
+        .where(
+          and(
+            eq(calendarAutoTasks.dateKey, input.dateKey),
+            ne(calendarAutoTasks.status, "cancelled")
+          )
+        );
+    }),
+});
+
 export const taskRouter = router({
   taskStates: taskStatesRouter,
   storeCheck: storeCheckRouter,
@@ -686,4 +704,5 @@ export const taskRouter = router({
   misoca: misocaRouter,
   grayCell: grayCellRouter,
   storesShift: storesShiftRouter,
+  calendarAutoTasks: calendarAutoTasksRouter,
 });

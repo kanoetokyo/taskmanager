@@ -221,6 +221,7 @@ import { z as z2 } from "zod";
 import {
   bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -265,6 +266,34 @@ var taskStates = pgTable(
     dateKeyTaskIdIdx: uniqueIndex("task_states_date_task_unique").on(
       table.dateKey,
       table.taskId
+    )
+  })
+);
+var calendarAutoTasks = pgTable(
+  "calendar_auto_tasks",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    ruleId: varchar("ruleId", { length: 128 }).notNull(),
+    targetMonth: varchar("targetMonth", { length: 7 }).notNull(),
+    sourceEventId: varchar("sourceEventId", { length: 512 }),
+    dateKey: varchar("dateKey", { length: 10 }).notNull(),
+    category: varchar("category", { length: 128 }).notNull(),
+    label: varchar("label", { length: 512 }).notNull(),
+    defaultPlanned: varchar("defaultPlanned", { length: 64 }).notNull().default(""),
+    status: varchar("status", { length: 32 }).notNull().default("scheduled"),
+    details: jsonb("details").notNull().default({}),
+    revision: integer("revision").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
+  },
+  (table) => ({
+    ruleMonthIdx: uniqueIndex("calendar_auto_tasks_rule_month_unique").on(
+      table.ruleId,
+      table.targetMonth
+    ),
+    dateStatusIdx: index("calendar_auto_tasks_date_status_idx").on(
+      table.dateKey,
+      table.status
     )
   })
 );
@@ -898,6 +927,17 @@ var storesShiftRouter = router({
     });
   })
 });
+var calendarAutoTasksRouter = router({
+  getByDate: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
+    const db = await requireDb();
+    return db.select().from(calendarAutoTasks).where(
+      and(
+        eq2(calendarAutoTasks.dateKey, input.dateKey),
+        ne(calendarAutoTasks.status, "cancelled")
+      )
+    );
+  })
+});
 var taskRouter = router({
   taskStates: taskStatesRouter,
   storeCheck: storeCheckRouter,
@@ -905,7 +945,8 @@ var taskRouter = router({
   customerHandover: customerHandoverRouter,
   misoca: misocaRouter,
   grayCell: grayCellRouter,
-  storesShift: storesShiftRouter
+  storesShift: storesShiftRouter,
+  calendarAutoTasks: calendarAutoTasksRouter
 });
 
 // server/taskDefinitionRouter.ts

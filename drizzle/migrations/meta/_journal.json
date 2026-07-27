@@ -15,6 +15,13 @@
       "when": 1784150000000,
       "tag": "0002_data_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784966400000,
+      "tag": "0003_calendar_auto_tasks",
+      "breakpoints": true
     }
   ]
 }
