@@ -14,8 +14,10 @@ export const config = {
 const GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
 const GITHUB_ACTIONS_AUDIENCE = "https://github.com/kanoetokyo";
 const GITHUB_ACTIONS_REPOSITORY = "kanoetokyo/taskmanager";
-const GITHUB_ACTIONS_WORKFLOW_REF =
+const GITHUB_ACTIONS_PREVIEW_WORKFLOW_REF =
   "kanoetokyo/taskmanager/.github/workflows/run-calendar-preview-sync.yml@refs/heads/main";
+const GITHUB_ACTIONS_PRODUCTION_WORKFLOW_REF =
+  "kanoetokyo/taskmanager/.github/workflows/run-calendar-production-sync.yml@refs/heads/main";
 const githubActionsJwks = createRemoteJWKSet(
   new URL("https://token.actions.githubusercontent.com/.well-known/jwks")
 );
@@ -36,19 +38,24 @@ function isCronSecretAuthorized(req: IncomingMessage) {
   );
 }
 
-export function isAllowedGitHubActionsPreviewSync(payload: JWTPayload) {
+export function isAllowedGitHubActionsSync(payload: JWTPayload) {
+  const allowedWorkflowRef =
+    process.env.VERCEL_ENV === "preview"
+      ? GITHUB_ACTIONS_PREVIEW_WORKFLOW_REF
+      : process.env.VERCEL_ENV === "production"
+        ? GITHUB_ACTIONS_PRODUCTION_WORKFLOW_REF
+        : null;
+
   return (
-    process.env.VERCEL_ENV === "preview" &&
+    allowedWorkflowRef !== null &&
     payload.repository === GITHUB_ACTIONS_REPOSITORY &&
     payload.ref === "refs/heads/main" &&
     payload.event_name === "workflow_dispatch" &&
-    payload.workflow_ref === GITHUB_ACTIONS_WORKFLOW_REF
+    payload.workflow_ref === allowedWorkflowRef
   );
 }
 
 async function isGitHubActionsAuthorized(req: IncomingMessage) {
-  if (process.env.VERCEL_ENV !== "preview") return false;
-
   const authorization = headerValue(req.headers.authorization);
   if (!authorization?.startsWith("Bearer ")) return false;
 
@@ -61,7 +68,7 @@ async function isGitHubActionsAuthorized(req: IncomingMessage) {
         audience: GITHUB_ACTIONS_AUDIENCE,
       }
     );
-    return isAllowedGitHubActionsPreviewSync(payload);
+    return isAllowedGitHubActionsSync(payload);
   } catch {
     return false;
   }

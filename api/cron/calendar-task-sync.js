@@ -666,7 +666,8 @@ var config = {
 var GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
 var GITHUB_ACTIONS_AUDIENCE = "https://github.com/kanoetokyo";
 var GITHUB_ACTIONS_REPOSITORY = "kanoetokyo/taskmanager";
-var GITHUB_ACTIONS_WORKFLOW_REF = "kanoetokyo/taskmanager/.github/workflows/run-calendar-preview-sync.yml@refs/heads/main";
+var GITHUB_ACTIONS_PREVIEW_WORKFLOW_REF = "kanoetokyo/taskmanager/.github/workflows/run-calendar-preview-sync.yml@refs/heads/main";
+var GITHUB_ACTIONS_PRODUCTION_WORKFLOW_REF = "kanoetokyo/taskmanager/.github/workflows/run-calendar-production-sync.yml@refs/heads/main";
 var githubActionsJwks = createRemoteJWKSet(
   new URL("https://token.actions.githubusercontent.com/.well-known/jwks")
 );
@@ -681,11 +682,11 @@ function isCronSecretAuthorized(req) {
   const received = Buffer.from(authorization);
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
-function isAllowedGitHubActionsPreviewSync(payload) {
-  return process.env.VERCEL_ENV === "preview" && payload.repository === GITHUB_ACTIONS_REPOSITORY && payload.ref === "refs/heads/main" && payload.event_name === "workflow_dispatch" && payload.workflow_ref === GITHUB_ACTIONS_WORKFLOW_REF;
+function isAllowedGitHubActionsSync(payload) {
+  const allowedWorkflowRef = process.env.VERCEL_ENV === "preview" ? GITHUB_ACTIONS_PREVIEW_WORKFLOW_REF : process.env.VERCEL_ENV === "production" ? GITHUB_ACTIONS_PRODUCTION_WORKFLOW_REF : null;
+  return allowedWorkflowRef !== null && payload.repository === GITHUB_ACTIONS_REPOSITORY && payload.ref === "refs/heads/main" && payload.event_name === "workflow_dispatch" && payload.workflow_ref === allowedWorkflowRef;
 }
 async function isGitHubActionsAuthorized(req) {
-  if (process.env.VERCEL_ENV !== "preview") return false;
   const authorization = headerValue(req.headers.authorization);
   if (!authorization?.startsWith("Bearer ")) return false;
   try {
@@ -697,7 +698,7 @@ async function isGitHubActionsAuthorized(req) {
         audience: GITHUB_ACTIONS_AUDIENCE
       }
     );
-    return isAllowedGitHubActionsPreviewSync(payload);
+    return isAllowedGitHubActionsSync(payload);
   } catch {
     return false;
   }
@@ -761,5 +762,5 @@ async function handler(req, res) {
 export {
   config,
   handler as default,
-  isAllowedGitHubActionsPreviewSync
+  isAllowedGitHubActionsSync
 };
