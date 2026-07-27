@@ -2,6 +2,7 @@
 
 // server/calendarTaskCron.ts
 import { timingSafeEqual } from "node:crypto";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // server/calendarAutomation.ts
 import { createHash } from "node:crypto";
@@ -327,12 +328,27 @@ function eventMatchesCustomer(event, rule) {
   if (event.status === "cancelled") return false;
   const description = normalizeForMatch(event.description);
   return rule.customerMatch.descriptionMustContain.every(
-    (value) => description.includes(normalizeForMatch(value))
+    (value) => includesConfiguredCustomerValue(description, normalizeForMatch(value))
   );
+}
+function includesConfiguredCustomerValue(description, configuredValue) {
+  if (!configuredValue) return false;
+  let index2 = description.indexOf(configuredValue);
+  while (index2 !== -1) {
+    const followingCharacter = description[index2 + configuredValue.length] ?? "";
+    if (!/\d$/.test(configuredValue) || !/^\d/.test(followingCharacter)) {
+      return true;
+    }
+    index2 = description.indexOf(configuredValue, index2 + configuredValue.length);
+  }
+  return false;
 }
 function hasOfficePresence(events, rule, dateKey) {
   return events.some((event) => {
-    if (event.status === "cancelled" || event.colorId !== rule.officePresence.colorId) {
+    if (event.status === "cancelled") {
+      return false;
+    }
+    if (event.colorId && event.colorId !== rule.officePresence.colorId) {
       return false;
     }
     const summary = normalizeForMatch(event.summary);
@@ -418,7 +434,11 @@ async function getGoogleAccessToken() {
       assertion
     })
   });
-  if (!response.ok) throw new Error("Google Calendar authorization failed.");
+  if (!response.ok) {
+    const failure = await response.json().catch(() => null);
+    const reason = failure && typeof failure.error === "string" ? failure.error : `HTTP ${response.status}`;
+    throw new Error(`Google Calendar authorization failed (${reason}).`);
+  }
   const payload = await response.json();
   if (!payload.access_token) throw new Error("Google Calendar token is missing.");
   return payload.access_token;
@@ -643,16 +663,47 @@ async function runCalendarTaskSync(options) {
 var config = {
   maxDuration: 60
 };
+var GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
+var GITHUB_ACTIONS_AUDIENCE = "https://github.com/kanoetokyo";
+var GITHUB_ACTIONS_REPOSITORY = "kanoetokyo/taskmanager";
+var GITHUB_ACTIONS_WORKFLOW_REF = "kanoetokyo/taskmanager/.github/workflows/run-calendar-preview-sync.yml@refs/heads/main";
+var githubActionsJwks = createRemoteJWKSet(
+  new URL("https://token.actions.githubusercontent.com/.well-known/jwks")
+);
 function headerValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
-function isAuthorized(req) {
+function isCronSecretAuthorized(req) {
   const secret = process.env.CRON_SECRET;
   const authorization = headerValue(req.headers.authorization);
   if (!secret || !authorization) return false;
   const expected = Buffer.from(`Bearer ${secret}`);
   const received = Buffer.from(authorization);
   return expected.length === received.length && timingSafeEqual(expected, received);
+}
+function isAllowedGitHubActionsPreviewSync(payload) {
+  return process.env.VERCEL_ENV === "preview" && payload.repository === GITHUB_ACTIONS_REPOSITORY && payload.ref === "refs/heads/main" && payload.event_name === "workflow_dispatch" && payload.workflow_ref === GITHUB_ACTIONS_WORKFLOW_REF;
+}
+async function isGitHubActionsAuthorized(req) {
+  if (process.env.VERCEL_ENV !== "preview") return false;
+  const authorization = headerValue(req.headers.authorization);
+  if (!authorization?.startsWith("Bearer ")) return false;
+  try {
+    const { payload } = await jwtVerify(
+      authorization.slice("Bearer ".length),
+      githubActionsJwks,
+      {
+        issuer: GITHUB_ACTIONS_ISSUER,
+        audience: GITHUB_ACTIONS_AUDIENCE
+      }
+    );
+    return isAllowedGitHubActionsPreviewSync(payload);
+  } catch {
+    return false;
+  }
+}
+async function isAuthorized(req) {
+  return isCronSecretAuthorized(req) || await isGitHubActionsAuthorized(req);
 }
 function sendJson(res, statusCode, body) {
   res.statusCode = statusCode;
@@ -670,7 +721,7 @@ async function handler(req, res) {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
-  if (!isAuthorized(req)) {
+  if (!await isAuthorized(req)) {
     sendJson(res, 401, { error: "Unauthorized" });
     return;
   }
@@ -709,5 +760,6 @@ async function handler(req, res) {
 }
 export {
   config,
-  handler as default
+  handler as default,
+  isAllowedGitHubActionsPreviewSync
 };

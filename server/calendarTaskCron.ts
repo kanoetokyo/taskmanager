@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import {
   getDefaultSyncMonth,
   isCalendarAutomationEnabled,
@@ -10,11 +11,20 @@ export const config = {
   maxDuration: 60,
 };
 
+const GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
+const GITHUB_ACTIONS_AUDIENCE = "https://github.com/kanoetokyo";
+const GITHUB_ACTIONS_REPOSITORY = "kanoetokyo/taskmanager";
+const GITHUB_ACTIONS_WORKFLOW_REF =
+  "kanoetokyo/taskmanager/.github/workflows/run-calendar-preview-sync.yml@refs/heads/main";
+const githubActionsJwks = createRemoteJWKSet(
+  new URL("https://token.actions.githubusercontent.com/.well-known/jwks")
+);
+
 function headerValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function isAuthorized(req: IncomingMessage) {
+function isCronSecretAuthorized(req: IncomingMessage) {
   const secret = process.env.CRON_SECRET;
   const authorization = headerValue(req.headers.authorization);
   if (!secret || !authorization) return false;
@@ -24,6 +34,41 @@ function isAuthorized(req: IncomingMessage) {
   return (
     expected.length === received.length && timingSafeEqual(expected, received)
   );
+}
+
+export function isAllowedGitHubActionsPreviewSync(payload: JWTPayload) {
+  return (
+    process.env.VERCEL_ENV === "preview" &&
+    payload.repository === GITHUB_ACTIONS_REPOSITORY &&
+    payload.ref === "refs/heads/main" &&
+    payload.event_name === "workflow_dispatch" &&
+    payload.workflow_ref === GITHUB_ACTIONS_WORKFLOW_REF
+  );
+}
+
+async function isGitHubActionsAuthorized(req: IncomingMessage) {
+  if (process.env.VERCEL_ENV !== "preview") return false;
+
+  const authorization = headerValue(req.headers.authorization);
+  if (!authorization?.startsWith("Bearer ")) return false;
+
+  try {
+    const { payload } = await jwtVerify(
+      authorization.slice("Bearer ".length),
+      githubActionsJwks,
+      {
+        issuer: GITHUB_ACTIONS_ISSUER,
+        audience: GITHUB_ACTIONS_AUDIENCE,
+      }
+    );
+    return isAllowedGitHubActionsPreviewSync(payload);
+  } catch {
+    return false;
+  }
+}
+
+async function isAuthorized(req: IncomingMessage) {
+  return isCronSecretAuthorized(req) || (await isGitHubActionsAuthorized(req));
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown) {
@@ -44,7 +89,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
-  if (!isAuthorized(req)) {
+  if (!(await isAuthorized(req))) {
     sendJson(res, 401, { error: "Unauthorized" });
     return;
   }
