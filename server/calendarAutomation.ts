@@ -157,8 +157,28 @@ function eventMatchesCustomer(event: GoogleCalendarEvent, rule: CalendarTaskRule
   if (event.status === "cancelled") return false;
   const description = normalizeForMatch(event.description);
   return rule.customerMatch.descriptionMustContain.every(value =>
-    description.includes(normalizeForMatch(value))
+    includesConfiguredCustomerValue(description, normalizeForMatch(value))
   );
+}
+
+function includesConfiguredCustomerValue(
+  description: string,
+  configuredValue: string
+) {
+  if (!configuredValue) return false;
+
+  let index = description.indexOf(configuredValue);
+  while (index !== -1) {
+    const followingCharacter = description[index + configuredValue.length] ?? "";
+    // Avoid treating a numeric identifier as a prefix of a different value,
+    // such as an address ending in 2 matching another address ending in 28.
+    if (!/\d$/.test(configuredValue) || !/^\d/.test(followingCharacter)) {
+      return true;
+    }
+    index = description.indexOf(configuredValue, index + configuredValue.length);
+  }
+
+  return false;
 }
 
 function hasOfficePresence(
@@ -167,7 +187,11 @@ function hasOfficePresence(
   dateKey: string
 ) {
   return events.some(event => {
-    if (event.status === "cancelled" || event.colorId !== rule.officePresence.colorId) {
+    if (event.status === "cancelled") {
+      return false;
+    }
+    // Google omits colorId when an event inherits the calendar's default color.
+    if (event.colorId && event.colorId !== rule.officePresence.colorId) {
       return false;
     }
     const summary = normalizeForMatch(event.summary);

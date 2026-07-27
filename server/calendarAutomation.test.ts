@@ -58,6 +58,27 @@ describe("calendar task evaluation", () => {
     expect(decision).toEqual({ kind: "no_matching_visit" });
   });
 
+  it("does not match a numeric customer identifier as a prefix", () => {
+    const numericRule: CalendarTaskRule = {
+      ...rule,
+      customerMatch: {
+        descriptionMustContain: ["Customer A", "09011112222", "Road 2"],
+      },
+    };
+    const decision = evaluateCalendarTaskRule(
+      numericRule,
+      [
+        event("different-address", "2026-08-25", {
+          description: "Customer A\n09011112222\nRoad 28",
+        }),
+      ],
+      "2026-08",
+      "2026-07-21"
+    );
+
+    expect(decision).toEqual({ kind: "no_matching_visit" });
+  });
+
   it("uses the final matching visit and the nearest prior office-presence day", () => {
     const decision = evaluateCalendarTaskRule(
       rule,
@@ -125,6 +146,28 @@ describe("calendar task evaluation", () => {
       dateKey: "2026-07-21",
       status: "needs_review",
       reason: "no_office_presence",
+    });
+  });
+
+  it("accepts an office event that inherits the calendar default color", () => {
+    const decision = evaluateCalendarTaskRule(
+      rule,
+      [
+        event("final-visit", "2026-08-25", { description: matchingDescription }),
+        event("default-color-office", "2026-08-24", {
+          summary: "NAO",
+          start: { date: "2026-08-24" },
+          end: { date: "2026-08-25" },
+        }),
+      ],
+      "2026-08",
+      "2026-07-21"
+    );
+
+    expect(decision).toMatchObject({
+      kind: "task",
+      dateKey: "2026-08-24",
+      status: "scheduled",
     });
   });
 
