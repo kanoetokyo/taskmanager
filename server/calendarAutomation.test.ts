@@ -116,6 +116,29 @@ describe("calendar task evaluation", () => {
     });
   });
 
+  it("requires the configured store name in the event title when provided", () => {
+    const storeRule: CalendarTaskRule = {
+      ...rule,
+      customerMatch: {
+        ...rule.customerMatch,
+        summaryMustContain: ["Oimachi"],
+      },
+    };
+    const decision = evaluateCalendarTaskRule(
+      storeRule,
+      [
+        event("wrong-store", "2026-08-25", {
+          summary: "Customer A (Other store)",
+          description: matchingDescription,
+        }),
+      ],
+      "2026-08",
+      "2026-07-21"
+    );
+
+    expect(decision).toEqual({ kind: "no_matching_visit" });
+  });
+
   it("can schedule on the final visit date or a later office-presence day", () => {
     const forwardRule: CalendarTaskRule = {
       ...rule,

@@ -15,6 +15,7 @@ const ruleSchema = z.object({
   calendarId: z.string().min(1).max(512),
   customerMatch: z.object({
     descriptionMustContain: z.array(z.string().min(1).max(512)).min(3).max(8),
+    summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional(),
   }),
   officePresence: z.object({
     titleContainsAny: z.array(z.string().min(1).max(128)).min(1).max(8),
@@ -170,8 +171,14 @@ function eventCoversDate(event: GoogleCalendarEvent, dateKey: string) {
 function eventMatchesCustomer(event: GoogleCalendarEvent, rule: CalendarTaskRule) {
   if (event.status === "cancelled") return false;
   const description = normalizeForMatch(event.description);
-  return rule.customerMatch.descriptionMustContain.every(value =>
-    includesConfiguredCustomerValue(description, normalizeForMatch(value))
+  const summary = normalizeForMatch(event.summary);
+  return (
+    rule.customerMatch.descriptionMustContain.every(value =>
+      includesConfiguredCustomerValue(description, normalizeForMatch(value))
+    ) &&
+    (rule.customerMatch.summaryMustContain ?? []).every(value =>
+      includesConfiguredCustomerValue(summary, normalizeForMatch(value))
+    )
   );
 }
 
