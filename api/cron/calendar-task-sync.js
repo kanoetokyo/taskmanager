@@ -242,7 +242,8 @@ var ruleSchema = z.object({
   officePresence: z.object({
     titleContainsAny: z.array(z.string().min(1).max(128)).min(1).max(8),
     colorId: z.string().min(1).max(16),
-    searchBackDays: z.number().int().min(1).max(7).default(7)
+    searchBackDays: z.number().int().min(1).max(7).default(7),
+    searchForwardDays: z.number().int().min(0).max(7).optional()
   }),
   task: z.object({
     title: z.string().min(1).max(512),
@@ -402,8 +403,13 @@ function evaluateCalendarTaskRule(rule, events, targetMonth, runDateKey) {
   if (!finalVisit || !finalVisitDate) {
     return { kind: "no_matching_visit" };
   }
-  for (let offset = 1; offset <= rule.officePresence.searchBackDays; offset += 1) {
-    const dateKey = shiftDateKey(finalVisitDate, -offset);
+  const searchForwardDays = rule.officePresence.searchForwardDays;
+  const offsets = searchForwardDays === void 0 ? Array.from(
+    { length: rule.officePresence.searchBackDays },
+    (_, index2) => -(index2 + 1)
+  ) : Array.from({ length: searchForwardDays + 1 }, (_, index2) => index2);
+  for (const offset of offsets) {
+    const dateKey = shiftDateKey(finalVisitDate, offset);
     if (hasOfficePresence(events, rule, dateKey)) {
       return {
         kind: "task",

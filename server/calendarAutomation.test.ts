@@ -116,6 +116,37 @@ describe("calendar task evaluation", () => {
     });
   });
 
+  it("can schedule on the final visit date or a later office-presence day", () => {
+    const forwardRule: CalendarTaskRule = {
+      ...rule,
+      officePresence: {
+        ...rule.officePresence,
+        searchForwardDays: 7,
+      },
+    };
+    const decision = evaluateCalendarTaskRule(
+      forwardRule,
+      [
+        event("final-visit", "2026-08-25", { description: matchingDescription }),
+        event("office-after-visit", "2026-08-27", {
+          summary: "NAO",
+          colorId: "3",
+          start: { date: "2026-08-27" },
+          end: { date: "2026-08-28" },
+        }),
+      ],
+      "2026-08",
+      "2026-08-01"
+    );
+
+    expect(decision).toMatchObject({
+      kind: "task",
+      finalVisitDate: "2026-08-25",
+      dateKey: "2026-08-27",
+      status: "scheduled",
+    });
+  });
+
   it("matches a customer record in a timed calendar event description", () => {
     const decision = evaluateCalendarTaskRule(
       {
