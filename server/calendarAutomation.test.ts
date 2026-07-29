@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarWindow,
   evaluateCalendarTaskRule,
   selectCalendarTaskRules,
   type CalendarTaskRule,
@@ -43,6 +44,13 @@ function event(
 const matchingDescription = "Customer A\n09011112222\nExample address";
 
 describe("calendar task evaluation", () => {
+  it("reads seven days past month end for forward-scheduled tasks", () => {
+    expect(calendarWindow("2026-07")).toEqual({
+      timeMin: "2026-06-24T00:00:00+09:00",
+      timeMax: "2026-08-08T00:00:00+09:00",
+    });
+  });
+
   it("limits a sync to the explicitly requested rule", () => {
     expect(
       selectCalendarTaskRules(

@@ -361,12 +361,13 @@ export function selectCalendarTaskRules(
   return rules.filter(rule => rule.id === ruleId);
 }
 
-function calendarWindow(targetMonth: string) {
+export function calendarWindow(targetMonth: string) {
   const firstDay = `${targetMonth}-01`;
   const nextMonth = addMonths(targetMonth, 1);
   return {
     timeMin: `${shiftDateKey(firstDay, -7)}T00:00:00+09:00`,
-    timeMax: `${nextMonth}-01T00:00:00+09:00`,
+    // Forward-scheduled tasks may need an office day in the following month.
+    timeMax: `${shiftDateKey(`${nextMonth}-01`, 7)}T00:00:00+09:00`,
   };
 }
 
