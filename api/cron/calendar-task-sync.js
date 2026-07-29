@@ -333,6 +333,15 @@ function eventMatchesCustomer(event, rule) {
 }
 function calendarSyncDiagnostic(rule, events, targetMonth) {
   const activeEvents = events.filter((event) => event.status !== "cancelled");
+  const matchValues = rule.customerMatch.descriptionMustContain.map(
+    (value) => normalizeForMatch(value)
+  );
+  const fieldMatches = (event) => {
+    const description = normalizeForMatch(event.description);
+    return matchValues.map(
+      (value) => includesConfiguredCustomerValue(description, value)
+    );
+  };
   const matchingVisits = activeEvents.filter(
     (event) => eventStartDateKey(event)?.startsWith(targetMonth) && eventMatchesCustomer(event, rule)
   );
@@ -342,16 +351,19 @@ function calendarSyncDiagnostic(rule, events, targetMonth) {
     targetMonthEventCount: activeEvents.filter(
       (event) => eventStartDateKey(event)?.startsWith(targetMonth)
     ).length,
-    matchingFieldCounts: rule.customerMatch.descriptionMustContain.map((value) => {
-      const normalizedValue = normalizeForMatch(value);
+    configuredMatchHashes: matchValues.map(
+      (value) => createHash("sha256").update(value).digest("hex").slice(0, 12)
+    ),
+    matchingFieldCounts: matchValues.map((value) => {
       return activeEvents.filter(
         (event) => includesConfiguredCustomerValue(
           normalizeForMatch(event.description),
-          normalizedValue
+          value
         )
       ).length;
     }),
-    matchingVisitStartDates: matchingVisits.map((event) => eventStartDateKey(event)).filter((dateKey) => Boolean(dateKey)).sort()
+    matchingVisitStartDates: matchingVisits.map((event) => eventStartDateKey(event)).filter((dateKey) => Boolean(dateKey)).sort(),
+    candidateEvents: activeEvents.map((event) => ({ startDate: eventStartDateKey(event), matchedFields: fieldMatches(event) })).filter((candidate) => candidate.matchedFields.some(Boolean)).sort((left, right) => (left.startDate ?? "").localeCompare(right.startDate ?? "")).slice(-10)
   };
 }
 function includesConfiguredCustomerValue(description, configuredValue) {
