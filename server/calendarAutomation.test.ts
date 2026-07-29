@@ -105,6 +105,39 @@ describe("calendar task evaluation", () => {
     });
   });
 
+  it("matches a customer record in a timed calendar event description", () => {
+    const decision = evaluateCalendarTaskRule(
+      {
+        ...rule,
+        customerMatch: {
+          descriptionMustContain: [
+            "水田",
+            "090-2227-1066",
+            "世田谷区駒沢4-12-2",
+          ],
+        },
+      },
+      [
+        event("mizuta-final-visit", "2026-07-31", {
+          summary: "【北山】水田様 (大井町店) 09:00 ¥8,700",
+          description:
+            "【顧客情報】\n氏名: 水田\n電話: 090-2227-1066\n住所: 世田谷区駒沢4-12-2",
+          start: { dateTime: "2026-07-31T09:00:00+09:00" },
+          end: { dateTime: "2026-07-31T11:00:00+09:00" },
+        }),
+      ],
+      "2026-07",
+      "2026-07-29"
+    );
+
+    expect(decision).toMatchObject({
+      kind: "task",
+      sourceEventId: "mizuta-final-visit",
+      finalVisitDate: "2026-07-31",
+      status: "needs_review",
+    });
+  });
+
   it("accepts an all-day office event spanning the day before the final visit", () => {
     const decision = evaluateCalendarTaskRule(
       rule,

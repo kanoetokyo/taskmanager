@@ -331,6 +331,29 @@ function eventMatchesCustomer(event, rule) {
     (value) => includesConfiguredCustomerValue(description, normalizeForMatch(value))
   );
 }
+function calendarSyncDiagnostic(rule, events, targetMonth) {
+  const activeEvents = events.filter((event) => event.status !== "cancelled");
+  const matchingVisits = activeEvents.filter(
+    (event) => eventStartDateKey(event)?.startsWith(targetMonth) && eventMatchesCustomer(event, rule)
+  );
+  return {
+    ruleId: rule.id,
+    fetchedEventCount: events.length,
+    targetMonthEventCount: activeEvents.filter(
+      (event) => eventStartDateKey(event)?.startsWith(targetMonth)
+    ).length,
+    matchingFieldCounts: rule.customerMatch.descriptionMustContain.map((value) => {
+      const normalizedValue = normalizeForMatch(value);
+      return activeEvents.filter(
+        (event) => includesConfiguredCustomerValue(
+          normalizeForMatch(event.description),
+          normalizedValue
+        )
+      ).length;
+    }),
+    matchingVisitStartDates: matchingVisits.map((event) => eventStartDateKey(event)).filter((dateKey) => Boolean(dateKey)).sort()
+  };
+}
 function includesConfiguredCustomerValue(description, configuredValue) {
   if (!configuredValue) return false;
   let index2 = description.indexOf(configuredValue);
@@ -587,12 +610,14 @@ async function runCalendarTaskSync(options) {
   const runDateKey = dateKeyForNow(options.now ?? /* @__PURE__ */ new Date());
   const eventsByCalendar = /* @__PURE__ */ new Map();
   const outcomes = [];
+  const diagnostics = [];
   for (const rule of rules) {
     let events = eventsByCalendar.get(rule.calendarId);
     if (!events) {
       events = await readCalendarEvents(rule.calendarId, options.targetMonth);
       eventsByCalendar.set(rule.calendarId, events);
     }
+    diagnostics.push(calendarSyncDiagnostic(rule, events, options.targetMonth));
     const decision = evaluateCalendarTaskRule(
       rule,
       events,
@@ -655,7 +680,8 @@ async function runCalendarTaskSync(options) {
   return {
     targetMonth: options.targetMonth,
     dryRun: Boolean(options.dryRun),
-    outcomes
+    outcomes,
+    diagnostics
   };
 }
 
@@ -752,7 +778,8 @@ async function handler(req, res) {
     sendJson(res, 200, {
       targetMonth: result.targetMonth,
       dryRun: result.dryRun,
-      counts
+      counts,
+      ...result.dryRun ? { diagnostics: result.diagnostics } : {}
     });
   } catch (error) {
     console.error("[Calendar automation] Synchronization failed", error);

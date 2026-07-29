@@ -129,6 +129,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       targetMonth: result.targetMonth,
       dryRun: result.dryRun,
       counts,
+      ...(result.dryRun ? { diagnostics: result.diagnostics } : {}),
     });
   } catch (error) {
     console.error("[Calendar automation] Synchronization failed", error);

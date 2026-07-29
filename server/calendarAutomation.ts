@@ -76,6 +76,14 @@ type SyncOutcome = {
   reason?: "no_matching_visit";
 };
 
+export type CalendarSyncDiagnostic = {
+  ruleId: string;
+  fetchedEventCount: number;
+  targetMonthEventCount: number;
+  matchingFieldCounts: number[];
+  matchingVisitStartDates: string[];
+};
+
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 function normalizeForMatch(value: string) {
@@ -159,6 +167,40 @@ function eventMatchesCustomer(event: GoogleCalendarEvent, rule: CalendarTaskRule
   return rule.customerMatch.descriptionMustContain.every(value =>
     includesConfiguredCustomerValue(description, normalizeForMatch(value))
   );
+}
+
+function calendarSyncDiagnostic(
+  rule: CalendarTaskRule,
+  events: GoogleCalendarEvent[],
+  targetMonth: string
+): CalendarSyncDiagnostic {
+  const activeEvents = events.filter(event => event.status !== "cancelled");
+  const matchingVisits = activeEvents.filter(
+    event =>
+      eventStartDateKey(event)?.startsWith(targetMonth) &&
+      eventMatchesCustomer(event, rule)
+  );
+
+  return {
+    ruleId: rule.id,
+    fetchedEventCount: events.length,
+    targetMonthEventCount: activeEvents.filter(event =>
+      eventStartDateKey(event)?.startsWith(targetMonth)
+    ).length,
+    matchingFieldCounts: rule.customerMatch.descriptionMustContain.map(value => {
+      const normalizedValue = normalizeForMatch(value);
+      return activeEvents.filter(event =>
+        includesConfiguredCustomerValue(
+          normalizeForMatch(event.description),
+          normalizedValue
+        )
+      ).length;
+    }),
+    matchingVisitStartDates: matchingVisits
+      .map(event => eventStartDateKey(event))
+      .filter((dateKey): dateKey is string => Boolean(dateKey))
+      .sort(),
+  };
 }
 
 function includesConfiguredCustomerValue(
@@ -539,6 +581,7 @@ export async function runCalendarTaskSync(options: {
   const runDateKey = dateKeyForNow(options.now ?? new Date());
   const eventsByCalendar = new Map<string, GoogleCalendarEvent[]>();
   const outcomes: SyncOutcome[] = [];
+  const diagnostics: CalendarSyncDiagnostic[] = [];
 
   for (const rule of rules) {
     let events = eventsByCalendar.get(rule.calendarId);
@@ -546,6 +589,8 @@ export async function runCalendarTaskSync(options: {
       events = await readCalendarEvents(rule.calendarId, options.targetMonth);
       eventsByCalendar.set(rule.calendarId, events);
     }
+
+    diagnostics.push(calendarSyncDiagnostic(rule, events, options.targetMonth));
 
     const decision = evaluateCalendarTaskRule(
       rule,
@@ -621,5 +666,6 @@ export async function runCalendarTaskSync(options: {
     targetMonth: options.targetMonth,
     dryRun: Boolean(options.dryRun),
     outcomes,
+    diagnostics,
   };
 }
