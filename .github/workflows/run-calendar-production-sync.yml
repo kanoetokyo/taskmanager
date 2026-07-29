@@ -17,6 +17,10 @@ on:
         options:
           - dry-run
           - write
+      rule_id:
+        description: "Optional rule ID. Leave blank to sync every configured customer."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +39,7 @@ jobs:
       CALENDAR_PRODUCTION_SYNC_URL: https://taskmanager-five-plum.vercel.app
       TARGET_MONTH: ${{ inputs.target_month }}
       MODE: ${{ inputs.mode }}
+      RULE_ID: ${{ inputs.rule_id }}
     steps:
       - name: Validate request and configuration
         shell: bash
@@ -49,6 +54,11 @@ jobs:
             exit 1
           fi
 
+          if [[ -n "$RULE_ID" && ! "$RULE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "rule_id may contain letters, numbers, dots, underscores, and hyphens." >&2
+            exit 1
+          fi
+
           if [[ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" || -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]]; then
             echo "GitHub Actions OIDC is unavailable for this workflow run." >&2
             exit 1
@@ -60,6 +70,9 @@ jobs:
           query="month=${TARGET_MONTH}"
           if [[ "$MODE" == "dry-run" ]]; then
             query="${query}&dryRun=1"
+          fi
+          if [[ -n "$RULE_ID" ]]; then
+            query="${query}&ruleId=${RULE_ID}"
           fi
 
           oidc_response="$(curl \

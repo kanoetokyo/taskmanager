@@ -444,6 +444,10 @@ function getCalendarTaskRules() {
   }
   return z.array(ruleSchema).min(1).parse(parsed);
 }
+function selectCalendarTaskRules(rules, ruleId) {
+  if (!ruleId) return rules;
+  return rules.filter((rule) => rule.id === ruleId);
+}
 function calendarWindow(targetMonth) {
   const firstDay = `${targetMonth}-01`;
   const nextMonth = addMonths(targetMonth, 1);
@@ -616,7 +620,10 @@ async function runCalendarTaskSync(options) {
   if (!isCalendarAutomationEnabled()) {
     throw new Error("Calendar automation is disabled.");
   }
-  const rules = getCalendarTaskRules();
+  const rules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
+  if (rules.length === 0) {
+    throw new Error("The requested calendar automation rule was not found.");
+  }
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable for calendar automation.");
   const runDateKey = dateKeyForNow(options.now ?? /* @__PURE__ */ new Date());
@@ -774,11 +781,17 @@ async function handler(req, res) {
     sendJson(res, 400, { error: "Invalid target month" });
     return;
   }
+  const requestedRuleId = url.searchParams.get("ruleId");
+  if (requestedRuleId && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(requestedRuleId)) {
+    sendJson(res, 400, { error: "Invalid calendar automation rule" });
+    return;
+  }
   try {
     const result = await runCalendarTaskSync({
       targetMonth: requestedMonth ?? getDefaultSyncMonth(),
       dryRun: url.searchParams.get("dryRun") === "1",
-      requestId: headerValue(req.headers["x-vercel-id"]) ?? "calendar-cron"
+      requestId: headerValue(req.headers["x-vercel-id"]) ?? "calendar-cron",
+      ruleId: requestedRuleId ?? void 0
     });
     const counts = result.outcomes.reduce(
       (summary, outcome) => {

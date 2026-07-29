@@ -336,6 +336,14 @@ export function getCalendarTaskRules() {
   return z.array(ruleSchema).min(1).parse(parsed);
 }
 
+export function selectCalendarTaskRules(
+  rules: CalendarTaskRule[],
+  ruleId?: string
+) {
+  if (!ruleId) return rules;
+  return rules.filter(rule => rule.id === ruleId);
+}
+
 function calendarWindow(targetMonth: string) {
   const firstDay = `${targetMonth}-01`;
   const nextMonth = addMonths(targetMonth, 1);
@@ -590,12 +598,16 @@ export async function runCalendarTaskSync(options: {
   dryRun?: boolean;
   now?: Date;
   requestId?: string;
+  ruleId?: string;
 }) {
   if (!isCalendarAutomationEnabled()) {
     throw new Error("Calendar automation is disabled.");
   }
 
-  const rules = getCalendarTaskRules();
+  const rules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
+  if (rules.length === 0) {
+    throw new Error("The requested calendar automation rule was not found.");
+  }
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable for calendar automation.");
 

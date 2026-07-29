@@ -111,12 +111,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     sendJson(res, 400, { error: "Invalid target month" });
     return;
   }
+  const requestedRuleId = url.searchParams.get("ruleId");
+  if (requestedRuleId && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(requestedRuleId)) {
+    sendJson(res, 400, { error: "Invalid calendar automation rule" });
+    return;
+  }
 
   try {
     const result = await runCalendarTaskSync({
       targetMonth: requestedMonth ?? getDefaultSyncMonth(),
       dryRun: url.searchParams.get("dryRun") === "1",
       requestId: headerValue(req.headers["x-vercel-id"]) ?? "calendar-cron",
+      ruleId: requestedRuleId ?? undefined,
     });
     const counts = result.outcomes.reduce<Record<string, number>>(
       (summary, outcome) => {

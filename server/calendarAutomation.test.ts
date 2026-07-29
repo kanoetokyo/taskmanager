@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateCalendarTaskRule,
+  selectCalendarTaskRules,
   type CalendarTaskRule,
   type GoogleCalendarEvent,
 } from "./calendarAutomation";
@@ -42,6 +43,16 @@ function event(
 const matchingDescription = "Customer A\n09011112222\nExample address";
 
 describe("calendar task evaluation", () => {
+  it("limits a sync to the explicitly requested rule", () => {
+    expect(
+      selectCalendarTaskRules(
+        [rule, { ...rule, id: "customer-b-invoice" }],
+        "customer-b-invoice"
+      )
+    ).toEqual([{ ...rule, id: "customer-b-invoice" }]);
+    expect(selectCalendarTaskRules([rule], "missing-rule")).toEqual([]);
+  });
+
   it("requires every configured description field and ignores a title-only match", () => {
     const decision = evaluateCalendarTaskRule(
       rule,
