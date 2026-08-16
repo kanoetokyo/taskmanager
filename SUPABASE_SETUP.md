@@ -118,6 +118,18 @@ value through a `VITE_` variable.
 node scripts/apply-sql-migration.mjs drizzle/migrations/0004_atinn_handover_issues.sql
 ```
 
+### AtInn handover category migration
+
+`drizzle/migrations/0005_atinn_handover_issue_categories.sql` adds a category
+column to each existing AtInn handover issue. Existing records remain
+uncategorized until an operator selects one in the app. Apply it after the
+AtInn handover migration and before deploying the category UI.
+
+```bash
+# DATABASE_URL must point to the Preview Branch, not production.
+node scripts/apply-sql-migration.mjs drizzle/migrations/0005_atinn_handover_issue_categories.sql
+```
+
 ## 4. Seed Initial Task Definitions
 
 After the schema exists, run:
