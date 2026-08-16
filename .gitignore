@@ -45,6 +45,9 @@ pids
 *.seed
 *.pid.lock
 *.bak
+.local-storage/
+client/public/design-qa/
+.design-qa/
 
 # Coverage directory used by tools like istanbul
 coverage/

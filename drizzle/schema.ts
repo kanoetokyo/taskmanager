@@ -210,6 +210,36 @@ export const atinnHandoverIssues = pgTable("atinn_handover_issues", {
 export type AtinnHandoverIssue = typeof atinnHandoverIssues.$inferSelect;
 export type InsertAtinnHandoverIssue = typeof atinnHandoverIssues.$inferInsert;
 
+// ─── Customer Handover Attachments (顧客引き継ぎ写真) ──────────────────────
+export const customerHandoverAttachments = pgTable(
+  "customer_handover_attachments",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    customerHandoverId: varchar("customerHandoverId", { length: 64 })
+      .notNull()
+      .references(() => customerHandovers.id, { onDelete: "cascade" }),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    fileName: varchar("fileName", { length: 255 }).notNull(),
+    mimeType: varchar("mimeType", { length: 128 }).notNull(),
+    sizeBytes: integer("sizeBytes").notNull(),
+    sortOrder: integer("sortOrder").notNull().default(0),
+    createdBy: varchar("createdBy", { length: 64 }).notNull().default(""),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    customerSortIdx: uniqueIndex(
+      "customer_handover_attachments_customer_sort_unique"
+    ).on(table.customerHandoverId, table.sortOrder),
+    storageKeyIdx: uniqueIndex(
+      "customer_handover_attachments_storage_key_unique"
+    ).on(table.storageKey),
+  })
+);
+export type CustomerHandoverAttachment =
+  typeof customerHandoverAttachments.$inferSelect;
+export type InsertCustomerHandoverAttachment =
+  typeof customerHandoverAttachments.$inferInsert;
+
 // ─── Audit Log ─────────────────────────────────────────────────────────────
 // Stores before/after snapshots for recoverability and incident investigation.
 export const auditLogs = pgTable("audit_logs", {

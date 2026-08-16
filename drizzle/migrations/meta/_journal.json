@@ -29,6 +29,12 @@
       "when": 1786834800000,
       "tag": "0004_atinn_handover_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "when": 1785312000000,
+      "tag": "0004_customer_handover_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -140,6 +140,41 @@ var customerHandovers = pgTable("customer_handovers", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
 });
+var atinnHandoverIssues = pgTable("atinn_handover_issues", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: varchar("title", { length: 255 }).notNull().default(""),
+  content: varchar("content", { length: 2048 }).notNull().default(""),
+  beforeImageUrl: varchar("beforeImageUrl", { length: 2048 }),
+  afterImageUrl: varchar("afterImageUrl", { length: 2048 }),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  deletedAt: timestamp("deletedAt"),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  revision: integer("revision").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
+});
+var customerHandoverAttachments = pgTable(
+  "customer_handover_attachments",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    customerHandoverId: varchar("customerHandoverId", { length: 64 }).notNull().references(() => customerHandovers.id, { onDelete: "cascade" }),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    fileName: varchar("fileName", { length: 255 }).notNull(),
+    mimeType: varchar("mimeType", { length: 128 }).notNull(),
+    sizeBytes: integer("sizeBytes").notNull(),
+    sortOrder: integer("sortOrder").notNull().default(0),
+    createdBy: varchar("createdBy", { length: 64 }).notNull().default(""),
+    createdAt: timestamp("createdAt").defaultNow().notNull()
+  },
+  (table) => ({
+    customerSortIdx: uniqueIndex(
+      "customer_handover_attachments_customer_sort_unique"
+    ).on(table.customerHandoverId, table.sortOrder),
+    storageKeyIdx: uniqueIndex(
+      "customer_handover_attachments_storage_key_unique"
+    ).on(table.storageKey)
+  })
+);
 var auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   entityType: varchar("entityType", { length: 64 }).notNull(),

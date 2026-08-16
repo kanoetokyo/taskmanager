@@ -22,15 +22,21 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  Camera,
   Plus,
   Trash2,
   X,
   Users,
   RefreshCw,
   CalendarClock,
+  ImageIcon,
+  LoaderCircle,
+  Share2,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
+import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 
@@ -89,6 +95,24 @@ function getTrpcErrorCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
+async function copyShareText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard copy failed");
+}
+
 // カンバン列定義（3列）
 const KANBAN_COLUMNS: {
   status: CustomerStatus;
@@ -143,8 +167,69 @@ interface CustomerRecord {
   revision?: number;
 }
 
+interface CustomerAttachment {
+  id: string;
+  customerHandoverId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sortOrder: number;
+  createdAt: Date | string;
+  url: string | null;
+}
+
+const IS_DESIGN_QA_PREVIEW =
+  import.meta.env.DEV &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("designQa") === "1";
+
+const IS_MOBILE_DESIGN_QA_PREVIEW =
+  IS_DESIGN_QA_PREVIEW &&
+  new URLSearchParams(window.location.search).get("mobileQa") === "1";
+
+const DESIGN_QA_CUSTOMERS: CustomerRecord[] = [
+  {
+    id: "design-qa-final-call",
+    name: "佐藤様",
+    status: "不通・未対応",
+    contact: "POS(大井町店)",
+    memo: "SMSで予約サイト送付済み",
+    assignee: "前田",
+    links: [],
+    dueDate: null,
+    callCount: 2,
+    revision: 1,
+  },
+  {
+    id: "design-qa-first-call",
+    name: "北村様",
+    status: "不通・未対応",
+    contact: "LINE(大森南店)",
+    memo: "写真の内容を確認して折り返し予定",
+    assignee: "加藤",
+    links: [],
+    dueDate: null,
+    callCount: 1,
+    revision: 1,
+  },
+];
+
+const DESIGN_QA_ATTACHMENTS: CustomerAttachment[] = Array.from(
+  { length: MAX_CUSTOMER_PHOTOS },
+  (_, index) => ({
+    id: `design-qa-photo-${index + 1}`,
+    customerHandoverId: "design-qa-first-call",
+    fileName: `customer-photo-${index + 1}.png`,
+    mimeType: "image/png",
+    sizeBytes: 1_000_000,
+    sortOrder: index,
+    createdAt: "2026-07-29T13:40:00+09:00",
+    url: `/design-qa/customer-photo-${index + 1}.png`,
+  })
+);
+
 function newCustomerRecord(
-  status: CustomerStatus = "不通・未対応"
+  status: CustomerStatus = "これから"
 ): CustomerRecord {
   return {
     id: crypto.randomUUID(),
@@ -179,7 +264,9 @@ function toCustomerRecord(c: {
     contact: c.store,
     memo: c.content,
     assignee: c.assignee ?? "",
-    links: Array.isArray(c.links) ? c.links.filter((link): link is string => typeof link === "string") : [],
+    links: Array.isArray(c.links)
+      ? c.links.filter((link): link is string => typeof link === "string")
+      : [],
     dueDate: c.dueDate ?? null,
     callCount: c.callCount ?? 0,
     revision: c.revision,
@@ -220,20 +307,176 @@ function formatDueDate(ms: number | null): string {
 
 interface CustomerCardProps {
   c: CustomerRecord;
+  attachments: CustomerAttachment[];
+  isUploadingPhotos: boolean;
   onUpdate: (id: string, field: keyof CustomerRecord, value: string) => void;
   onDelete: (id: string) => void;
   onLinkChange: (id: string, links: string[]) => void;
   onDueDateChange: (id: string, dueDate: number | null) => void;
   onCalledToggle: (id: string, callCount?: number) => void;
+  onAddPhotos: (id: string, files: FileList) => void;
+  onDeletePhoto: (attachment: CustomerAttachment) => void;
+  onShare: (customer: CustomerRecord, photoCount: number) => void;
+}
+
+function formatAttachmentDate(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}登録`;
+}
+
+function CustomerPhotoSection({
+  customer,
+  attachments,
+  isUploading,
+  onAddPhotos,
+  onDeletePhoto,
+  onShare,
+}: {
+  customer: CustomerRecord;
+  attachments: CustomerAttachment[];
+  isUploading: boolean;
+  onAddPhotos: (id: string, files: FileList) => void;
+  onDeletePhoto: (attachment: CustomerAttachment) => void;
+  onShare: (customer: CustomerRecord, photoCount: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [preview, setPreview] = useState<CustomerAttachment | null>(null);
+  const remaining = MAX_CUSTOMER_PHOTOS - attachments.length;
+  const firstCreatedAt = attachments[0]?.createdAt;
+
+  return (
+    <div className="mt-2.5 border-t border-rose-100 pt-2.5">
+      {attachments.length > 0 && (
+        <>
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+            <span>
+              {firstCreatedAt
+                ? `${formatAttachmentDate(firstCreatedAt)}・`
+                : ""}
+              写真{attachments.length}枚
+            </span>
+            <span className="text-gray-400">最大{MAX_CUSTOMER_PHOTOS}枚</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {attachments.map((attachment, index) => (
+              <div
+                key={attachment.id}
+                className="group relative aspect-[4/3] overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+              >
+                {attachment.url ? (
+                  <button
+                    type="button"
+                    className="h-full w-full"
+                    onClick={() => setPreview(attachment)}
+                    aria-label={`写真${index + 1}を拡大`}
+                  >
+                    <img
+                      src={attachment.url}
+                      alt={`顧客案件の写真 ${index + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-gray-300">
+                    <ImageIcon className="h-7 w-7" aria-hidden="true" />
+                    <span className="sr-only">写真を読み込めません</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDeletePhoto(attachment)}
+                  className="absolute right-1.5 top-1.5 rounded-full bg-white/95 p-1.5 text-gray-500 shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
+                  aria-label={`写真${index + 1}を削除`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={event => {
+          if (event.target.files?.length)
+            onAddPhotos(customer.id, event.target.files);
+          event.target.value = "";
+        }}
+      />
+
+      <div
+        className={`grid grid-cols-1 gap-2 ${attachments.length > 0 ? "mt-2" : ""}`}
+      >
+        {attachments.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onShare(customer, attachments.length)}
+            className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
+          >
+            <Share2 className="h-4 w-4" aria-hidden="true" />
+            LINEへ共有
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={isUploading || remaining <= 0}
+          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300"
+        >
+          {isUploading ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Camera className="h-4 w-4" aria-hidden="true" />
+          )}
+          {isUploading
+            ? "保存中…"
+            : attachments.length > 0
+              ? remaining > 0
+                ? "写真を追加"
+                : "4枚登録済み"
+              : "写真を追加"}
+        </button>
+      </div>
+
+      <Dialog
+        open={Boolean(preview)}
+        onOpenChange={open => !open && setPreview(null)}
+      >
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-auto border-rose-100 bg-white p-3 sm:p-5">
+          <DialogTitle className="pr-8 text-sm text-gray-700">
+            写真を確認
+          </DialogTitle>
+          {preview?.url && (
+            <img
+              src={preview.url}
+              alt="顧客案件の写真拡大表示"
+              className="mx-auto max-h-[80vh] w-auto max-w-full rounded-lg object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
 const CustomerCard = memo(function CustomerCard({
   c,
+  attachments,
+  isUploadingPhotos,
   onUpdate,
   onDelete,
   onLinkChange,
   onDueDateChange,
   onCalledToggle,
+  onAddPhotos,
+  onDeletePhoto,
+  onShare,
 }: CustomerCardProps) {
   const overdue = isOverdue(c);
   const isKorekara = c.status === "これから";
@@ -255,6 +498,8 @@ const CustomerCard = memo(function CustomerCard({
 
     return (
       <div
+        id={`customer-card-${c.id}`}
+        data-customer-id={c.id}
         className={`rounded-xl border shadow-sm p-2.5 transition-colors ${cardTone}`}
       >
         <div className="flex items-start gap-1.5">
@@ -394,12 +639,22 @@ const CustomerCard = memo(function CustomerCard({
             ))}
           </div>
         )}
+        <CustomerPhotoSection
+          customer={c}
+          attachments={attachments}
+          isUploading={isUploadingPhotos}
+          onAddPhotos={onAddPhotos}
+          onDeletePhoto={onDeletePhoto}
+          onShare={onShare}
+        />
       </div>
     );
   }
 
   return (
     <div
+      id={`customer-card-${c.id}`}
+      data-customer-id={c.id}
       className={`rounded-xl border shadow-sm p-2.5 transition-colors ${
         overdue ? "bg-red-50 border-red-300" : "bg-white border-gray-100"
       }`}
@@ -558,6 +813,14 @@ const CustomerCard = memo(function CustomerCard({
           ))}
         </div>
       )}
+      <CustomerPhotoSection
+        customer={c}
+        attachments={attachments}
+        isUploading={isUploadingPhotos}
+        onAddPhotos={onAddPhotos}
+        onDeletePhoto={onDeletePhoto}
+        onShare={onShare}
+      />
     </div>
   );
 });
@@ -565,8 +828,16 @@ const CustomerCard = memo(function CustomerCard({
 // ─── メインコンポーネント ────────────────────────────────────────────────────
 
 export default function CustomerHandover() {
-  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>(() =>
+    IS_DESIGN_QA_PREVIEW ? DESIGN_QA_CUSTOMERS : []
+  );
+  const [designQaAttachments, setDesignQaAttachments] = useState<
+    CustomerAttachment[]
+  >(() => (IS_DESIGN_QA_PREVIEW ? DESIGN_QA_ATTACHMENTS : []));
   const [lastSaved, setLastSaved] = useState<string>("");
+  const [uploadingPhotoIds, setUploadingPhotoIds] = useState<Set<string>>(
+    new Set()
+  );
 
   // タブタイトルを「顧客引継ぎ」に設定し、ページ離脱時に元に戻す
   useEffect(() => {
@@ -583,47 +854,89 @@ export default function CustomerHandover() {
     new Map()
   );
   const customerSnapshotRef = useRef<Record<string, CustomerRecord>>({});
-  const dirtyFieldsRef = useRef<Map<string, Set<keyof CustomerRecord>>>(new Map());
-  const changeVersionRef = useRef<Map<string, number>>(new Map());
-  const saveRunnerRef = useRef<(id: string) => Promise<boolean>>(async () => true);
-  const saveQueueRef = useRef(createSerialSaveQueue(id => saveRunnerRef.current(id)));
-
-  const { data: customerData, error: customerError, refetch: refetchCustomers } = trpc.task.customerHandover.getActive.useQuery(
-    undefined,
-    { refetchInterval: 30000 }
+  const sharedCustomerIdRef = useRef(
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("customer")
   );
+  const dirtyFieldsRef = useRef<Map<string, Set<keyof CustomerRecord>>>(
+    new Map()
+  );
+  const changeVersionRef = useRef<Map<string, number>>(new Map());
+  const saveRunnerRef = useRef<(id: string) => Promise<boolean>>(
+    async () => true
+  );
+  const saveQueueRef = useRef(
+    createSerialSaveQueue(id => saveRunnerRef.current(id))
+  );
+
+  const {
+    data: customerData,
+    error: customerError,
+    refetch: refetchCustomers,
+  } = trpc.task.customerHandover.getActive.useQuery(undefined, {
+    enabled: !IS_DESIGN_QA_PREVIEW,
+    refetchInterval: IS_DESIGN_QA_PREVIEW ? false : 30000,
+  });
+  const {
+    data: attachmentData,
+    error: attachmentError,
+    refetch: refetchAttachments,
+  } = trpc.task.customerHandoverAttachment.listActive.useQuery(undefined, {
+    enabled: !IS_DESIGN_QA_PREVIEW,
+    refetchInterval: IS_DESIGN_QA_PREVIEW ? false : 30000,
+  });
 
   const upsertCustomer = trpc.task.customerHandover.upsert.useMutation();
   const patchCustomer = trpc.task.customerHandover.patch.useMutation();
   const deleteCustomer = trpc.task.customerHandover.delete.useMutation();
   const restoreCustomer = trpc.task.customerHandover.restore.useMutation();
+  const uploadAttachment =
+    trpc.task.customerHandoverAttachment.upload.useMutation();
+  const deleteAttachment =
+    trpc.task.customerHandoverAttachment.delete.useMutation();
+
+  const effectiveAttachments = IS_DESIGN_QA_PREVIEW
+    ? designQaAttachments
+    : (attachmentData ?? []);
+  const attachmentsByCustomer = effectiveAttachments.reduce<
+    Record<string, CustomerAttachment[]>
+  >((grouped, attachment) => {
+    const current = grouped[attachment.customerHandoverId] ?? [];
+    current.push(attachment as CustomerAttachment);
+    grouped[attachment.customerHandoverId] = current;
+    return grouped;
+  }, {});
 
   const updateCustomerRevision = useCallback((id: string, revision: number) => {
-    const nextCustomers = customersRef.current.map(record => (
+    const nextCustomers = customersRef.current.map(record =>
       record.id === id ? { ...record, revision } : record
-    ));
+    );
     customersRef.current = nextCustomers;
     setCustomers(current => {
-      return current.map(record => (
+      return current.map(record =>
         record.id === id ? { ...record, revision } : record
-      ));
+      );
     });
   }, []);
 
-  const refreshCustomerRevision = useCallback(async (id: string) => {
-    try {
-      const result = await refetchCustomers();
-      const latest = result.data?.find(record => record.id === id);
-      if (!latest) return;
-      const serverRecord = toCustomerRecord(latest);
-      customerSnapshotRef.current[id] = serverRecord;
-      if (serverRecord.revision !== undefined) {
-        updateCustomerRevision(id, serverRecord.revision);
+  const refreshCustomerRevision = useCallback(
+    async (id: string) => {
+      try {
+        const result = await refetchCustomers();
+        const latest = result.data?.find(record => record.id === id);
+        if (!latest) return;
+        const serverRecord = toCustomerRecord(latest);
+        customerSnapshotRef.current[id] = serverRecord;
+        if (serverRecord.revision !== undefined) {
+          updateCustomerRevision(id, serverRecord.revision);
+        }
+      } catch {
+        // The current card stays untouched when the follow-up read also fails.
       }
-    } catch {
-      // The current card stays untouched when the follow-up read also fails.
-    }
-  }, [refetchCustomers, updateCustomerRevision]);
+    },
+    [refetchCustomers, updateCustomerRevision]
+  );
 
   // customersが変わるたびにrefを同期
   useEffect(() => {
@@ -633,7 +946,9 @@ export default function CustomerHandover() {
   useEffect(() => {
     if (customerData === undefined) return;
     const records = customerData.map(toCustomerRecord);
-    const nextSnapshot = Object.fromEntries(records.map(record => [record.id, record]));
+    const nextSnapshot = Object.fromEntries(
+      records.map(record => [record.id, record])
+    );
     if (!loadedRef.current) {
       customerSnapshotRef.current = nextSnapshot;
       setCustomers(records);
@@ -653,17 +968,36 @@ export default function CustomerHandover() {
       });
       records.forEach(record => {
         if (!currentIds.has(record.id)) merged.push(record);
-        if (!dirtyFieldsRef.current.get(record.id)?.size) customerSnapshotRef.current[record.id] = record;
+        if (!dirtyFieldsRef.current.get(record.id)?.size)
+          customerSnapshotRef.current[record.id] = record;
       });
       return merged;
     });
   }, [customerData]);
 
-  useEffect(() => () => {
-    debounceTimers.current.forEach(timer => clearTimeout(timer));
-    debounceTimers.current.clear();
-    saveQueueRef.current.dispose();
-  }, []);
+  useEffect(() => {
+    const customerId = sharedCustomerIdRef.current;
+    if (!customerId || !customers.some(customer => customer.id === customerId))
+      return;
+    const element = document.getElementById(`customer-card-${customerId}`);
+    if (!element) return;
+    sharedCustomerIdRef.current = null;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("ring-2", "ring-rose-400", "ring-offset-2");
+    const timer = window.setTimeout(() => {
+      element.classList.remove("ring-2", "ring-rose-400", "ring-offset-2");
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [customers]);
+
+  useEffect(
+    () => () => {
+      debounceTimers.current.forEach(timer => clearTimeout(timer));
+      debounceTimers.current.clear();
+      saveQueueRef.current.dispose();
+    },
+    []
+  );
 
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -678,6 +1012,11 @@ export default function CustomerHandover() {
 
   const saveToDb = useCallback(
     async (id: string): Promise<boolean> => {
+      if (IS_DESIGN_QA_PREVIEW) {
+        dirtyFieldsRef.current.delete(id);
+        setLastSaved(new Date().toLocaleTimeString("ja-JP"));
+        return true;
+      }
       const c = customersRef.current.find(r => r.id === id);
       if (!c) return true;
       const fields = new Set(dirtyFieldsRef.current.get(id) ?? []);
@@ -727,21 +1066,33 @@ export default function CustomerHandover() {
         console.error("Customer save failed:", e);
         void refreshCustomerRevision(id);
         if (getTrpcErrorCode(e) === "CONFLICT") {
-          toast.error("他の端末で先に更新されています。入力内容は画面に保持され、自動上書きはしていません。");
+          toast.error(
+            "他の端末で先に更新されています。入力内容は画面に保持され、自動上書きはしていません。"
+          );
         } else {
-          toast.error("保存結果を確認できません。入力内容は画面に保持されています。", {
-            action: {
-              label: "再試行",
-              onClick: () => {
-                void refreshCustomerRevision(id).finally(() => saveQueueRef.current.request(id));
+          toast.error(
+            "保存結果を確認できません。入力内容は画面に保持されています。",
+            {
+              action: {
+                label: "再試行",
+                onClick: () => {
+                  void refreshCustomerRevision(id).finally(() =>
+                    saveQueueRef.current.request(id)
+                  );
+                },
               },
-            },
-          });
+            }
+          );
         }
         return false;
       }
     },
-    [patchCustomer, refreshCustomerRevision, updateCustomerRevision, upsertCustomer]
+    [
+      patchCustomer,
+      refreshCustomerRevision,
+      updateCustomerRevision,
+      upsertCustomer,
+    ]
   );
 
   saveRunnerRef.current = saveToDb;
@@ -771,11 +1122,23 @@ export default function CustomerHandover() {
         const complete = async () => {
           try {
             const saved = current.revision
-              ? await patchCustomer.mutateAsync({ id, expectedRevision: current.revision, status: "完了" })
+              ? await patchCustomer.mutateAsync({
+                  id,
+                  expectedRevision: current.revision,
+                  status: "完了",
+                })
               : await upsertCustomer.mutateAsync({
-                  id: current.id, dateKey: todayKey(), customerName: current.name, store: current.contact,
-                  content: current.memo, status: "完了", assignee: current.assignee, links: current.links,
-                  dueDate: current.dueDate, callCount: current.callCount, expectedRevision: undefined,
+                  id: current.id,
+                  dateKey: todayKey(),
+                  customerName: current.name,
+                  store: current.contact,
+                  content: current.memo,
+                  status: "完了",
+                  assignee: current.assignee,
+                  links: current.links,
+                  dueDate: current.dueDate,
+                  callCount: current.callCount,
+                  expectedRevision: undefined,
                 });
             setCustomers(records => records.filter(record => record.id !== id));
             toast.success("完了として保存しました。", {
@@ -783,12 +1146,18 @@ export default function CustomerHandover() {
                 label: "元に戻す",
                 onClick: async () => {
                   try {
-                    const restored = await restoreCustomer.mutateAsync({ id, expectedRevision: saved.revision, status: current.status });
+                    const restored = await restoreCustomer.mutateAsync({
+                      id,
+                      expectedRevision: saved.revision,
+                      status: current.status,
+                    });
                     const restoredRecord = toCustomerRecord(restored);
                     customerSnapshotRef.current[id] = restoredRecord;
                     setCustomers(records => [...records, restoredRecord]);
                   } catch {
-                    toast.error("復元に失敗しました。画面を更新して確認してください。");
+                    toast.error(
+                      "復元に失敗しました。画面を更新して確認してください。"
+                    );
                   }
                 },
               },
@@ -805,16 +1174,27 @@ export default function CustomerHandover() {
           c.id !== id ? c : { ...c, [field]: value }
         );
         customersRef.current = updated;
-        const fields = dirtyFieldsRef.current.get(id) ?? new Set<keyof CustomerRecord>();
+        const fields =
+          dirtyFieldsRef.current.get(id) ?? new Set<keyof CustomerRecord>();
         fields.add(field);
         dirtyFieldsRef.current.set(id, fields);
-        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
-        if (field === "status" || field === "contact" || field === "assignee") setTimeout(() => requestCustomerSave(id), 0);
+        changeVersionRef.current.set(
+          id,
+          (changeVersionRef.current.get(id) ?? 0) + 1
+        );
+        if (field === "status" || field === "contact" || field === "assignee")
+          setTimeout(() => requestCustomerSave(id), 0);
         else setTimeout(() => saveToDbDebounced(id), 0);
         return updated;
       });
     },
-    [patchCustomer, requestCustomerSave, restoreCustomer, saveToDbDebounced, upsertCustomer]
+    [
+      patchCustomer,
+      requestCustomerSave,
+      restoreCustomer,
+      saveToDbDebounced,
+      upsertCustomer,
+    ]
   );
 
   // 期限更新（即時DB送信）
@@ -823,8 +1203,17 @@ export default function CustomerHandover() {
       setCustomers(prev => {
         const updated = prev.map(c => (c.id !== id ? c : { ...c, dueDate }));
         customersRef.current = updated;
-        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "dueDate"]));
-        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
+        dirtyFieldsRef.current.set(
+          id,
+          new Set<keyof CustomerRecord>([
+            ...Array.from(dirtyFieldsRef.current.get(id) ?? []),
+            "dueDate",
+          ])
+        );
+        changeVersionRef.current.set(
+          id,
+          (changeVersionRef.current.get(id) ?? 0) + 1
+        );
         setTimeout(() => requestCustomerSave(id), 0);
         return updated;
       });
@@ -838,8 +1227,17 @@ export default function CustomerHandover() {
       setCustomers(prev => {
         const updated = prev.map(c => (c.id === id ? { ...c, links } : c));
         customersRef.current = updated;
-        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "links"]));
-        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
+        dirtyFieldsRef.current.set(
+          id,
+          new Set<keyof CustomerRecord>([
+            ...Array.from(dirtyFieldsRef.current.get(id) ?? []),
+            "links",
+          ])
+        );
+        changeVersionRef.current.set(
+          id,
+          (changeVersionRef.current.get(id) ?? 0) + 1
+        );
         setTimeout(() => saveToDbDebounced(id), 0);
         return updated;
       });
@@ -860,13 +1258,146 @@ export default function CustomerHandover() {
           };
         });
         customersRef.current = updated;
-        dirtyFieldsRef.current.set(id, new Set<keyof CustomerRecord>([...Array.from(dirtyFieldsRef.current.get(id) ?? []), "callCount"]));
-        changeVersionRef.current.set(id, (changeVersionRef.current.get(id) ?? 0) + 1);
+        dirtyFieldsRef.current.set(
+          id,
+          new Set<keyof CustomerRecord>([
+            ...Array.from(dirtyFieldsRef.current.get(id) ?? []),
+            "callCount",
+          ])
+        );
+        changeVersionRef.current.set(
+          id,
+          (changeVersionRef.current.get(id) ?? 0) + 1
+        );
         setTimeout(() => requestCustomerSave(id), 0);
         return updated;
       });
     },
     [requestCustomerSave]
+  );
+
+  const handleAddPhotos = useCallback(
+    async (id: string, files: FileList) => {
+      const existingCount = attachmentsByCustomer[id]?.length ?? 0;
+      const remaining = MAX_CUSTOMER_PHOTOS - existingCount;
+      if (remaining <= 0) {
+        toast.error(`写真は1案件${MAX_CUSTOMER_PHOTOS}枚までです。`);
+        return;
+      }
+
+      const selected = Array.from(files).slice(0, remaining);
+      if (files.length > remaining) {
+        toast.info(`残り${remaining}枚だけ追加します。`);
+      }
+
+      if (IS_DESIGN_QA_PREVIEW) {
+        setDesignQaAttachments(current => [
+          ...current,
+          ...selected.map((file, index) => ({
+            id: `design-qa-upload-${crypto.randomUUID()}`,
+            customerHandoverId: id,
+            fileName: file.name,
+            mimeType: file.type || "image/jpeg",
+            sizeBytes: file.size,
+            sortOrder: existingCount + index,
+            createdAt: new Date().toISOString(),
+            url: URL.createObjectURL(file),
+          })),
+        ]);
+        toast.success(`写真${selected.length}枚を追加しました。`);
+        return;
+      }
+
+      const timer = debounceTimers.current.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        debounceTimers.current.delete(id);
+      }
+
+      setUploadingPhotoIds(current => new Set(current).add(id));
+      try {
+        const saved = await saveQueueRef.current.flush(id);
+        if (!saved) throw new Error("顧客カードを先に保存できませんでした。");
+
+        for (const file of selected) {
+          const prepared = await prepareCustomerPhoto(file);
+          await uploadAttachment.mutateAsync({
+            customerHandoverId: id,
+            fileName: prepared.fileName,
+            mimeType: prepared.mimeType,
+            dataBase64: prepared.dataBase64,
+          });
+        }
+        await refetchAttachments();
+        toast.success(`写真${selected.length}枚を保存しました。`);
+      } catch (error) {
+        console.error("Customer photo upload failed:", error);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "写真を保存できませんでした。"
+        );
+        await refetchAttachments();
+      } finally {
+        setUploadingPhotoIds(current => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [attachmentsByCustomer, refetchAttachments, uploadAttachment]
+  );
+
+  const handleDeletePhoto = useCallback(
+    async (attachment: CustomerAttachment) => {
+      if (!window.confirm("この写真を削除しますか？")) return;
+      if (IS_DESIGN_QA_PREVIEW) {
+        if (attachment.url?.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.url);
+        }
+        setDesignQaAttachments(current =>
+          current.filter(item => item.id !== attachment.id)
+        );
+        toast.success("写真を削除しました。");
+        return;
+      }
+      try {
+        await deleteAttachment.mutateAsync({ id: attachment.id });
+        await refetchAttachments();
+        toast.success("写真を削除しました。");
+      } catch (error) {
+        console.error("Customer photo delete failed:", error);
+        toast.error("写真を削除できませんでした。");
+      }
+    },
+    [deleteAttachment, refetchAttachments]
+  );
+
+  const handleShare = useCallback(
+    async (customer: CustomerRecord, photoCount: number) => {
+      const url = new URL("/customers", window.location.origin);
+      url.searchParams.set("customer", customer.id);
+      const title = customer.name.trim()
+        ? `${customer.name.trim()}の案件`
+        : "新規案件";
+      const text = `${title}（写真${photoCount}枚）`;
+
+      try {
+        if (navigator.share) {
+          await navigator.share({ title, text, url: url.toString() });
+          return;
+        }
+        await copyShareText(`${text}\n${url.toString()}`);
+        toast.success("案件URLをコピーしました。LINEに貼り付けてください。");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        console.error("Customer share failed:", error);
+        toast.error("共有画面を開けませんでした。もう一度お試しください。");
+      }
+    },
+    []
   );
 
   const handleDelete = useCallback(
@@ -883,19 +1414,28 @@ export default function CustomerHandover() {
         return;
       }
       try {
-        const deleted = await deleteCustomer.mutateAsync({ id, expectedRevision: record.revision });
+        const deleted = await deleteCustomer.mutateAsync({
+          id,
+          expectedRevision: record.revision,
+        });
         setCustomers(records => records.filter(customer => customer.id !== id));
         toast.success("顧客引き継ぎをアーカイブしました。", {
           action: {
             label: "元に戻す",
             onClick: async () => {
               try {
-                const restored = await restoreCustomer.mutateAsync({ id, expectedRevision: deleted.revision, status: record.status });
+                const restored = await restoreCustomer.mutateAsync({
+                  id,
+                  expectedRevision: deleted.revision,
+                  status: record.status,
+                });
                 const restoredRecord = toCustomerRecord(restored);
                 customerSnapshotRef.current[id] = restoredRecord;
                 setCustomers(records => [...records, restoredRecord]);
               } catch {
-                toast.error("復元に失敗しました。画面を更新して確認してください。");
+                toast.error(
+                  "復元に失敗しました。画面を更新して確認してください。"
+                );
               }
             },
           },
@@ -909,16 +1449,39 @@ export default function CustomerHandover() {
 
   // 列ごとに追加
   const handleAddToColumn = useCallback(
-    (status: CustomerStatus) => {
+    (status: CustomerStatus = "これから", focusNewCustomer = false) => {
       const rec = newCustomerRecord(status);
       setCustomers(prev => {
-        const updated = [...prev, rec];
+        const updated = [rec, ...prev];
         customersRef.current = updated;
         return updated;
       });
-      dirtyFieldsRef.current.set(rec.id, new Set<keyof CustomerRecord>(["name", "status", "contact", "memo", "assignee", "links", "dueDate", "callCount"]));
+      dirtyFieldsRef.current.set(
+        rec.id,
+        new Set<keyof CustomerRecord>([
+          "name",
+          "status",
+          "contact",
+          "memo",
+          "assignee",
+          "links",
+          "dueDate",
+          "callCount",
+        ])
+      );
       changeVersionRef.current.set(rec.id, 1);
       setTimeout(() => requestCustomerSave(rec.id), 0);
+      if (focusNewCustomer) {
+        setTimeout(() => {
+          const card = document.getElementById(`customer-card-${rec.id}`);
+          card?.scrollIntoView({ behavior: "smooth", block: "center" });
+          card
+            ?.querySelector<HTMLTextAreaElement>(
+              'textarea[placeholder="顧客名"]'
+            )
+            ?.focus();
+        }, 0);
+      }
     },
     [requestCustomerSave]
   );
@@ -927,19 +1490,21 @@ export default function CustomerHandover() {
   const overdueCount = customers.filter(c => isOverdue(c)).length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className={`min-h-screen bg-background ${IS_MOBILE_DESIGN_QA_PREVIEW ? "mx-auto max-w-[390px]" : ""}`}
+    >
       {/* ヘッダー */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-rose-100 shadow-sm">
         <div className="max-w-[90rem] mx-auto px-6 py-3 flex items-center gap-3">
           <Link href="/">
-            <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-rose-500 transition-colors">
+            <button className="flex items-center gap-1.5 whitespace-nowrap text-sm text-gray-500 hover:text-rose-500 transition-colors">
               <ArrowLeft className="w-4 h-4" />
               タスク管理へ戻る
             </button>
           </Link>
           <div className="flex items-center gap-2 ml-2">
             <span
-              className="flex items-center gap-1.5 text-sm font-bold text-rose-700"
+              className="flex items-center gap-1.5 whitespace-nowrap text-sm font-bold text-rose-700"
               style={{
                 fontFamily: "'Zen Maru Gothic', 'Noto Sans JP', sans-serif",
                 letterSpacing: "0.06em",
@@ -959,13 +1524,15 @@ export default function CustomerHandover() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-2">
-            {customerError && (
+            {(customerError || attachmentError) && (
               <span className="text-xs text-rose-600 font-medium">
                 接続できません。表示中のデータは保持されています。
               </span>
             )}
             {lastSaved && (
-              <span className="text-xs text-gray-400 flex items-center gap-1">
+              <span
+                className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "hidden" : "hidden sm:flex"} items-center gap-1 text-xs text-gray-400`}
+              >
                 <RefreshCw className="w-3 h-3" />
                 {lastSaved}
               </span>
@@ -976,7 +1543,24 @@ export default function CustomerHandover() {
 
       {/* カンバン3列 */}
       <div className="max-w-[90rem] mx-auto px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div
+          className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:hidden"} mb-4 rounded-xl border border-rose-200 bg-white p-2.5 shadow-sm`}
+        >
+          <button
+            type="button"
+            onClick={() => handleAddToColumn("これから", true)}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:ring-offset-2 active:bg-rose-700"
+          >
+            <Plus className="h-4 w-4" />
+            新規顧客を追加
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+              これから
+            </span>
+          </button>
+        </div>
+        <div
+          className={`grid grid-cols-1 gap-4 ${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:grid-cols-3"}`}
+        >
           {KANBAN_COLUMNS.map(col => {
             // 「不通・未対応」列は「これから」ステータスも含める
             const colCards =
@@ -989,14 +1573,15 @@ export default function CustomerHandover() {
             const sortedCards =
               col.status === "不通・未対応"
                 ? [...colCards].sort((a, b) => {
+                    const aStatusRank = a.status === "これから" ? 0 : 1;
+                    const bStatusRank = b.status === "これから" ? 0 : 1;
+                    if (aStatusRank !== bStatusRank)
+                      return aStatusRank - bStatusRank;
                     const aCallRank =
                       a.callCount >= 2 ? 0 : a.callCount === 1 ? 1 : 2;
                     const bCallRank =
                       b.callCount >= 2 ? 0 : b.callCount === 1 ? 1 : 2;
-                    if (aCallRank !== bCallRank) return aCallRank - bCallRank;
-                    const aStatusRank = a.status === "これから" ? 0 : 1;
-                    const bStatusRank = b.status === "これから" ? 0 : 1;
-                    return aStatusRank - bStatusRank;
+                    return aCallRank - bCallRank;
                   })
                 : colCards;
             return (
@@ -1042,11 +1627,16 @@ export default function CustomerHandover() {
                     <CustomerCard
                       key={c.id}
                       c={c}
+                      attachments={attachmentsByCustomer[c.id] ?? []}
+                      isUploadingPhotos={uploadingPhotoIds.has(c.id)}
                       onUpdate={updateCustomer}
                       onDelete={handleDelete}
                       onLinkChange={handleLinkChange}
                       onDueDateChange={handleDueDateChange}
                       onCalledToggle={handleCalledToggle}
+                      onAddPhotos={handleAddPhotos}
+                      onDeletePhoto={handleDeletePhoto}
+                      onShare={handleShare}
                     />
                   ))}
                 </div>
@@ -1054,7 +1644,7 @@ export default function CustomerHandover() {
                 {/* 列ごとの追加ボタン */}
                 <button
                   onClick={() => handleAddToColumn(col.status)}
-                  className={`flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border-2 border-dashed transition-colors ${col.addBtnClass} border-current`}
+                  className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "hidden" : "hidden md:flex"} items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border-2 border-dashed transition-colors ${col.addBtnClass} border-current`}
                 >
                   <Plus className="w-3.5 h-3.5" />
                   追加

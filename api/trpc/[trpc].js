@@ -361,6 +361,28 @@ var atinnHandoverIssues = pgTable("atinn_handover_issues", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
 });
+var customerHandoverAttachments = pgTable(
+  "customer_handover_attachments",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    customerHandoverId: varchar("customerHandoverId", { length: 64 }).notNull().references(() => customerHandovers.id, { onDelete: "cascade" }),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    fileName: varchar("fileName", { length: 255 }).notNull(),
+    mimeType: varchar("mimeType", { length: 128 }).notNull(),
+    sizeBytes: integer("sizeBytes").notNull(),
+    sortOrder: integer("sortOrder").notNull().default(0),
+    createdBy: varchar("createdBy", { length: 64 }).notNull().default(""),
+    createdAt: timestamp("createdAt").defaultNow().notNull()
+  },
+  (table) => ({
+    customerSortIdx: uniqueIndex(
+      "customer_handover_attachments_customer_sort_unique"
+    ).on(table.customerHandoverId, table.sortOrder),
+    storageKeyIdx: uniqueIndex(
+      "customer_handover_attachments_storage_key_unique"
+    ).on(table.storageKey)
+  })
+);
 var auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   entityType: varchar("entityType", { length: 64 }).notNull(),
@@ -437,6 +459,33 @@ async function getDb() {
 }
 
 // server/storage.ts
+import { del, issueSignedToken, presignUrl, put } from "@vercel/blob";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { dirname, resolve, sep } from "node:path";
+var LOCAL_STORAGE_ROOT = resolve(process.cwd(), ".local-storage");
+function hasRemoteStorageConfig() {
+  return Boolean(ENV.forgeApiUrl && ENV.forgeApiKey);
+}
+function hasVercelBlobConfig() {
+  return Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID
+  );
+}
+async function buildVercelBlobReadUrl(key) {
+  const validUntil = Date.now() + 10 * 60 * 1e3;
+  const signedToken = await issueSignedToken({
+    pathname: key,
+    operations: ["get"],
+    validUntil
+  });
+  const { presignedUrl } = await presignUrl(signedToken, {
+    access: "private",
+    operation: "get",
+    pathname: key,
+    validUntil
+  });
+  return presignedUrl;
+}
 function getStorageConfig() {
   const baseUrl = ENV.forgeApiUrl;
   const apiKey = ENV.forgeApiKey;
@@ -452,11 +501,54 @@ function buildUploadUrl(baseUrl, relKey) {
   url.searchParams.set("path", normalizeKey(relKey));
   return url;
 }
+async function buildDownloadUrl(baseUrl, relKey, apiKey) {
+  const downloadApiUrl = new URL(
+    "v1/storage/downloadUrl",
+    ensureTrailingSlash(baseUrl)
+  );
+  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
+  const response = await fetch(downloadApiUrl, {
+    method: "GET",
+    headers: buildAuthHeaders(apiKey)
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage URL lookup failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  return (await response.json()).url;
+}
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 function normalizeKey(relKey) {
-  return relKey.replace(/^\/+/, "");
+  const key = relKey.replace(/\\/g, "/").replace(/^\/+/, "");
+  const segments = key.split("/");
+  if (!key || segments.some(
+    (segment) => segment === "" || segment === "." || segment === ".."
+  )) {
+    throw new Error("Invalid storage key");
+  }
+  return key;
+}
+function localPathForKey(relKey) {
+  const filePath = resolve(LOCAL_STORAGE_ROOT, normalizeKey(relKey));
+  if (filePath !== LOCAL_STORAGE_ROOT && !filePath.startsWith(`${LOCAL_STORAGE_ROOT}${sep}`)) {
+    throw new Error("Invalid local storage path");
+  }
+  return filePath;
+}
+function inferContentType(key) {
+  const lower = key.toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  return "application/octet-stream";
+}
+function toBuffer(data) {
+  if (typeof data === "string") return Buffer.from(data);
+  return Buffer.from(data);
 }
 function toFormData(data, contentType, fileName) {
   const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
@@ -468,8 +560,26 @@ function buildAuthHeaders(apiKey) {
   return { Authorization: `Bearer ${apiKey}` };
 }
 async function storagePut(relKey, data, contentType = "application/octet-stream") {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  if (hasVercelBlobConfig()) {
+    await put(key, toBuffer(data), {
+      access: "private",
+      addRandomSuffix: false,
+      contentType
+    });
+    return { key, url: await buildVercelBlobReadUrl(key) };
+  }
+  if (!hasRemoteStorageConfig()) {
+    if (ENV.isProduction) getStorageConfig();
+    const filePath = localPathForKey(key);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, toBuffer(data));
+    return {
+      key,
+      url: `data:${contentType};base64,${toBuffer(data).toString("base64")}`
+    };
+  }
+  const { baseUrl, apiKey } = getStorageConfig();
   const uploadUrl = buildUploadUrl(baseUrl, key);
   const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
   const response = await fetch(uploadUrl, {
@@ -486,10 +596,61 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
   const url = (await response.json()).url;
   return { key, url };
 }
+async function storageGet(relKey) {
+  const key = normalizeKey(relKey);
+  if (hasVercelBlobConfig()) {
+    return { key, url: await buildVercelBlobReadUrl(key) };
+  }
+  if (!hasRemoteStorageConfig()) {
+    if (ENV.isProduction) getStorageConfig();
+    const data = await readFile(localPathForKey(key));
+    return {
+      key,
+      url: `data:${inferContentType(key)};base64,${data.toString("base64")}`
+    };
+  }
+  const { baseUrl, apiKey } = getStorageConfig();
+  return {
+    key,
+    url: await buildDownloadUrl(baseUrl, key, apiKey)
+  };
+}
+async function storageDelete(relKey) {
+  const key = normalizeKey(relKey);
+  if (hasVercelBlobConfig()) {
+    await del(key);
+    return;
+  }
+  if (!hasRemoteStorageConfig()) {
+    if (ENV.isProduction) getStorageConfig();
+    try {
+      await unlink(localPathForKey(key));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    return;
+  }
+  const { baseUrl, apiKey } = getStorageConfig();
+  const deleteUrl = new URL("v1/storage/delete", ensureTrailingSlash(baseUrl));
+  deleteUrl.searchParams.set("path", key);
+  const response = await fetch(deleteUrl, {
+    method: "DELETE",
+    headers: buildAuthHeaders(apiKey)
+  });
+  if (!response.ok && response.status !== 404) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage delete failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+}
 
 // server/taskRouter.ts
 var expectedRevision = z2.number().int().positive().nullable().optional();
 var requestIdInput = z2.string().max(128).optional();
+var MAX_CUSTOMER_PHOTOS = 4;
+var MAX_CUSTOMER_PHOTO_BYTES = 125e4;
+var MAX_CUSTOMER_PHOTO_BASE64_LENGTH = 18e5;
 async function requireDb() {
   const db = await getDb();
   if (!db) {
@@ -503,7 +664,10 @@ async function requireDb() {
 function getAuditActor(ctx, requestId) {
   const header = ctx.req.headers?.["x-request-id"];
   const headerValue = Array.isArray(header) ? header[0] : header;
-  return { actorId: ctx.user?.openId ?? "legacy-unauthenticated", requestId: requestId ?? headerValue ?? null };
+  return {
+    actorId: ctx.user?.openId ?? "legacy-unauthenticated",
+    requestId: requestId ?? headerValue ?? null
+  };
 }
 function conflictError() {
   return new TRPCError3({
@@ -512,7 +676,10 @@ function conflictError() {
   });
 }
 function notFoundError() {
-  return new TRPCError3({ code: "NOT_FOUND", message: "\u5BFE\u8C61\u30C7\u30FC\u30BF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002" });
+  return new TRPCError3({
+    code: "NOT_FOUND",
+    message: "\u5BFE\u8C61\u30C7\u30FC\u30BF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002"
+  });
 }
 async function writeAudit(tx, actor, entityType, entityId, action, before, after) {
   await tx.insert(auditLogs).values({
@@ -528,6 +695,32 @@ async function writeAudit(tx, actor, entityType, entityId, action, before, after
 function assertExpectedRevision(currentRevision, expected) {
   if (expected == null || expected !== currentRevision) throw conflictError();
 }
+function decodeCustomerPhoto(dataBase64) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) {
+    throw new TRPCError3({
+      code: "BAD_REQUEST",
+      message: "\u5199\u771F\u30C7\u30FC\u30BF\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002"
+    });
+  }
+  const data = Buffer.from(dataBase64, "base64");
+  if (data.length === 0 || data.length > MAX_CUSTOMER_PHOTO_BYTES) {
+    throw new TRPCError3({
+      code: "PAYLOAD_TOO_LARGE",
+      message: "\u5199\u771F\u304C\u5927\u304D\u3059\u304E\u307E\u3059\u3002\u3082\u3046\u4E00\u5EA6\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+    });
+  }
+  if (data[0] !== 255 || data[1] !== 216 || data[2] !== 255) {
+    throw new TRPCError3({
+      code: "BAD_REQUEST",
+      message: "JPEG\u5F62\u5F0F\u306E\u5199\u771F\u3060\u3051\u767B\u9332\u3067\u304D\u307E\u3059\u3002"
+    });
+  }
+  return data;
+}
+function safeCustomerPhotoName(fileName) {
+  const base = fileName.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return `${base || "photo"}.jpg`;
+}
 var taskStateInput = z2.object({
   dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   taskId: z2.string().min(1).max(128),
@@ -539,7 +732,12 @@ var taskStateInput = z2.object({
   requestId: requestIdInput
 });
 async function saveTaskState(tx, input, actor) {
-  const current = await tx.select().from(taskStates).where(and(eq2(taskStates.dateKey, input.dateKey), eq2(taskStates.taskId, input.taskId))).limit(1);
+  const current = await tx.select().from(taskStates).where(
+    and(
+      eq2(taskStates.dateKey, input.dateKey),
+      eq2(taskStates.taskId, input.taskId)
+    )
+  ).limit(1);
   if (current.length === 0) {
     if (input.expectedRevision != null) throw conflictError();
     const [created] = await tx.insert(taskStates).values({
@@ -551,7 +749,15 @@ async function saveTaskState(tx, input, actor) {
       planned: input.planned,
       revision: 1
     }).returning();
-    await writeAudit(tx, actor, "task_state", `${input.dateKey}:${input.taskId}`, "create", null, created);
+    await writeAudit(
+      tx,
+      actor,
+      "task_state",
+      `${input.dateKey}:${input.taskId}`,
+      "create",
+      null,
+      created
+    );
     return created;
   }
   const previous = current[0];
@@ -570,7 +776,15 @@ async function saveTaskState(tx, input, actor) {
     )
   ).returning();
   if (!updated) throw conflictError();
-  await writeAudit(tx, actor, "task_state", `${input.dateKey}:${input.taskId}`, "update", previous, updated);
+  await writeAudit(
+    tx,
+    actor,
+    "task_state",
+    `${input.dateKey}:${input.taskId}`,
+    "update",
+    previous,
+    updated
+  );
   return updated;
 }
 var taskStatesRouter = router({
@@ -581,11 +795,23 @@ var taskStatesRouter = router({
   getByDateWithMonthly: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async ({ input }) => {
     const db = await requireDb();
     const todayStates = await db.select().from(taskStates).where(eq2(taskStates.dateKey, input.dateKey));
-    const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(and(eq2(taskDefinitions.isActive, true), gte(taskDefinitions.showOnDays, "1")));
+    const showOnDaysTasks = await db.select({ id: taskDefinitions.id }).from(taskDefinitions).where(
+      and(
+        eq2(taskDefinitions.isActive, true),
+        gte(taskDefinitions.showOnDays, "1")
+      )
+    );
     if (showOnDaysTasks.length === 0) return todayStates;
-    const showOnDaysTaskIds = new Set(showOnDaysTasks.map((t2) => `def-${t2.id}`));
+    const showOnDaysTaskIds = new Set(
+      showOnDaysTasks.map((t2) => `def-${t2.id}`)
+    );
     const monthStart = `${input.dateKey.slice(0, 7)}-01`;
-    const monthlyStates = await db.select().from(taskStates).where(and(gte(taskStates.dateKey, monthStart), lte(taskStates.dateKey, input.dateKey)));
+    const monthlyStates = await db.select().from(taskStates).where(
+      and(
+        gte(taskStates.dateKey, monthStart),
+        lte(taskStates.dateKey, input.dateKey)
+      )
+    );
     const todayStateMap = new Map(todayStates.map((s) => [s.taskId, s]));
     const result = todayStates.filter((s) => !showOnDaysTaskIds.has(s.taskId));
     for (const taskId of Array.from(showOnDaysTaskIds)) {
@@ -609,10 +835,14 @@ ${completedDateTag}` : completedDateTag
       if (!todayState) continue;
       const todayNote = todayState.note ?? "";
       const hasCompletedDateTag = todayNote.includes("__completedDate:");
-      const taggedCompletion = monthlyCompleted.find((s) => s.note?.includes("__completedDate:"));
+      const taggedCompletion = monthlyCompleted.find(
+        (s) => s.note?.includes("__completedDate:")
+      );
       if (!hasCompletedDateTag && taggedCompletion) {
         const completedDateTag = `__completedDate:${taggedCompletion.dateKey}`;
-        const completedByMatch = (taggedCompletion.note ?? "").match(/__completedBy:([^\n]+)/);
+        const completedByMatch = (taggedCompletion.note ?? "").match(
+          /__completedBy:([^\n]+)/
+        );
         const completedByTag = completedByMatch ? `
 __completedBy:${completedByMatch[1].trim()}` : "";
         const cleanTodayNote = todayNote.replace(/\n?__completedDate:\d{4}-\d{2}-\d{2}/g, "").replace(/\n?__completedBy:[^\n]+/g, "").trim();
@@ -629,14 +859,18 @@ ${completedDateTag}${completedByTag}` : `${completedDateTag}${completedByTag}`
   }),
   upsert: appProcedure.input(taskStateInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
-    return db.transaction((tx) => saveTaskState(tx, input, getAuditActor(ctx, input.requestId)));
+    return db.transaction(
+      (tx) => saveTaskState(tx, input, getAuditActor(ctx, input.requestId))
+    );
   }),
   bulkUpsert: appProcedure.input(z2.array(taskStateInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
       for (const item of input) {
-        saved.push(await saveTaskState(tx, item, getAuditActor(ctx, item.requestId)));
+        saved.push(
+          await saveTaskState(tx, item, getAuditActor(ctx, item.requestId))
+        );
       }
       return saved;
     });
@@ -650,16 +884,37 @@ var storeCheckInput = z2.object({
   requestId: requestIdInput
 });
 async function saveStoreCheck(tx, input, actor) {
-  const current = await tx.select().from(storeCheckStates).where(and(eq2(storeCheckStates.dateKey, input.dateKey), eq2(storeCheckStates.checkType, input.checkType))).limit(1);
+  const current = await tx.select().from(storeCheckStates).where(
+    and(
+      eq2(storeCheckStates.dateKey, input.dateKey),
+      eq2(storeCheckStates.checkType, input.checkType)
+    )
+  ).limit(1);
   if (current.length === 0) {
     if (input.expectedRevision != null) throw conflictError();
-    const [created] = await tx.insert(storeCheckStates).values({ dateKey: input.dateKey, checkType: input.checkType, checkedStores: input.checkedStores, revision: 1 }).returning();
-    await writeAudit(tx, actor, "store_check", `${input.dateKey}:${input.checkType}`, "create", null, created);
+    const [created] = await tx.insert(storeCheckStates).values({
+      dateKey: input.dateKey,
+      checkType: input.checkType,
+      checkedStores: input.checkedStores,
+      revision: 1
+    }).returning();
+    await writeAudit(
+      tx,
+      actor,
+      "store_check",
+      `${input.dateKey}:${input.checkType}`,
+      "create",
+      null,
+      created
+    );
     return created;
   }
   const previous = current[0];
   assertExpectedRevision(previous.revision, input.expectedRevision);
-  const [updated] = await tx.update(storeCheckStates).set({ checkedStores: input.checkedStores, revision: previous.revision + 1 }).where(
+  const [updated] = await tx.update(storeCheckStates).set({
+    checkedStores: input.checkedStores,
+    revision: previous.revision + 1
+  }).where(
     and(
       eq2(storeCheckStates.dateKey, input.dateKey),
       eq2(storeCheckStates.checkType, input.checkType),
@@ -667,7 +922,15 @@ async function saveStoreCheck(tx, input, actor) {
     )
   ).returning();
   if (!updated) throw conflictError();
-  await writeAudit(tx, actor, "store_check", `${input.dateKey}:${input.checkType}`, "update", previous, updated);
+  await writeAudit(
+    tx,
+    actor,
+    "store_check",
+    `${input.dateKey}:${input.checkType}`,
+    "update",
+    previous,
+    updated
+  );
   return updated;
 }
 var storeCheckRouter = router({
@@ -677,13 +940,18 @@ var storeCheckRouter = router({
   }),
   upsert: appProcedure.input(storeCheckInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
-    return db.transaction((tx) => saveStoreCheck(tx, input, getAuditActor(ctx, input.requestId)));
+    return db.transaction(
+      (tx) => saveStoreCheck(tx, input, getAuditActor(ctx, input.requestId))
+    );
   }),
   bulkUpsert: appProcedure.input(z2.array(storeCheckInput).min(1)).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const saved = [];
-      for (const item of input) saved.push(await saveStoreCheck(tx, item, getAuditActor(ctx, item.requestId)));
+      for (const item of input)
+        saved.push(
+          await saveStoreCheck(tx, item, getAuditActor(ctx, item.requestId))
+        );
       return saved;
     });
   })
@@ -693,7 +961,14 @@ var individualInput = z2.object({
   dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   author: z2.string().max(64),
   target: z2.string().max(64),
-  tasks: z2.array(z2.object({ id: z2.string(), content: z2.string(), done: z2.boolean(), deadline: z2.string().optional() })),
+  tasks: z2.array(
+    z2.object({
+      id: z2.string(),
+      content: z2.string(),
+      done: z2.boolean(),
+      deadline: z2.string().optional()
+    })
+  ),
   completed: z2.boolean(),
   important: z2.boolean().optional().default(false),
   expectedRevision,
@@ -702,7 +977,12 @@ var individualInput = z2.object({
 var individualHandoverRouter = router({
   getActive: appProcedure.input(z2.object({ dateKey: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).query(async () => {
     const db = await requireDb();
-    return db.select().from(individualHandovers).where(and(eq2(individualHandovers.completed, false), isNull(individualHandovers.deletedAt)));
+    return db.select().from(individualHandovers).where(
+      and(
+        eq2(individualHandovers.completed, false),
+        isNull(individualHandovers.deletedAt)
+      )
+    );
   }),
   upsert: appProcedure.input(individualInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
@@ -724,7 +1004,15 @@ var individualHandoverRouter = router({
           updatedBy: actor.actorId,
           revision: 1
         }).returning();
-        await writeAudit(tx, actor, "individual_handover", input.id, input.completed ? "complete" : "create", null, created);
+        await writeAudit(
+          tx,
+          actor,
+          "individual_handover",
+          input.id,
+          input.completed ? "complete" : "create",
+          null,
+          created
+        );
         return created;
       }
       const previous = current[0];
@@ -739,35 +1027,96 @@ var individualHandoverRouter = router({
         important: input.important,
         updatedBy: actor.actorId,
         revision: previous.revision + 1
-      }).where(and(eq2(individualHandovers.id, input.id), eq2(individualHandovers.revision, input.expectedRevision))).returning();
+      }).where(
+        and(
+          eq2(individualHandovers.id, input.id),
+          eq2(individualHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "individual_handover", input.id, input.completed ? "complete" : "update", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "individual_handover",
+        input.id,
+        input.completed ? "complete" : "update",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
-  delete: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: appProcedure.input(
+    z2.object({
+      id: z2.string(),
+      expectedRevision: z2.number().int().positive(),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
       const [previous] = await tx.select().from(individualHandovers).where(eq2(individualHandovers.id, input.id)).limit(1);
       if (!previous) throw notFoundError();
       assertExpectedRevision(previous.revision, input.expectedRevision);
-      const [updated] = await tx.update(individualHandovers).set({ deletedAt: /* @__PURE__ */ new Date(), updatedBy: actor.actorId, revision: previous.revision + 1 }).where(and(eq2(individualHandovers.id, input.id), eq2(individualHandovers.revision, input.expectedRevision))).returning();
+      const [updated] = await tx.update(individualHandovers).set({
+        deletedAt: /* @__PURE__ */ new Date(),
+        updatedBy: actor.actorId,
+        revision: previous.revision + 1
+      }).where(
+        and(
+          eq2(individualHandovers.id, input.id),
+          eq2(individualHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "individual_handover", input.id, "soft_delete", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "individual_handover",
+        input.id,
+        "soft_delete",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
-  restore: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: appProcedure.input(
+    z2.object({
+      id: z2.string(),
+      expectedRevision: z2.number().int().positive(),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
       const [previous] = await tx.select().from(individualHandovers).where(eq2(individualHandovers.id, input.id)).limit(1);
       if (!previous) throw notFoundError();
       assertExpectedRevision(previous.revision, input.expectedRevision);
-      const [updated] = await tx.update(individualHandovers).set({ deletedAt: null, completed: false, completedAt: null, updatedBy: actor.actorId, revision: previous.revision + 1 }).where(and(eq2(individualHandovers.id, input.id), eq2(individualHandovers.revision, input.expectedRevision))).returning();
+      const [updated] = await tx.update(individualHandovers).set({
+        deletedAt: null,
+        completed: false,
+        completedAt: null,
+        updatedBy: actor.actorId,
+        revision: previous.revision + 1
+      }).where(
+        and(
+          eq2(individualHandovers.id, input.id),
+          eq2(individualHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "individual_handover", input.id, "restore", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "individual_handover",
+        input.id,
+        "restore",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
@@ -778,7 +1127,15 @@ var individualHandoverRouter = router({
       const [previous] = await tx.select().from(individualHandovers).where(eq2(individualHandovers.id, input.id)).limit(1);
       if (!previous) throw notFoundError();
       await tx.delete(individualHandovers).where(eq2(individualHandovers.id, input.id));
-      await writeAudit(tx, actor, "individual_handover", input.id, "hard_delete", previous, null);
+      await writeAudit(
+        tx,
+        actor,
+        "individual_handover",
+        input.id,
+        "hard_delete",
+        previous,
+        null
+      );
       return { success: true };
     });
   })
@@ -813,7 +1170,12 @@ var customerPatchInput = z2.object({
 var customerHandoverRouter = router({
   getActive: appProcedure.query(async () => {
     const db = await requireDb();
-    return db.select().from(customerHandovers).where(and(isNull(customerHandovers.deletedAt), ne(customerHandovers.status, "\u5B8C\u4E86")));
+    return db.select().from(customerHandovers).where(
+      and(
+        isNull(customerHandovers.deletedAt),
+        ne(customerHandovers.status, "\u5B8C\u4E86")
+      )
+    );
   }),
   upsert: appProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
@@ -826,8 +1188,24 @@ var customerHandoverRouter = router({
       const callCount = input.callCount ?? 0;
       if (current.length === 0) {
         if (input.expectedRevision != null) throw conflictError();
-        const [created] = await tx.insert(customerHandovers).values({ ...input, links, dueDate, callCount, completedAt: input.status === "\u5B8C\u4E86" ? now : null, updatedBy: actor.actorId, revision: 1 }).returning();
-        await writeAudit(tx, actor, "customer_handover", input.id, input.status === "\u5B8C\u4E86" ? "complete" : "create", null, created);
+        const [created] = await tx.insert(customerHandovers).values({
+          ...input,
+          links,
+          dueDate,
+          callCount,
+          completedAt: input.status === "\u5B8C\u4E86" ? now : null,
+          updatedBy: actor.actorId,
+          revision: 1
+        }).returning();
+        await writeAudit(
+          tx,
+          actor,
+          "customer_handover",
+          input.id,
+          input.status === "\u5B8C\u4E86" ? "complete" : "create",
+          null,
+          created
+        );
         return created;
       }
       const previous = current[0];
@@ -845,9 +1223,22 @@ var customerHandoverRouter = router({
         completedAt: input.status === "\u5B8C\u4E86" ? previous.completedAt ?? now : null,
         updatedBy: actor.actorId,
         revision: previous.revision + 1
-      }).where(and(eq2(customerHandovers.id, input.id), eq2(customerHandovers.revision, input.expectedRevision))).returning();
+      }).where(
+        and(
+          eq2(customerHandovers.id, input.id),
+          eq2(customerHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "customer_handover", input.id, input.status === "\u5B8C\u4E86" ? "complete" : "update", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover",
+        input.id,
+        input.status === "\u5B8C\u4E86" ? "complete" : "update",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
@@ -859,36 +1250,93 @@ var customerHandoverRouter = router({
       if (!previous || previous.deletedAt) throw notFoundError();
       assertExpectedRevision(previous.revision, input.expectedRevision);
       const updates = {};
-      for (const key of ["customerName", "store", "content", "status", "assignee", "links", "dueDate", "callCount"]) {
+      for (const key of [
+        "customerName",
+        "store",
+        "content",
+        "status",
+        "assignee",
+        "links",
+        "dueDate",
+        "callCount"
+      ]) {
         if (input[key] !== void 0) updates[key] = input[key];
       }
       if (Object.keys(updates).length === 0) {
-        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u66F4\u65B0\u3059\u308B\u9805\u76EE\u304C\u3042\u308A\u307E\u305B\u3093\u3002" });
+        throw new TRPCError3({
+          code: "BAD_REQUEST",
+          message: "\u66F4\u65B0\u3059\u308B\u9805\u76EE\u304C\u3042\u308A\u307E\u305B\u3093\u3002"
+        });
       }
-      if (updates.status === "\u5B8C\u4E86" && !previous.completedAt) updates.completedAt = /* @__PURE__ */ new Date();
-      if (updates.status !== void 0 && updates.status !== "\u5B8C\u4E86") updates.completedAt = null;
+      if (updates.status === "\u5B8C\u4E86" && !previous.completedAt)
+        updates.completedAt = /* @__PURE__ */ new Date();
+      if (updates.status !== void 0 && updates.status !== "\u5B8C\u4E86")
+        updates.completedAt = null;
       updates.updatedBy = actor.actorId;
       updates.revision = previous.revision + 1;
-      const [updated] = await tx.update(customerHandovers).set(updates).where(and(eq2(customerHandovers.id, input.id), eq2(customerHandovers.revision, input.expectedRevision))).returning();
+      const [updated] = await tx.update(customerHandovers).set(updates).where(
+        and(
+          eq2(customerHandovers.id, input.id),
+          eq2(customerHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "customer_handover", input.id, updates.status === "\u5B8C\u4E86" ? "complete" : "update", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover",
+        input.id,
+        updates.status === "\u5B8C\u4E86" ? "complete" : "update",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
-  delete: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  delete: appProcedure.input(
+    z2.object({
+      id: z2.string(),
+      expectedRevision: z2.number().int().positive(),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
       const [previous] = await tx.select().from(customerHandovers).where(eq2(customerHandovers.id, input.id)).limit(1);
       if (!previous) throw notFoundError();
       assertExpectedRevision(previous.revision, input.expectedRevision);
-      const [updated] = await tx.update(customerHandovers).set({ deletedAt: /* @__PURE__ */ new Date(), updatedBy: actor.actorId, revision: previous.revision + 1 }).where(and(eq2(customerHandovers.id, input.id), eq2(customerHandovers.revision, input.expectedRevision))).returning();
+      const [updated] = await tx.update(customerHandovers).set({
+        deletedAt: /* @__PURE__ */ new Date(),
+        updatedBy: actor.actorId,
+        revision: previous.revision + 1
+      }).where(
+        and(
+          eq2(customerHandovers.id, input.id),
+          eq2(customerHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "customer_handover", input.id, "soft_delete", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover",
+        input.id,
+        "soft_delete",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
-  restore: appProcedure.input(z2.object({ id: z2.string(), expectedRevision: z2.number().int().positive(), status: z2.string().max(32).optional(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  restore: appProcedure.input(
+    z2.object({
+      id: z2.string(),
+      expectedRevision: z2.number().int().positive(),
+      status: z2.string().max(32).optional(),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
     return db.transaction(async (tx) => {
@@ -902,22 +1350,53 @@ var customerHandoverRouter = router({
         completedAt: status === "\u5B8C\u4E86" ? previous.completedAt : null,
         updatedBy: actor.actorId,
         revision: previous.revision + 1
-      }).where(and(eq2(customerHandovers.id, input.id), eq2(customerHandovers.revision, input.expectedRevision))).returning();
+      }).where(
+        and(
+          eq2(customerHandovers.id, input.id),
+          eq2(customerHandovers.revision, input.expectedRevision)
+        )
+      ).returning();
       if (!updated) throw conflictError();
-      await writeAudit(tx, actor, "customer_handover", input.id, "restore", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover",
+        input.id,
+        "restore",
+        previous,
+        updated
+      );
       return updated;
     });
   }),
   hardDelete: appAdminProcedure.input(z2.object({ id: z2.string(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     const actor = getAuditActor(ctx, input.requestId);
-    return db.transaction(async (tx) => {
+    const storedAttachments = await db.select({ storageKey: customerHandoverAttachments.storageKey }).from(customerHandoverAttachments).where(eq2(customerHandoverAttachments.customerHandoverId, input.id));
+    const result = await db.transaction(async (tx) => {
       const [previous] = await tx.select().from(customerHandovers).where(eq2(customerHandovers.id, input.id)).limit(1);
       if (!previous) throw notFoundError();
       await tx.delete(customerHandovers).where(eq2(customerHandovers.id, input.id));
-      await writeAudit(tx, actor, "customer_handover", input.id, "hard_delete", previous, null);
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover",
+        input.id,
+        "hard_delete",
+        previous,
+        null
+      );
       return { success: true };
     });
+    const cleanup = await Promise.allSettled(
+      storedAttachments.map(
+        (attachment) => storageDelete(attachment.storageKey)
+      )
+    );
+    return {
+      ...result,
+      storageCleanupFailed: cleanup.some((item) => item.status === "rejected")
+    };
   })
 });
 var atinnIssueInput = z2.object({
@@ -1039,18 +1518,172 @@ var atinnHandoverRouter = router({
     });
   })
 });
-var simpleStatusInput = z2.object({ value: z2.string().max(16), requestId: requestIdInput });
+var customerAttachmentUploadInput = z2.object({
+  customerHandoverId: z2.string().min(1).max(64),
+  fileName: z2.string().min(1).max(255),
+  mimeType: z2.literal("image/jpeg"),
+  dataBase64: z2.string().min(4).max(MAX_CUSTOMER_PHOTO_BASE64_LENGTH),
+  requestId: requestIdInput
+});
+var customerHandoverAttachmentRouter = router({
+  listActive: appProcedure.query(async () => {
+    const db = await requireDb();
+    const attachments = await db.select({
+      id: customerHandoverAttachments.id,
+      customerHandoverId: customerHandoverAttachments.customerHandoverId,
+      fileName: customerHandoverAttachments.fileName,
+      mimeType: customerHandoverAttachments.mimeType,
+      sizeBytes: customerHandoverAttachments.sizeBytes,
+      sortOrder: customerHandoverAttachments.sortOrder,
+      createdAt: customerHandoverAttachments.createdAt,
+      storageKey: customerHandoverAttachments.storageKey
+    }).from(customerHandoverAttachments).innerJoin(
+      customerHandovers,
+      eq2(customerHandoverAttachments.customerHandoverId, customerHandovers.id)
+    ).where(
+      and(
+        isNull(customerHandovers.deletedAt),
+        ne(customerHandovers.status, "\u5B8C\u4E86")
+      )
+    ).orderBy(
+      sortAsc(customerHandoverAttachments.customerHandoverId),
+      sortAsc(customerHandoverAttachments.sortOrder),
+      sortAsc(customerHandoverAttachments.createdAt)
+    );
+    return Promise.all(
+      attachments.map(async (attachment) => {
+        try {
+          const stored = await storageGet(attachment.storageKey);
+          return { ...attachment, url: stored.url };
+        } catch (error) {
+          console.error("Customer attachment URL lookup failed:", error);
+          return { ...attachment, url: null };
+        }
+      })
+    );
+  }),
+  upload: appProcedure.input(customerAttachmentUploadInput).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const actor = getAuditActor(ctx, input.requestId);
+    const data = decodeCustomerPhoto(input.dataBase64);
+    const id = randomUUID();
+    const fileName = safeCustomerPhotoName(input.fileName);
+    const storageKey = `customer-handovers/${input.customerHandoverId}/${id}-${fileName}`;
+    const created = await db.transaction(async (tx) => {
+      const [customer] = await tx.select().from(customerHandovers).where(eq2(customerHandovers.id, input.customerHandoverId)).limit(1);
+      if (!customer || customer.deletedAt || customer.status === "\u5B8C\u4E86") {
+        throw notFoundError();
+      }
+      const existing = await tx.select({ sortOrder: customerHandoverAttachments.sortOrder }).from(customerHandoverAttachments).where(
+        eq2(
+          customerHandoverAttachments.customerHandoverId,
+          input.customerHandoverId
+        )
+      );
+      if (existing.length >= MAX_CUSTOMER_PHOTOS) {
+        throw new TRPCError3({
+          code: "BAD_REQUEST",
+          message: `\u5199\u771F\u306F1\u6848\u4EF6${MAX_CUSTOMER_PHOTOS}\u679A\u307E\u3067\u3067\u3059\u3002`
+        });
+      }
+      const usedOrders = new Set(existing.map((item) => item.sortOrder));
+      const sortOrder = Array.from(
+        { length: MAX_CUSTOMER_PHOTOS },
+        (_, index2) => index2
+      ).find((index2) => !usedOrders.has(index2));
+      if (sortOrder === void 0) {
+        throw new TRPCError3({
+          code: "CONFLICT",
+          message: "\u5199\u771F\u306E\u4E26\u3073\u9806\u3092\u78BA\u4FDD\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"
+        });
+      }
+      const [attachment] = await tx.insert(customerHandoverAttachments).values({
+        id,
+        customerHandoverId: input.customerHandoverId,
+        storageKey,
+        fileName,
+        mimeType: input.mimeType,
+        sizeBytes: data.length,
+        sortOrder,
+        createdBy: actor.actorId
+      }).returning();
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover_attachment",
+        id,
+        "create",
+        null,
+        attachment
+      );
+      return attachment;
+    });
+    try {
+      const stored = await storagePut(storageKey, data, input.mimeType);
+      return { ...created, url: stored.url };
+    } catch (error) {
+      await db.delete(customerHandoverAttachments).where(eq2(customerHandoverAttachments.id, id));
+      console.error("Customer attachment upload failed:", error);
+      throw new TRPCError3({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "\u5199\u771F\u3092\u4FDD\u5B58\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002"
+      });
+    }
+  }),
+  delete: appProcedure.input(
+    z2.object({ id: z2.string().min(1).max(64), requestId: requestIdInput })
+  ).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const actor = getAuditActor(ctx, input.requestId);
+    const [attachment] = await db.select().from(customerHandoverAttachments).where(eq2(customerHandoverAttachments.id, input.id)).limit(1);
+    if (!attachment) throw notFoundError();
+    await storageDelete(attachment.storageKey);
+    await db.transaction(async (tx) => {
+      await tx.delete(customerHandoverAttachments).where(eq2(customerHandoverAttachments.id, input.id));
+      await writeAudit(
+        tx,
+        actor,
+        "customer_handover_attachment",
+        input.id,
+        "delete",
+        attachment,
+        null
+      );
+    });
+    return { success: true };
+  })
+});
+var simpleStatusInput = z2.object({
+  value: z2.string().max(16),
+  requestId: requestIdInput
+});
 async function upsertSingletonStatus(db, table, field, value, actor, entityType) {
   return db.transaction(async (tx) => {
     const existing = await tx.select().from(table).limit(1);
     if (existing.length > 0) {
       const previous = existing[0];
       const [updated] = await tx.update(table).set({ [field]: value }).where(eq2(table.id, previous.id)).returning();
-      await writeAudit(tx, actor, entityType, previous.id, "update", previous, updated);
+      await writeAudit(
+        tx,
+        actor,
+        entityType,
+        previous.id,
+        "update",
+        previous,
+        updated
+      );
       return updated;
     }
     const [created] = await tx.insert(table).values({ [field]: value }).returning();
-    await writeAudit(tx, actor, entityType, created.id, "create", null, created);
+    await writeAudit(
+      tx,
+      actor,
+      entityType,
+      created.id,
+      "create",
+      null,
+      created
+    );
     return created;
   });
 }
@@ -1060,9 +1693,21 @@ var misocaRouter = router({
     const result = await db.select().from(misocaStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: appProcedure.input(z2.object({ completedUntil: z2.string().max(16), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(
+    z2.object({
+      completedUntil: z2.string().max(16),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
-    return upsertSingletonStatus(db, misocaStatus, "completedUntil", input.completedUntil, getAuditActor(ctx, input.requestId), "misoca_status");
+    return upsertSingletonStatus(
+      db,
+      misocaStatus,
+      "completedUntil",
+      input.completedUntil,
+      getAuditActor(ctx, input.requestId),
+      "misoca_status"
+    );
   })
 });
 var grayCellRouter = router({
@@ -1071,19 +1716,47 @@ var grayCellRouter = router({
     const result = await db.select().from(grayCellStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: appProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(
+    z2.object({
+      confirmedUntil: z2.string().max(16),
+      updatedBy: z2.string().max(64).default(""),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(grayCellStatus).limit(1);
       const actor = getAuditActor(ctx, input.requestId);
       if (existing.length > 0) {
         const previous = existing[0];
-        const [updated] = await tx.update(grayCellStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy }).where(eq2(grayCellStatus.id, previous.id)).returning();
-        await writeAudit(tx, actor, "gray_cell_status", previous.id, "update", previous, updated);
+        const [updated] = await tx.update(grayCellStatus).set({
+          confirmedUntil: input.confirmedUntil,
+          updatedBy: input.updatedBy
+        }).where(eq2(grayCellStatus.id, previous.id)).returning();
+        await writeAudit(
+          tx,
+          actor,
+          "gray_cell_status",
+          previous.id,
+          "update",
+          previous,
+          updated
+        );
         return updated;
       }
-      const [created] = await tx.insert(grayCellStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy }).returning();
-      await writeAudit(tx, actor, "gray_cell_status", created.id, "create", null, created);
+      const [created] = await tx.insert(grayCellStatus).values({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      }).returning();
+      await writeAudit(
+        tx,
+        actor,
+        "gray_cell_status",
+        created.id,
+        "create",
+        null,
+        created
+      );
       return created;
     });
   })
@@ -1094,19 +1767,47 @@ var storesShiftRouter = router({
     const result = await db.select().from(storesShiftStatus).limit(1);
     return result[0] ?? null;
   }),
-  upsert: appProcedure.input(z2.object({ confirmedUntil: z2.string().max(16), updatedBy: z2.string().max(64).default(""), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+  upsert: appProcedure.input(
+    z2.object({
+      confirmedUntil: z2.string().max(16),
+      updatedBy: z2.string().max(64).default(""),
+      requestId: requestIdInput
+    })
+  ).mutation(async ({ ctx, input }) => {
     const db = await requireDb();
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(storesShiftStatus).limit(1);
       const actor = getAuditActor(ctx, input.requestId);
       if (existing.length > 0) {
         const previous = existing[0];
-        const [updated] = await tx.update(storesShiftStatus).set({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy }).where(eq2(storesShiftStatus.id, previous.id)).returning();
-        await writeAudit(tx, actor, "stores_shift_status", previous.id, "update", previous, updated);
+        const [updated] = await tx.update(storesShiftStatus).set({
+          confirmedUntil: input.confirmedUntil,
+          updatedBy: input.updatedBy
+        }).where(eq2(storesShiftStatus.id, previous.id)).returning();
+        await writeAudit(
+          tx,
+          actor,
+          "stores_shift_status",
+          previous.id,
+          "update",
+          previous,
+          updated
+        );
         return updated;
       }
-      const [created] = await tx.insert(storesShiftStatus).values({ confirmedUntil: input.confirmedUntil, updatedBy: input.updatedBy }).returning();
-      await writeAudit(tx, actor, "stores_shift_status", created.id, "create", null, created);
+      const [created] = await tx.insert(storesShiftStatus).values({
+        confirmedUntil: input.confirmedUntil,
+        updatedBy: input.updatedBy
+      }).returning();
+      await writeAudit(
+        tx,
+        actor,
+        "stores_shift_status",
+        created.id,
+        "create",
+        null,
+        created
+      );
       return created;
     });
   })
@@ -1128,6 +1829,7 @@ var taskRouter = router({
   individualHandover: individualHandoverRouter,
   customerHandover: customerHandoverRouter,
   atinnHandover: atinnHandoverRouter,
+  customerHandoverAttachment: customerHandoverAttachmentRouter,
   misoca: misocaRouter,
   grayCell: grayCellRouter,
   storesShift: storesShiftRouter,
