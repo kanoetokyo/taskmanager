@@ -15,6 +15,10 @@
       "destination": "/"
     },
     {
+      "source": "/atinn-handover",
+      "destination": "/"
+    },
+    {
       "source": "/login",
       "destination": "/"
     },

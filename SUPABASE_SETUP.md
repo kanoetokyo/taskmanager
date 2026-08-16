@@ -102,6 +102,22 @@ node scripts/apply-sql-migration.mjs drizzle/migrations/0003_calendar_auto_tasks
 Complete the staging dry run in `CALENDAR_AUTOMATION_SETUP.md` before enabling the
 production cron job.
 
+### AtInn handover migration and photo storage
+
+`drizzle/migrations/0004_atinn_handover_issues.sql` is additive. It creates the
+AtInn handover issue library used by `/atinn-handover`; it does not modify existing
+customer or task records. Apply it to a Supabase Preview Branch before production.
+
+The Before/After image uploader also requires the server-only
+`BUILT_IN_FORGE_API_URL` and `BUILT_IN_FORGE_API_KEY` storage proxy variables.
+Set them in the local `.env` and Vercel project settings. Do not expose either
+value through a `VITE_` variable.
+
+```bash
+# DATABASE_URL must point to the Preview Branch, not production.
+node scripts/apply-sql-migration.mjs drizzle/migrations/0004_atinn_handover_issues.sql
+```
+
 ## 4. Seed Initial Task Definitions
 
 After the schema exists, run:
