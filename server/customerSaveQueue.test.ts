@@ -49,4 +49,16 @@ describe("customer save queue", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(save).toHaveBeenCalledTimes(1);
   });
+
+  it("flush waits until the requested save has completed", async () => {
+    const pendingSave = deferred<boolean>();
+    const save = vi.fn(() => pendingSave.promise);
+    const queue = createSerialSaveQueue(save);
+
+    const flushed = queue.flush("card-1");
+    expect(save).toHaveBeenCalledTimes(1);
+
+    pendingSave.resolve(true);
+    await expect(flushed).resolves.toBe(true);
+  });
 });
