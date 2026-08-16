@@ -1905,14 +1905,6 @@ export default function Home() {
               >
                 顧客引き継ぎページへ →
               </a>
-              <a
-                href="/atinn-handover"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition-colors shadow-sm"
-              >
-                アットイン引き継ぎ
-              </a>
             </div>
           </div>
         </section>
@@ -2049,6 +2041,15 @@ export default function Home() {
             </section>
           );
         })()}
+
+        <a
+          href="/atinn-handover"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
+        >
+          アットインモード
+        </a>
 
         </div>{/* /左カラム */}
 
