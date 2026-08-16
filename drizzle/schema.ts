@@ -190,6 +190,26 @@ export const customerHandovers = pgTable("customer_handovers", {
 export type CustomerHandover = typeof customerHandovers.$inferSelect;
 export type InsertCustomerHandover = typeof customerHandovers.$inferInsert;
 
+// ─── AtInn Handover Issue Records (アットイン引き継ぎ) ─────────────────────
+export const atinnHandoverIssues = pgTable("atinn_handover_issues", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: varchar("title", { length: 255 }).notNull().default(""),
+  content: varchar("content", { length: 2048 }).notNull().default(""),
+  beforeImageUrl: varchar("beforeImageUrl", { length: 2048 }),
+  afterImageUrl: varchar("afterImageUrl", { length: 2048 }),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  deletedAt: timestamp("deletedAt"),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  revision: integer("revision").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+export type AtinnHandoverIssue = typeof atinnHandoverIssues.$inferSelect;
+export type InsertAtinnHandoverIssue = typeof atinnHandoverIssues.$inferInsert;
+
 // ─── Audit Log ─────────────────────────────────────────────────────────────
 // Stores before/after snapshots for recoverability and incident investigation.
 export const auditLogs = pgTable("audit_logs", {

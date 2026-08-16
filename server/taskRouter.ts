@@ -1,8 +1,10 @@
-import { and, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
+import { asc as sortAsc, and, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   auditLogs,
+  atinnHandoverIssues,
   calendarAutoTasks,
   customerHandovers,
   grayCellStatus,
@@ -15,6 +17,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import { appAdminProcedure, appProcedure, router } from "./_core/trpc";
+import { storagePut } from "./storage";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type AuditActor = { actorId: string; requestId: string | null };
@@ -595,6 +598,167 @@ const customerHandoverRouter = router({
   }),
 });
 
+const atinnIssueInput = z.object({
+  id: z.string().min(1).max(64),
+  title: z.string().max(255),
+  content: z.string().max(2048),
+  beforeImageUrl: z.string().url().max(2048).nullable(),
+  afterImageUrl: z.string().url().max(2048).nullable(),
+  sortOrder: z.number().int().min(0).max(1_000_000),
+  expectedRevision,
+  requestId: requestIdInput,
+});
+
+const atinnImageInput = z.object({
+  id: z.string().min(1).max(64),
+  slot: z.enum(["before", "after"]),
+  // 3 MB binary image after client-side compression fits within Vercel's body limit.
+  imageData: z.string().min(32).max(4_300_000),
+  requestId: requestIdInput,
+});
+
+const ATINN_IMAGE_MIME_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const;
+
+function decodeAtinnImage(imageData: string) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(imageData);
+  if (!match) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "JPEG・PNG・WebP形式の画像を選択してください。",
+    });
+  }
+
+  const mimeType = match[1] as keyof typeof ATINN_IMAGE_MIME_TYPES;
+  const data = Buffer.from(match[2], "base64");
+  if (data.length === 0 || data.length > 3 * 1024 * 1024) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "画像は圧縮後3MB以下にしてください。",
+    });
+  }
+
+  return { data, mimeType, extension: ATINN_IMAGE_MIME_TYPES[mimeType] };
+}
+
+const atinnHandoverRouter = router({
+  list: appProcedure.query(async () => {
+    const db = await requireDb();
+    return db
+      .select()
+      .from(atinnHandoverIssues)
+      .where(isNull(atinnHandoverIssues.deletedAt))
+      .orderBy(sortAsc(atinnHandoverIssues.sortOrder), sortAsc(atinnHandoverIssues.createdAt));
+  }),
+
+  upsert: appProcedure.input(atinnIssueInput).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const actor = getAuditActor(ctx, input.requestId);
+    return db.transaction(async tx => {
+      const current = await tx
+        .select()
+        .from(atinnHandoverIssues)
+        .where(eq(atinnHandoverIssues.id, input.id))
+        .limit(1);
+
+      if (current.length === 0) {
+        if (input.expectedRevision != null) throw conflictError();
+        const [created] = await tx
+          .insert(atinnHandoverIssues)
+          .values({
+            id: input.id,
+            title: input.title,
+            content: input.content,
+            beforeImageUrl: input.beforeImageUrl,
+            afterImageUrl: input.afterImageUrl,
+            sortOrder: input.sortOrder,
+            updatedBy: actor.actorId,
+            revision: 1,
+          })
+          .returning();
+        await writeAudit(tx, actor, "atinn_handover_issue", input.id, "create", null, created);
+        return created;
+      }
+
+      const previous = current[0];
+      if (previous.deletedAt) throw notFoundError();
+      assertExpectedRevision(previous.revision, input.expectedRevision);
+      const [updated] = await tx
+        .update(atinnHandoverIssues)
+        .set({
+          title: input.title,
+          content: input.content,
+          beforeImageUrl: input.beforeImageUrl,
+          afterImageUrl: input.afterImageUrl,
+          sortOrder: input.sortOrder,
+          updatedBy: actor.actorId,
+          revision: previous.revision + 1,
+        })
+        .where(
+          and(
+            eq(atinnHandoverIssues.id, input.id),
+            eq(atinnHandoverIssues.revision, input.expectedRevision!)
+          )
+        )
+        .returning();
+      if (!updated) throw conflictError();
+      await writeAudit(tx, actor, "atinn_handover_issue", input.id, "update", previous, updated);
+      return updated;
+    });
+  }),
+
+  uploadImage: appProcedure.input(atinnImageInput).mutation(async ({ input }) => {
+    const db = await requireDb();
+    const [issue] = await db
+      .select({ id: atinnHandoverIssues.id })
+      .from(atinnHandoverIssues)
+      .where(and(eq(atinnHandoverIssues.id, input.id), isNull(atinnHandoverIssues.deletedAt)))
+      .limit(1);
+    if (!issue) throw notFoundError();
+
+    const image = decodeAtinnImage(input.imageData);
+    const key = `atinn-handover/${input.id}/${input.slot}/${randomUUID()}.${image.extension}`;
+    const uploaded = await storagePut(key, image.data, image.mimeType);
+    return { url: uploaded.url };
+  }),
+
+  delete: appProcedure
+    .input(z.object({ id: z.string().min(1).max(64), expectedRevision: z.number().int().positive(), requestId: requestIdInput }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const actor = getAuditActor(ctx, input.requestId);
+      return db.transaction(async tx => {
+        const [previous] = await tx
+          .select()
+          .from(atinnHandoverIssues)
+          .where(eq(atinnHandoverIssues.id, input.id))
+          .limit(1);
+        if (!previous || previous.deletedAt) throw notFoundError();
+        assertExpectedRevision(previous.revision, input.expectedRevision);
+        const [updated] = await tx
+          .update(atinnHandoverIssues)
+          .set({
+            deletedAt: new Date(),
+            updatedBy: actor.actorId,
+            revision: previous.revision + 1,
+          })
+          .where(
+            and(
+              eq(atinnHandoverIssues.id, input.id),
+              eq(atinnHandoverIssues.revision, input.expectedRevision)
+            )
+          )
+          .returning();
+        if (!updated) throw conflictError();
+        await writeAudit(tx, actor, "atinn_handover_issue", input.id, "soft_delete", previous, updated);
+        return updated;
+      });
+    }),
+});
+
 const simpleStatusInput = z.object({ value: z.string().max(16), requestId: requestIdInput });
 
 async function upsertSingletonStatus(
@@ -701,6 +865,7 @@ export const taskRouter = router({
   storeCheck: storeCheckRouter,
   individualHandover: individualHandoverRouter,
   customerHandover: customerHandoverRouter,
+  atinnHandover: atinnHandoverRouter,
   misoca: misocaRouter,
   grayCell: grayCellRouter,
   storesShift: storesShiftRouter,

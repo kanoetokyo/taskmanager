@@ -213,7 +213,8 @@ var systemRouter = router({
 });
 
 // server/taskRouter.ts
-import { and, eq as eq2, gte, isNull, lte, ne } from "drizzle-orm";
+import { asc as sortAsc, and, eq as eq2, gte, isNull, lte, ne } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { TRPCError as TRPCError3 } from "@trpc/server";
 import { z as z2 } from "zod";
 
@@ -347,6 +348,19 @@ var customerHandovers = pgTable("customer_handovers", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
 });
+var atinnHandoverIssues = pgTable("atinn_handover_issues", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  title: varchar("title", { length: 255 }).notNull().default(""),
+  content: varchar("content", { length: 2048 }).notNull().default(""),
+  beforeImageUrl: varchar("beforeImageUrl", { length: 2048 }),
+  afterImageUrl: varchar("afterImageUrl", { length: 2048 }),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  deletedAt: timestamp("deletedAt"),
+  updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
+  revision: integer("revision").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => /* @__PURE__ */ new Date())
+});
 var auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   entityType: varchar("entityType", { length: 64 }).notNull(),
@@ -420,6 +434,57 @@ async function getDb() {
     }
   }
   return _db;
+}
+
+// server/storage.ts
+function getStorageConfig() {
+  const baseUrl = ENV.forgeApiUrl;
+  const apiKey = ENV.forgeApiKey;
+  if (!baseUrl || !apiKey) {
+    throw new Error(
+      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+    );
+  }
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+function buildUploadUrl(baseUrl, relKey) {
+  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
+  url.searchParams.set("path", normalizeKey(relKey));
+  return url;
+}
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+function normalizeKey(relKey) {
+  return relKey.replace(/^\/+/, "");
+}
+function toFormData(data, contentType, fileName) {
+  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
+  const form = new FormData();
+  form.append("file", blob, fileName || "file");
+  return form;
+}
+function buildAuthHeaders(apiKey) {
+  return { Authorization: `Bearer ${apiKey}` };
+}
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const { baseUrl, apiKey } = getStorageConfig();
+  const key = normalizeKey(relKey);
+  const uploadUrl = buildUploadUrl(baseUrl, key);
+  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: buildAuthHeaders(apiKey),
+    body: formData
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  const url = (await response.json()).url;
+  return { key, url };
 }
 
 // server/taskRouter.ts
@@ -855,6 +920,125 @@ var customerHandoverRouter = router({
     });
   })
 });
+var atinnIssueInput = z2.object({
+  id: z2.string().min(1).max(64),
+  title: z2.string().max(255),
+  content: z2.string().max(2048),
+  beforeImageUrl: z2.string().url().max(2048).nullable(),
+  afterImageUrl: z2.string().url().max(2048).nullable(),
+  sortOrder: z2.number().int().min(0).max(1e6),
+  expectedRevision,
+  requestId: requestIdInput
+});
+var atinnImageInput = z2.object({
+  id: z2.string().min(1).max(64),
+  slot: z2.enum(["before", "after"]),
+  // 3 MB binary image after client-side compression fits within Vercel's body limit.
+  imageData: z2.string().min(32).max(43e5),
+  requestId: requestIdInput
+});
+var ATINN_IMAGE_MIME_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp"
+};
+function decodeAtinnImage(imageData) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(imageData);
+  if (!match) {
+    throw new TRPCError3({
+      code: "BAD_REQUEST",
+      message: "JPEG\u30FBPNG\u30FBWebP\u5F62\u5F0F\u306E\u753B\u50CF\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+    });
+  }
+  const mimeType = match[1];
+  const data = Buffer.from(match[2], "base64");
+  if (data.length === 0 || data.length > 3 * 1024 * 1024) {
+    throw new TRPCError3({
+      code: "BAD_REQUEST",
+      message: "\u753B\u50CF\u306F\u5727\u7E2E\u5F8C3MB\u4EE5\u4E0B\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+    });
+  }
+  return { data, mimeType, extension: ATINN_IMAGE_MIME_TYPES[mimeType] };
+}
+var atinnHandoverRouter = router({
+  list: appProcedure.query(async () => {
+    const db = await requireDb();
+    return db.select().from(atinnHandoverIssues).where(isNull(atinnHandoverIssues.deletedAt)).orderBy(sortAsc(atinnHandoverIssues.sortOrder), sortAsc(atinnHandoverIssues.createdAt));
+  }),
+  upsert: appProcedure.input(atinnIssueInput).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const actor = getAuditActor(ctx, input.requestId);
+    return db.transaction(async (tx) => {
+      const current = await tx.select().from(atinnHandoverIssues).where(eq2(atinnHandoverIssues.id, input.id)).limit(1);
+      if (current.length === 0) {
+        if (input.expectedRevision != null) throw conflictError();
+        const [created] = await tx.insert(atinnHandoverIssues).values({
+          id: input.id,
+          title: input.title,
+          content: input.content,
+          beforeImageUrl: input.beforeImageUrl,
+          afterImageUrl: input.afterImageUrl,
+          sortOrder: input.sortOrder,
+          updatedBy: actor.actorId,
+          revision: 1
+        }).returning();
+        await writeAudit(tx, actor, "atinn_handover_issue", input.id, "create", null, created);
+        return created;
+      }
+      const previous = current[0];
+      if (previous.deletedAt) throw notFoundError();
+      assertExpectedRevision(previous.revision, input.expectedRevision);
+      const [updated] = await tx.update(atinnHandoverIssues).set({
+        title: input.title,
+        content: input.content,
+        beforeImageUrl: input.beforeImageUrl,
+        afterImageUrl: input.afterImageUrl,
+        sortOrder: input.sortOrder,
+        updatedBy: actor.actorId,
+        revision: previous.revision + 1
+      }).where(
+        and(
+          eq2(atinnHandoverIssues.id, input.id),
+          eq2(atinnHandoverIssues.revision, input.expectedRevision)
+        )
+      ).returning();
+      if (!updated) throw conflictError();
+      await writeAudit(tx, actor, "atinn_handover_issue", input.id, "update", previous, updated);
+      return updated;
+    });
+  }),
+  uploadImage: appProcedure.input(atinnImageInput).mutation(async ({ input }) => {
+    const db = await requireDb();
+    const [issue] = await db.select({ id: atinnHandoverIssues.id }).from(atinnHandoverIssues).where(and(eq2(atinnHandoverIssues.id, input.id), isNull(atinnHandoverIssues.deletedAt))).limit(1);
+    if (!issue) throw notFoundError();
+    const image = decodeAtinnImage(input.imageData);
+    const key = `atinn-handover/${input.id}/${input.slot}/${randomUUID()}.${image.extension}`;
+    const uploaded = await storagePut(key, image.data, image.mimeType);
+    return { url: uploaded.url };
+  }),
+  delete: appProcedure.input(z2.object({ id: z2.string().min(1).max(64), expectedRevision: z2.number().int().positive(), requestId: requestIdInput })).mutation(async ({ ctx, input }) => {
+    const db = await requireDb();
+    const actor = getAuditActor(ctx, input.requestId);
+    return db.transaction(async (tx) => {
+      const [previous] = await tx.select().from(atinnHandoverIssues).where(eq2(atinnHandoverIssues.id, input.id)).limit(1);
+      if (!previous || previous.deletedAt) throw notFoundError();
+      assertExpectedRevision(previous.revision, input.expectedRevision);
+      const [updated] = await tx.update(atinnHandoverIssues).set({
+        deletedAt: /* @__PURE__ */ new Date(),
+        updatedBy: actor.actorId,
+        revision: previous.revision + 1
+      }).where(
+        and(
+          eq2(atinnHandoverIssues.id, input.id),
+          eq2(atinnHandoverIssues.revision, input.expectedRevision)
+        )
+      ).returning();
+      if (!updated) throw conflictError();
+      await writeAudit(tx, actor, "atinn_handover_issue", input.id, "soft_delete", previous, updated);
+      return updated;
+    });
+  })
+});
 var simpleStatusInput = z2.object({ value: z2.string().max(16), requestId: requestIdInput });
 async function upsertSingletonStatus(db, table, field, value, actor, entityType) {
   return db.transaction(async (tx) => {
@@ -943,6 +1127,7 @@ var taskRouter = router({
   storeCheck: storeCheckRouter,
   individualHandover: individualHandoverRouter,
   customerHandover: customerHandoverRouter,
+  atinnHandover: atinnHandoverRouter,
   misoca: misocaRouter,
   grayCell: grayCellRouter,
   storesShift: storesShiftRouter,

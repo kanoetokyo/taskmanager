@@ -8,6 +8,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import SakuraPetals from "./components/SakuraPetals";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import CustomerHandover from "./pages/CustomerHandover";
+import AtinnHandover from "./pages/AtinnHandover";
 import Home from "./pages/Home";
 import ShowOnDaysPage from "./pages/ShowOnDaysPage";
 
@@ -23,6 +24,7 @@ function AppRoutes() {
       </Route>
       <Route path={"/"} component={Home} />
       <Route path={"/customers"} component={CustomerHandover} />
+      <Route path={"/atinn-handover"} component={AtinnHandover} />
       <Route path={"/show-on-days"} component={ShowOnDaysPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
