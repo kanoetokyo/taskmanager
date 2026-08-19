@@ -412,12 +412,12 @@ function CustomerPhotoSection({
       />
 
       <div
-        className={`grid grid-cols-1 gap-2 ${attachments.length > 0 ? "mt-2" : ""}`}
+        className={`grid grid-cols-2 gap-2 ${attachments.length > 0 ? "mt-2" : ""}`}
       >
         <button
           type="button"
           onClick={() => onShare(customer, attachments.length)}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#06C755] bg-white px-3 py-2 text-sm font-semibold text-[#06C755] transition-colors hover:bg-[#06C755]/10 focus:outline-none focus:ring-2 focus:ring-[#06C755]/30"
         >
           <Share2 className="h-4 w-4" aria-hidden="true" />
           LINEへ共有
