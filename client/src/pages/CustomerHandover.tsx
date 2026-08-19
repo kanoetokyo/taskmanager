@@ -37,6 +37,7 @@ import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { buildCustomerHandoverShare } from "@shared/customerHandoverShare";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 
@@ -413,16 +414,14 @@ function CustomerPhotoSection({
       <div
         className={`grid grid-cols-1 gap-2 ${attachments.length > 0 ? "mt-2" : ""}`}
       >
-        {attachments.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onShare(customer, attachments.length)}
-            className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
-          >
-            <Share2 className="h-4 w-4" aria-hidden="true" />
-            LINEへ共有
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => onShare(customer, attachments.length)}
+          className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300"
+        >
+          <Share2 className="h-4 w-4" aria-hidden="true" />
+          LINEへ共有
+        </button>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -1376,19 +1375,19 @@ export default function CustomerHandover() {
 
   const handleShare = useCallback(
     async (customer: CustomerRecord, photoCount: number) => {
-      const url = new URL("/customers", window.location.origin);
-      url.searchParams.set("customer", customer.id);
-      const title = customer.name.trim()
-        ? `${customer.name.trim()}の案件`
-        : "新規案件";
-      const text = `${title}（写真${photoCount}枚）`;
+      const { title, text, url } = buildCustomerHandoverShare(
+        customer.id,
+        customer.name,
+        photoCount,
+        window.location.origin
+      );
 
       try {
         if (navigator.share) {
-          await navigator.share({ title, text, url: url.toString() });
+          await navigator.share({ title, text, url });
           return;
         }
-        await copyShareText(`${text}\n${url.toString()}`);
+        await copyShareText(`${text}\n${url}`);
         toast.success("案件URLをコピーしました。LINEに貼り付けてください。");
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
