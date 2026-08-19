@@ -5,7 +5,6 @@ import { isLoginRequired } from "@/lib/authMode";
 import NotFound from "@/pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
-import SakuraPetals from "./components/SakuraPetals";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import CustomerHandover from "./pages/CustomerHandover";
 import AtinnHandover from "./pages/AtinnHandover";
@@ -46,7 +45,6 @@ function App() {
         // switchable
       >
         <TooltipProvider>
-          <SakuraPetals />
           <Toaster />
           {isLoginRequired ? (
             <Switch>
