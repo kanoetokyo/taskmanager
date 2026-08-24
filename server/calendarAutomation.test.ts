@@ -91,6 +91,16 @@ describe("calendar task evaluation", () => {
     );
   });
 
+  it("keeps the retired Mizuta rule inactive after August 2026 without a Vercel setting", () => {
+    expect(
+      isCalendarTaskRuleActive(
+        "mizuta-invoice-printing",
+        "2026-09",
+        parseCalendarTaskRuleEndMonths()
+      )
+    ).toBe(false);
+  });
+
   it("rejects an invalid rule end-month configuration", () => {
     expect(() => parseCalendarTaskRuleEndMonths('{"customer-a":"August"}')).toThrow();
   });

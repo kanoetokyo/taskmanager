@@ -269,6 +269,9 @@ var JAPAN_TIME_ZONE = "Asia/Tokyo";
 var GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 var GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 var calendarMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
+var DEFAULT_CALENDAR_TASK_RULE_END_MONTHS = {
+  "mizuta-invoice-printing": "2026-08"
+};
 var ruleSchema = z.object({
   id: z.string().min(1).max(128),
   calendarId: z.string().min(1).max(512),
@@ -508,14 +511,17 @@ function getCalendarTaskRules() {
   return parseCalendarTaskRules(raw);
 }
 function parseCalendarTaskRuleEndMonths(raw) {
-  if (!raw) return {};
+  if (!raw) return { ...DEFAULT_CALENDAR_TASK_RULE_END_MONTHS };
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error("Calendar automation end-month configuration is invalid.");
   }
-  return z.record(z.string(), calendarMonthSchema).parse(parsed);
+  return {
+    ...DEFAULT_CALENDAR_TASK_RULE_END_MONTHS,
+    ...z.record(z.string(), calendarMonthSchema).parse(parsed)
+  };
 }
 function isCalendarTaskRuleActive(ruleId, targetMonth, endMonths = parseCalendarTaskRuleEndMonths(
   process.env.CALENDAR_AUTO_TASK_RULE_END_MONTHS_JSON

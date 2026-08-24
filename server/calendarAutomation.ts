@@ -10,6 +10,10 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE =
   "https://www.googleapis.com/auth/calendar.readonly";
 const calendarMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
+// Retired rules stay here until their generated-task history can be archived.
+const DEFAULT_CALENDAR_TASK_RULE_END_MONTHS: Record<string, string> = {
+  "mizuta-invoice-printing": "2026-08",
+};
 
 const ruleSchema = z
   .object({
@@ -381,7 +385,7 @@ export function getCalendarTaskRules() {
 }
 
 export function parseCalendarTaskRuleEndMonths(raw?: string) {
-  if (!raw) return {} as Record<string, string>;
+  if (!raw) return { ...DEFAULT_CALENDAR_TASK_RULE_END_MONTHS };
 
   let parsed: unknown;
   try {
@@ -390,7 +394,10 @@ export function parseCalendarTaskRuleEndMonths(raw?: string) {
     throw new Error("Calendar automation end-month configuration is invalid.");
   }
 
-  return z.record(z.string(), calendarMonthSchema).parse(parsed);
+  return {
+    ...DEFAULT_CALENDAR_TASK_RULE_END_MONTHS,
+    ...z.record(z.string(), calendarMonthSchema).parse(parsed),
+  };
 }
 
 export function isCalendarTaskRuleActive(
