@@ -271,6 +271,7 @@ var GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 var ruleSchema = z.object({
   id: z.string().min(1).max(128),
   calendarId: z.string().min(1).max(512),
+  customerDisplayName: z.string().min(1).max(128),
   customerMatch: z.object({
     descriptionMustContain: z.array(z.string().min(1).max(512)).min(3).max(8),
     summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional()
@@ -286,6 +287,25 @@ var ruleSchema = z.object({
     category: z.string().min(1).max(128),
     defaultPlanned: z.string().max(64).default("\u5F53\u65E5\u4E8B\u52D9\u62C5\u5F53")
   })
+}).superRefine((rule, context) => {
+  const customerName = normalizeForMatch(rule.customerDisplayName);
+  const nameIsMatched = rule.customerMatch.descriptionMustContain.some(
+    (value) => normalizeForMatch(value) === customerName
+  );
+  if (!nameIsMatched) {
+    context.addIssue({
+      code: "custom",
+      path: ["customerMatch", "descriptionMustContain"],
+      message: "Customer display name must be included as an exact description match."
+    });
+  }
+  if (!normalizeForMatch(rule.task.title).includes(customerName)) {
+    context.addIssue({
+      code: "custom",
+      path: ["task", "title"],
+      message: "Task title must include the configured customer display name."
+    });
+  }
 });
 var googleEventSchema = z.object({
   id: z.string().min(1),
@@ -481,6 +501,9 @@ function isCalendarAutomationEnabled() {
 function getCalendarTaskRules() {
   const raw = process.env.CALENDAR_AUTO_TASK_RULES_JSON;
   if (!raw) return [];
+  return parseCalendarTaskRules(raw);
+}
+function parseCalendarTaskRules(raw) {
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -637,6 +660,7 @@ function toPersistableTask(rule, decision) {
     defaultPlanned: rule.task.defaultPlanned,
     status: decision.status ?? "scheduled",
     details: {
+      customerDisplayName: rule.customerDisplayName,
       finalVisitDate: decision.finalVisitDate ?? "",
       reason: decision.reason ?? ""
     }

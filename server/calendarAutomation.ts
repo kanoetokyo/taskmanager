@@ -10,9 +10,11 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE =
   "https://www.googleapis.com/auth/calendar.readonly";
 
-const ruleSchema = z.object({
+const ruleSchema = z
+  .object({
   id: z.string().min(1).max(128),
   calendarId: z.string().min(1).max(512),
+  customerDisplayName: z.string().min(1).max(128),
   customerMatch: z.object({
     descriptionMustContain: z.array(z.string().min(1).max(512)).min(3).max(8),
     summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional(),
@@ -28,7 +30,28 @@ const ruleSchema = z.object({
     category: z.string().min(1).max(128),
     defaultPlanned: z.string().max(64).default("当日事務担当"),
   }),
-});
+  })
+  .superRefine((rule, context) => {
+    const customerName = normalizeForMatch(rule.customerDisplayName);
+    const nameIsMatched = rule.customerMatch.descriptionMustContain.some(
+      value => normalizeForMatch(value) === customerName
+    );
+    if (!nameIsMatched) {
+      context.addIssue({
+        code: "custom",
+        path: ["customerMatch", "descriptionMustContain"],
+        message: "Customer display name must be included as an exact description match.",
+      });
+    }
+
+    if (!normalizeForMatch(rule.task.title).includes(customerName)) {
+      context.addIssue({
+        code: "custom",
+        path: ["task", "title"],
+        message: "Task title must include the configured customer display name.",
+      });
+    }
+  });
 
 const googleEventSchema = z.object({
   id: z.string().min(1),
@@ -344,6 +367,10 @@ export function getCalendarTaskRules() {
   const raw = process.env.CALENDAR_AUTO_TASK_RULES_JSON;
   if (!raw) return [];
 
+  return parseCalendarTaskRules(raw);
+}
+
+export function parseCalendarTaskRules(raw: string) {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -579,6 +606,7 @@ function toPersistableTask(
     defaultPlanned: rule.task.defaultPlanned,
     status: decision.status ?? "scheduled",
     details: {
+      customerDisplayName: rule.customerDisplayName,
       finalVisitDate: decision.finalVisitDate ?? "",
       reason: decision.reason ?? "",
     },

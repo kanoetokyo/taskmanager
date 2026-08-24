@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calendarWindow,
   evaluateCalendarTaskRule,
+  parseCalendarTaskRules,
   selectCalendarTaskRules,
   type CalendarTaskRule,
   type GoogleCalendarEvent,
@@ -10,6 +11,7 @@ import {
 const rule: CalendarTaskRule = {
   id: "customer-a-invoice",
   calendarId: "calendar@example.com",
+  customerDisplayName: "Customer A",
   customerMatch: {
     descriptionMustContain: ["Customer A", "090-1111-2222", "Example address"],
   },
@@ -44,6 +46,25 @@ function event(
 const matchingDescription = "Customer A\n09011112222\nExample address";
 
 describe("calendar task evaluation", () => {
+  it("rejects a rule when its display name and customer match are inconsistent", () => {
+    expect(() =>
+      parseCalendarTaskRules(
+        JSON.stringify([
+          {
+            ...rule,
+            customerMatch: {
+              descriptionMustContain: [
+                "Customer B",
+                "090-2222-2222",
+                "Other address",
+              ],
+            },
+          },
+        ])
+      )
+    ).toThrow(/Customer display name/);
+  });
+
   it("reads seven days past month end for forward-scheduled tasks", () => {
     expect(calendarWindow("2026-07")).toEqual({
       timeMin: "2026-06-24T00:00:00+09:00",
@@ -182,6 +203,7 @@ describe("calendar task evaluation", () => {
     const decision = evaluateCalendarTaskRule(
       {
         ...rule,
+        customerDisplayName: "水田",
         customerMatch: {
           descriptionMustContain: [
             "水田",
