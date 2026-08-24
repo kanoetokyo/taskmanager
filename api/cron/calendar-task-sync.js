@@ -268,6 +268,7 @@ async function getDb() {
 var JAPAN_TIME_ZONE = "Asia/Tokyo";
 var GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 var GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+var calendarMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 var ruleSchema = z.object({
   id: z.string().min(1).max(128),
   calendarId: z.string().min(1).max(512),
@@ -506,6 +507,22 @@ function getCalendarTaskRules() {
   if (!raw) return [];
   return parseCalendarTaskRules(raw);
 }
+function parseCalendarTaskRuleEndMonths(raw) {
+  if (!raw) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Calendar automation end-month configuration is invalid.");
+  }
+  return z.record(z.string(), calendarMonthSchema).parse(parsed);
+}
+function isCalendarTaskRuleActive(ruleId, targetMonth, endMonths = parseCalendarTaskRuleEndMonths(
+  process.env.CALENDAR_AUTO_TASK_RULE_END_MONTHS_JSON
+)) {
+  const endMonth = endMonths[ruleId];
+  return !endMonth || targetMonth <= endMonth;
+}
 function parseCalendarTaskRules(raw) {
   let parsed;
   try {
@@ -696,9 +713,24 @@ async function runCalendarTaskSync(options) {
   if (!isCalendarAutomationEnabled()) {
     throw new Error("Calendar automation is disabled.");
   }
-  const rules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
-  if (rules.length === 0) {
+  const selectedRules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
+  if (selectedRules.length === 0) {
     throw new Error("The requested calendar automation rule was not found.");
+  }
+  const rules = selectedRules.filter(
+    (rule) => isCalendarTaskRuleActive(rule.id, options.targetMonth)
+  );
+  if (rules.length === 0) {
+    return {
+      targetMonth: options.targetMonth,
+      dryRun: Boolean(options.dryRun),
+      outcomes: selectedRules.map((rule) => ({
+        ruleId: rule.id,
+        action: "skipped",
+        reason: "deactivated"
+      })),
+      diagnostics: []
+    };
   }
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable for calendar automation.");

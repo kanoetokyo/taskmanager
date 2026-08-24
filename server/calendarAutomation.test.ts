@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calendarWindow,
   evaluateCalendarTaskRule,
+  isCalendarTaskRuleActive,
+  parseCalendarTaskRuleEndMonths,
   parseCalendarTaskRules,
   selectCalendarTaskRules,
   type CalendarTaskRule,
@@ -71,6 +73,26 @@ describe("calendar task evaluation", () => {
     expect(parseCalendarTaskRules(JSON.stringify([legacyRule]))).toMatchObject([
       { customerDisplayName: "Customer A" },
     ]);
+  });
+
+  it("does not create or display tasks after a rule's configured end month", () => {
+    const endMonths = parseCalendarTaskRuleEndMonths(
+      JSON.stringify({ "customer-a-invoice": "2026-08" })
+    );
+
+    expect(
+      isCalendarTaskRuleActive("customer-a-invoice", "2026-08", endMonths)
+    ).toBe(true);
+    expect(
+      isCalendarTaskRuleActive("customer-a-invoice", "2026-09", endMonths)
+    ).toBe(false);
+    expect(isCalendarTaskRuleActive("other-rule", "2026-09", endMonths)).toBe(
+      true
+    );
+  });
+
+  it("rejects an invalid rule end-month configuration", () => {
+    expect(() => parseCalendarTaskRuleEndMonths('{"customer-a":"August"}')).toThrow();
   });
 
   it("reads seven days past month end for forward-scheduled tasks", () => {

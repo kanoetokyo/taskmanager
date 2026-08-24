@@ -17,6 +17,7 @@ import {
   taskStates,
 } from "../drizzle/schema";
 import { getDb } from "./db";
+import { isCalendarTaskRuleActive } from "./calendarAutomation";
 import { appAdminProcedure, appProcedure, router } from "./_core/trpc";
 import { storageDelete, storageGet, storagePut } from "./storage";
 
@@ -1551,7 +1552,7 @@ const calendarAutoTasksRouter = router({
     .input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .query(async ({ input }) => {
       const db = await requireDb();
-      return db
+      const tasks = await db
         .select()
         .from(calendarAutoTasks)
         .where(
@@ -1560,6 +1561,9 @@ const calendarAutoTasksRouter = router({
             ne(calendarAutoTasks.status, "cancelled")
           )
         );
+      return tasks.filter(task =>
+        isCalendarTaskRuleActive(task.ruleId, task.targetMonth)
+      );
     }),
 });
 

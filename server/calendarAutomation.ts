@@ -9,6 +9,7 @@ const JAPAN_TIME_ZONE = "Asia/Tokyo";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE =
   "https://www.googleapis.com/auth/calendar.readonly";
+const calendarMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
 const ruleSchema = z
   .object({
@@ -107,7 +108,7 @@ type SyncOutcome = {
   ruleId: string;
   action: "created" | "updated" | "unchanged" | "skipped";
   status?: "scheduled" | "needs_review";
-  reason?: "no_matching_visit";
+  reason?: "no_matching_visit" | "deactivated";
 };
 
 export type CalendarSyncDiagnostic = {
@@ -377,6 +378,30 @@ export function getCalendarTaskRules() {
   if (!raw) return [];
 
   return parseCalendarTaskRules(raw);
+}
+
+export function parseCalendarTaskRuleEndMonths(raw?: string) {
+  if (!raw) return {} as Record<string, string>;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Calendar automation end-month configuration is invalid.");
+  }
+
+  return z.record(z.string(), calendarMonthSchema).parse(parsed);
+}
+
+export function isCalendarTaskRuleActive(
+  ruleId: string,
+  targetMonth: string,
+  endMonths = parseCalendarTaskRuleEndMonths(
+    process.env.CALENDAR_AUTO_TASK_RULE_END_MONTHS_JSON
+  )
+) {
+  const endMonth = endMonths[ruleId];
+  return !endMonth || targetMonth <= endMonth;
 }
 
 export function parseCalendarTaskRules(raw: string) {
@@ -663,9 +688,24 @@ export async function runCalendarTaskSync(options: {
     throw new Error("Calendar automation is disabled.");
   }
 
-  const rules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
-  if (rules.length === 0) {
+  const selectedRules = selectCalendarTaskRules(getCalendarTaskRules(), options.ruleId);
+  if (selectedRules.length === 0) {
     throw new Error("The requested calendar automation rule was not found.");
+  }
+  const rules = selectedRules.filter(rule =>
+    isCalendarTaskRuleActive(rule.id, options.targetMonth)
+  );
+  if (rules.length === 0) {
+    return {
+      targetMonth: options.targetMonth,
+      dryRun: Boolean(options.dryRun),
+      outcomes: selectedRules.map(rule => ({
+        ruleId: rule.id,
+        action: "skipped" as const,
+        reason: "deactivated" as const,
+      })),
+      diagnostics: [],
+    };
   }
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable for calendar automation.");
