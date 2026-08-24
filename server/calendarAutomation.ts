@@ -12,27 +12,33 @@ const GOOGLE_CALENDAR_SCOPE =
 
 const ruleSchema = z
   .object({
-  id: z.string().min(1).max(128),
-  calendarId: z.string().min(1).max(512),
-  customerDisplayName: z.string().min(1).max(128),
-  customerMatch: z.object({
-    descriptionMustContain: z.array(z.string().min(1).max(512)).min(3).max(8),
-    summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional(),
-  }),
-  officePresence: z.object({
-    titleContainsAny: z.array(z.string().min(1).max(128)).min(1).max(8),
-    colorId: z.string().min(1).max(16),
-    searchBackDays: z.number().int().min(1).max(7).default(7),
-    searchForwardDays: z.number().int().min(0).max(7).optional(),
-  }),
-  task: z.object({
-    title: z.string().min(1).max(512),
-    category: z.string().min(1).max(128),
-    defaultPlanned: z.string().max(64).default("当日事務担当"),
-  }),
+    id: z.string().min(1).max(128),
+    calendarId: z.string().min(1).max(512),
+    // Older private configurations infer this from their first exact customer identifier.
+    customerDisplayName: z.string().min(1).max(128).optional(),
+    customerMatch: z.object({
+      descriptionMustContain: z
+        .array(z.string().min(1).max(512))
+        .min(3)
+        .max(8),
+      summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional(),
+    }),
+    officePresence: z.object({
+      titleContainsAny: z.array(z.string().min(1).max(128)).min(1).max(8),
+      colorId: z.string().min(1).max(16),
+      searchBackDays: z.number().int().min(1).max(7).default(7),
+      searchForwardDays: z.number().int().min(0).max(7).optional(),
+    }),
+    task: z.object({
+      title: z.string().min(1).max(512),
+      category: z.string().min(1).max(128),
+      defaultPlanned: z.string().max(64).default("当日事務担当"),
+    }),
   })
   .superRefine((rule, context) => {
-    const customerName = normalizeForMatch(rule.customerDisplayName);
+    const customerName = normalizeForMatch(
+      rule.customerDisplayName ?? rule.customerMatch.descriptionMustContain[0]
+    );
     const nameIsMatched = rule.customerMatch.descriptionMustContain.some(
       value => normalizeForMatch(value) === customerName
     );
@@ -71,7 +77,10 @@ const googleEventSchema = z.object({
     .optional(),
 });
 
-export type CalendarTaskRule = z.infer<typeof ruleSchema>;
+type RawCalendarTaskRule = z.infer<typeof ruleSchema>;
+export type CalendarTaskRule = RawCalendarTaskRule & {
+  customerDisplayName: string;
+};
 export type GoogleCalendarEvent = z.infer<typeof googleEventSchema>;
 
 type TaskDecision = {
@@ -377,7 +386,11 @@ export function parseCalendarTaskRules(raw: string) {
   } catch {
     throw new Error("Calendar automation rule configuration is invalid.");
   }
-  return z.array(ruleSchema).min(1).parse(parsed);
+  return z.array(ruleSchema).min(1).parse(parsed).map(rule => ({
+    ...rule,
+    customerDisplayName:
+      rule.customerDisplayName ?? rule.customerMatch.descriptionMustContain[0],
+  }));
 }
 
 export function selectCalendarTaskRules(

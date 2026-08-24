@@ -65,6 +65,14 @@ describe("calendar task evaluation", () => {
     ).toThrow(/Customer display name/);
   });
 
+  it("infers a display name for legacy rules before validating the task title", () => {
+    const { customerDisplayName: _customerDisplayName, ...legacyRule } = rule;
+
+    expect(parseCalendarTaskRules(JSON.stringify([legacyRule]))).toMatchObject([
+      { customerDisplayName: "Customer A" },
+    ]);
+  });
+
   it("reads seven days past month end for forward-scheduled tasks", () => {
     expect(calendarWindow("2026-07")).toEqual({
       timeMin: "2026-06-24T00:00:00+09:00",

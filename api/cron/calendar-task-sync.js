@@ -271,7 +271,8 @@ var GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 var ruleSchema = z.object({
   id: z.string().min(1).max(128),
   calendarId: z.string().min(1).max(512),
-  customerDisplayName: z.string().min(1).max(128),
+  // Older private configurations infer this from their first exact customer identifier.
+  customerDisplayName: z.string().min(1).max(128).optional(),
   customerMatch: z.object({
     descriptionMustContain: z.array(z.string().min(1).max(512)).min(3).max(8),
     summaryMustContain: z.array(z.string().min(1).max(128)).max(3).optional()
@@ -288,7 +289,9 @@ var ruleSchema = z.object({
     defaultPlanned: z.string().max(64).default("\u5F53\u65E5\u4E8B\u52D9\u62C5\u5F53")
   })
 }).superRefine((rule, context) => {
-  const customerName = normalizeForMatch(rule.customerDisplayName);
+  const customerName = normalizeForMatch(
+    rule.customerDisplayName ?? rule.customerMatch.descriptionMustContain[0]
+  );
   const nameIsMatched = rule.customerMatch.descriptionMustContain.some(
     (value) => normalizeForMatch(value) === customerName
   );
@@ -510,7 +513,10 @@ function parseCalendarTaskRules(raw) {
   } catch {
     throw new Error("Calendar automation rule configuration is invalid.");
   }
-  return z.array(ruleSchema).min(1).parse(parsed);
+  return z.array(ruleSchema).min(1).parse(parsed).map((rule) => ({
+    ...rule,
+    customerDisplayName: rule.customerDisplayName ?? rule.customerMatch.descriptionMustContain[0]
+  }));
 }
 function selectCalendarTaskRules(rules, ruleId) {
   if (!ruleId) return rules;
