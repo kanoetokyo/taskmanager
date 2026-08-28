@@ -1598,7 +1598,7 @@ export default function CustomerHandover() {
         {isCancelledSearch ? (
           <section
             aria-label="キャンセル済みの顧客"
-            className="mx-auto max-w-4xl"
+            className="w-full max-w-[30rem]"
           >
             <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
               <h2 className="text-sm font-semibold text-slate-700">
