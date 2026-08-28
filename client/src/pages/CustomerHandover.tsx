@@ -31,6 +31,7 @@ import {
   CalendarClock,
   ImageIcon,
   LoaderCircle,
+  Search,
   Share2,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -38,6 +39,12 @@ import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { buildCustomerHandoverShare } from "@shared/customerHandoverShare";
+import {
+  CUSTOMER_HANDOVER_STATUSES,
+  filterCustomerHandovers,
+  type CustomerHandoverStatus,
+  type CustomerHandoverStatusFilter,
+} from "./customerHandoverFilters";
 
 // ─── 定数 ────────────────────────────────────────────────────────────────────
 
@@ -79,14 +86,8 @@ const CONTACT_OPTIONS = [
   "SMS",
 ];
 
-const CUSTOMER_STATUSES_ALL = [
-  "これから",
-  "不通・未対応",
-  "調整中・仮予約中",
-  "保留",
-  "完了",
-] as const;
-type CustomerStatus = (typeof CUSTOMER_STATUSES_ALL)[number];
+const CUSTOMER_STATUSES_ALL = CUSTOMER_HANDOVER_STATUSES;
+type CustomerStatus = CustomerHandoverStatus;
 
 function getTrpcErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
@@ -150,6 +151,7 @@ const STATUS_STYLE: Record<CustomerStatus, string> = {
   "不通・未対応": "bg-rose-50 text-rose-600 border-rose-200",
   "調整中・仮予約中": "bg-amber-50 text-amber-700 border-amber-200",
   保留: "bg-stone-100 text-stone-500 border-stone-200",
+  キャンセル: "bg-slate-100 text-slate-600 border-slate-300",
   完了: "bg-emerald-50 text-emerald-600 border-emerald-200",
 };
 
@@ -480,6 +482,7 @@ const CustomerCard = memo(function CustomerCard({
   const overdue = isOverdue(c);
   const isKorekara = c.status === "これから";
   const isUnreachable = c.status === "不通・未対応";
+  const isCancelled = c.status === "キャンセル";
   const autosize = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
@@ -654,8 +657,13 @@ const CustomerCard = memo(function CustomerCard({
     <div
       id={`customer-card-${c.id}`}
       data-customer-id={c.id}
+      data-customer-status={c.status}
       className={`rounded-xl border shadow-sm p-2.5 transition-colors ${
-        overdue ? "bg-red-50 border-red-300" : "bg-white border-gray-100"
+        overdue
+          ? "bg-red-50 border-red-300"
+          : isCancelled
+            ? "bg-slate-50 border-slate-200"
+            : "bg-white border-gray-100"
       }`}
     >
       <div className="flex items-start gap-1.5">
@@ -834,6 +842,9 @@ export default function CustomerHandover() {
     CustomerAttachment[]
   >(() => (IS_DESIGN_QA_PREVIEW ? DESIGN_QA_ATTACHMENTS : []));
   const [lastSaved, setLastSaved] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState<CustomerHandoverStatusFilter>("all");
   const [uploadingPhotoIds, setUploadingPhotoIds] = useState<Set<string>>(
     new Set()
   );
@@ -1485,7 +1496,15 @@ export default function CustomerHandover() {
     [requestCustomerSave]
   );
 
-  const totalCount = customers.filter(c => c.status !== "完了").length;
+  const visibleCustomers = filterCustomerHandovers(
+    customers,
+    searchQuery,
+    statusFilter
+  );
+  const isCancelledSearch = statusFilter === "キャンセル";
+  const totalCount = customers.filter(
+    c => c.status !== "完了" && c.status !== "キャンセル"
+  ).length;
   const overdueCount = customers.filter(c => isOverdue(c)).length;
 
   return (
@@ -1540,118 +1559,195 @@ export default function CustomerHandover() {
         </div>
       </header>
 
-      {/* カンバン3列 */}
+      {/* 検索と絞り込み */}
       <div className="max-w-[90rem] mx-auto px-6 py-4">
-        <div
-          className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:hidden"} mb-4 rounded-xl border border-rose-200 bg-white p-2.5 shadow-sm`}
-        >
-          <button
-            type="button"
-            onClick={() => handleAddToColumn("これから", true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:ring-offset-2 active:bg-rose-700"
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative block min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="顧客名・メモ・連絡先を検索"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 shadow-sm outline-none transition-colors placeholder:text-gray-400 focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+            />
+          </label>
+          <select
+            value={statusFilter}
+            onChange={event =>
+              setStatusFilter(
+                event.target.value as CustomerHandoverStatusFilter
+              )
+            }
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm outline-none transition-colors focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+            aria-label="ステータスで絞り込み"
           >
-            <Plus className="h-4 w-4" />
-            新規顧客を追加
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
-              これから
-            </span>
-          </button>
+            <option value="all">すべてのステータス</option>
+            {CUSTOMER_STATUSES_ALL.filter(status => status !== "完了").map(
+              status => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              )
+            )}
+          </select>
+          <span className="text-xs text-gray-400 sm:whitespace-nowrap">
+            {visibleCustomers.length}件
+          </span>
         </div>
-        <div
-          className={`grid grid-cols-1 gap-4 ${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:grid-cols-3"}`}
-        >
-          {KANBAN_COLUMNS.map(col => {
-            // 「不通・未対応」列は「これから」ステータスも含める
-            const colCards =
-              col.status === "不通・未対応"
-                ? customers.filter(
-                    c => c.status === "これから" || c.status === "不通・未対応"
-                  )
-                : customers.filter(c => c.status === col.status);
-            // 「これから」を上部に、「不通・未対応」を下部に表示
-            const sortedCards =
-              col.status === "不通・未対応"
-                ? [...colCards].sort((a, b) => {
-                    const aStatusRank = a.status === "これから" ? 0 : 1;
-                    const bStatusRank = b.status === "これから" ? 0 : 1;
-                    if (aStatusRank !== bStatusRank)
-                      return aStatusRank - bStatusRank;
-                    const aCallRank =
-                      a.callCount >= 2 ? 0 : a.callCount === 1 ? 1 : 2;
-                    const bCallRank =
-                      b.callCount >= 2 ? 0 : b.callCount === 1 ? 1 : 2;
-                    return aCallRank - bCallRank;
-                  })
-                : colCards;
-            return (
-              <div key={col.status} className="flex flex-col gap-3">
-                {/* 列ヘッダー */}
-                <div
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border ${col.headerClass}`}
-                >
-                  <span className="text-sm font-semibold text-gray-700">
-                    {col.label}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${col.badgeClass}`}
-                  >
-                    {sortedCards.length}件
-                  </span>
-                </div>
 
-                {/* カード一覧 */}
-                <div className="flex flex-col gap-3 min-h-[80px]">
-                  {sortedCards.length === 0 && (
-                    <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
-                      案件なし
-                    </div>
-                  )}
-                  {(col.status === "保留"
-                    ? [...sortedCards].sort((a, b) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const aOver =
-                          a.dueDate !== null && a.dueDate < today.getTime();
-                        const bOver =
-                          b.dueDate !== null && b.dueDate < today.getTime();
-                        if (aOver !== bOver) return aOver ? -1 : 1;
-                        if (a.dueDate !== null && b.dueDate !== null)
-                          return a.dueDate - b.dueDate;
-                        if (a.dueDate !== null) return -1;
-                        if (b.dueDate !== null) return 1;
-                        return 0;
+        {isCancelledSearch ? (
+          <section
+            aria-label="キャンセル済みの顧客"
+            className="mx-auto max-w-4xl"
+          >
+            <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+              <h2 className="text-sm font-semibold text-slate-700">
+                キャンセル済み
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                {visibleCustomers.length}件
+              </span>
+            </div>
+            <div className="flex flex-col gap-3">
+              {visibleCustomers.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-400">
+                  該当するキャンセル済みの顧客はいません。
+                </p>
+              ) : (
+                visibleCustomers.map(c => (
+                  <CustomerCard
+                    key={c.id}
+                    c={c}
+                    attachments={attachmentsByCustomer[c.id] ?? []}
+                    isUploadingPhotos={uploadingPhotoIds.has(c.id)}
+                    onUpdate={updateCustomer}
+                    onDelete={handleDelete}
+                    onLinkChange={handleLinkChange}
+                    onDueDateChange={handleDueDateChange}
+                    onCalledToggle={handleCalledToggle}
+                    onAddPhotos={handleAddPhotos}
+                    onDeletePhoto={handleDeletePhoto}
+                    onShare={handleShare}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
+            <div
+              className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:hidden"} mb-4 rounded-xl border border-rose-200 bg-white p-2.5 shadow-sm`}
+            >
+              <button
+                type="button"
+                onClick={() => handleAddToColumn("これから", true)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:ring-offset-2 active:bg-rose-700"
+              >
+                <Plus className="h-4 w-4" />
+                新規顧客を追加
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+                  これから
+                </span>
+              </button>
+            </div>
+            <div
+              className={`grid grid-cols-1 gap-4 ${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:grid-cols-3"}`}
+            >
+              {KANBAN_COLUMNS.map(col => {
+                // 「不通・未対応」列は「これから」ステータスも含める
+                const colCards =
+                  col.status === "不通・未対応"
+                    ? visibleCustomers.filter(
+                        c =>
+                          c.status === "これから" || c.status === "不通・未対応"
+                      )
+                    : visibleCustomers.filter(c => c.status === col.status);
+                // 「これから」を上部に、「不通・未対応」を下部に表示
+                const sortedCards =
+                  col.status === "不通・未対応"
+                    ? [...colCards].sort((a, b) => {
+                        const aStatusRank = a.status === "これから" ? 0 : 1;
+                        const bStatusRank = b.status === "これから" ? 0 : 1;
+                        if (aStatusRank !== bStatusRank)
+                          return aStatusRank - bStatusRank;
+                        const aCallRank =
+                          a.callCount >= 2 ? 0 : a.callCount === 1 ? 1 : 2;
+                        const bCallRank =
+                          b.callCount >= 2 ? 0 : b.callCount === 1 ? 1 : 2;
+                        return aCallRank - bCallRank;
                       })
-                    : sortedCards
-                  ).map(c => (
-                    <CustomerCard
-                      key={c.id}
-                      c={c}
-                      attachments={attachmentsByCustomer[c.id] ?? []}
-                      isUploadingPhotos={uploadingPhotoIds.has(c.id)}
-                      onUpdate={updateCustomer}
-                      onDelete={handleDelete}
-                      onLinkChange={handleLinkChange}
-                      onDueDateChange={handleDueDateChange}
-                      onCalledToggle={handleCalledToggle}
-                      onAddPhotos={handleAddPhotos}
-                      onDeletePhoto={handleDeletePhoto}
-                      onShare={handleShare}
-                    />
-                  ))}
-                </div>
+                    : colCards;
+                return (
+                  <div key={col.status} className="flex flex-col gap-3">
+                    {/* 列ヘッダー */}
+                    <div
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg border ${col.headerClass}`}
+                    >
+                      <span className="text-sm font-semibold text-gray-700">
+                        {col.label}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${col.badgeClass}`}
+                      >
+                        {sortedCards.length}件
+                      </span>
+                    </div>
 
-                {/* 列ごとの追加ボタン */}
-                <button
-                  onClick={() => handleAddToColumn(col.status)}
-                  className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "hidden" : "hidden md:flex"} items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border-2 border-dashed transition-colors ${col.addBtnClass} border-current`}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  追加
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                    {/* カード一覧 */}
+                    <div className="flex flex-col gap-3 min-h-[80px]">
+                      {sortedCards.length === 0 && (
+                        <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
+                          案件なし
+                        </div>
+                      )}
+                      {(col.status === "保留"
+                        ? [...sortedCards].sort((a, b) => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const aOver =
+                              a.dueDate !== null && a.dueDate < today.getTime();
+                            const bOver =
+                              b.dueDate !== null && b.dueDate < today.getTime();
+                            if (aOver !== bOver) return aOver ? -1 : 1;
+                            if (a.dueDate !== null && b.dueDate !== null)
+                              return a.dueDate - b.dueDate;
+                            if (a.dueDate !== null) return -1;
+                            if (b.dueDate !== null) return 1;
+                            return 0;
+                          })
+                        : sortedCards
+                      ).map(c => (
+                        <CustomerCard
+                          key={c.id}
+                          c={c}
+                          attachments={attachmentsByCustomer[c.id] ?? []}
+                          isUploadingPhotos={uploadingPhotoIds.has(c.id)}
+                          onUpdate={updateCustomer}
+                          onDelete={handleDelete}
+                          onLinkChange={handleLinkChange}
+                          onDueDateChange={handleDueDateChange}
+                          onCalledToggle={handleCalledToggle}
+                          onAddPhotos={handleAddPhotos}
+                          onDeletePhoto={handleDeletePhoto}
+                          onShare={handleShare}
+                        />
+                      ))}
+                    </div>
+
+                    {/* 列ごとの追加ボタン */}
+                    <button
+                      onClick={() => handleAddToColumn(col.status)}
+                      className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "hidden" : "hidden md:flex"} items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border-2 border-dashed transition-colors ${col.addBtnClass} border-current`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      追加
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
