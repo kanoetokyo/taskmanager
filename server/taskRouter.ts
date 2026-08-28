@@ -2,6 +2,7 @@ import { asc as sortAsc, and, eq, gte, isNull, lte, ne, sql } from "drizzle-orm"
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { ATINN_HANDOVER_CATEGORIES } from "@shared/const";
 import {
   auditLogs,
   atinnHandoverIssues,
@@ -1018,6 +1019,7 @@ const customerHandoverRouter = router({
 
 const atinnIssueInput = z.object({
   id: z.string().min(1).max(64),
+  category: z.union([z.literal(""), z.enum(ATINN_HANDOVER_CATEGORIES)]),
   title: z.string().max(255),
   content: z.string().max(2048),
   beforeImageUrl: z.string().url().max(2048).nullable(),
@@ -1088,6 +1090,7 @@ const atinnHandoverRouter = router({
           .insert(atinnHandoverIssues)
           .values({
             id: input.id,
+            category: input.category,
             title: input.title,
             content: input.content,
             beforeImageUrl: input.beforeImageUrl,
@@ -1107,6 +1110,7 @@ const atinnHandoverRouter = router({
       const [updated] = await tx
         .update(atinnHandoverIssues)
         .set({
+          category: input.category,
           title: input.title,
           content: input.content,
           beforeImageUrl: input.beforeImageUrl,
