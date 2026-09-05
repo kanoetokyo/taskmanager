@@ -20,6 +20,12 @@ export interface FilterableCustomerHandover {
   links: string[];
 }
 
+export function getSharedCustomerStatusFilter(
+  status: CustomerHandoverStatus
+): CustomerHandoverStatusFilter {
+  return status === "キャンセル" || status === "完了" ? status : "all";
+}
+
 function matchesSearch(record: FilterableCustomerHandover, query: string) {
   const normalizedQuery = query.trim().toLocaleLowerCase("ja-JP");
   if (!normalizedQuery) return true;

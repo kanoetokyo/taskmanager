@@ -42,6 +42,7 @@ import { buildCustomerHandoverShare } from "@shared/customerHandoverShare";
 import {
   CUSTOMER_HANDOVER_STATUSES,
   filterCustomerHandovers,
+  getSharedCustomerStatusFilter,
   type CustomerHandoverStatus,
   type CustomerHandoverStatusFilter,
 } from "./customerHandoverFilters";
@@ -987,8 +988,18 @@ export default function CustomerHandover() {
 
   useEffect(() => {
     const customerId = sharedCustomerIdRef.current;
-    if (!customerId || !customers.some(customer => customer.id === customerId))
+    if (!customerId) return;
+    const sharedCustomer = customers.find(customer => customer.id === customerId);
+    if (!sharedCustomer) return;
+
+    const sharedStatusFilter = getSharedCustomerStatusFilter(
+      sharedCustomer.status
+    );
+    if (statusFilter !== sharedStatusFilter) {
+      setStatusFilter(sharedStatusFilter);
       return;
+    }
+
     const element = document.getElementById(`customer-card-${customerId}`);
     if (!element) return;
     sharedCustomerIdRef.current = null;
@@ -998,7 +1009,7 @@ export default function CustomerHandover() {
       element.classList.remove("ring-2", "ring-rose-400", "ring-offset-2");
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [customers]);
+  }, [customers, statusFilter]);
 
   useEffect(
     () => () => {

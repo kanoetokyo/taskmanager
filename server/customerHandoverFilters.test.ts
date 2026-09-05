@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { filterCustomerHandovers } from "../client/src/pages/customerHandoverFilters";
+import {
+  filterCustomerHandovers,
+  getSharedCustomerStatusFilter,
+} from "../client/src/pages/customerHandoverFilters";
 
 const customers = [
   {
@@ -54,5 +57,11 @@ describe("filterCustomerHandovers", () => {
       customers[2],
     ]);
     expect(filterCustomerHandovers(customers, "鈴木", "all")).toEqual([]);
+  });
+
+  it("共有リンクでは完了またはキャンセルを表示する絞り込みを選ぶ", () => {
+    expect(getSharedCustomerStatusFilter("完了")).toBe("完了");
+    expect(getSharedCustomerStatusFilter("キャンセル")).toBe("キャンセル");
+    expect(getSharedCustomerStatusFilter("保留")).toBe("all");
   });
 });
