@@ -3,6 +3,7 @@ import {
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
   sortArchivedCustomerHandovers,
+  sortCustomerHandoverColumn,
 } from "../client/src/pages/customerHandoverFilters";
 
 const customers = [
@@ -92,5 +93,63 @@ describe("filterCustomerHandovers", () => {
         customer => customer.id
       )
     ).toEqual(["older", "newer"]);
+  });
+
+  it("不通・未対応は電話回数の優先順を保ち、同じグループを新しい登録順にする", () => {
+    const customers = [
+      {
+        id: "unanswered-old",
+        status: "不通・未対応" as const,
+        callCount: 0,
+        createdAt: "2026-09-01T09:00:00+09:00",
+      },
+      {
+        id: "final-new",
+        status: "不通・未対応" as const,
+        callCount: 2,
+        createdAt: "2026-09-04T09:00:00+09:00",
+      },
+      {
+        id: "final-old",
+        status: "不通・未対応" as const,
+        callCount: 2,
+        createdAt: "2026-09-02T09:00:00+09:00",
+      },
+      {
+        id: "first-call",
+        status: "不通・未対応" as const,
+        callCount: 1,
+        createdAt: "2026-09-03T09:00:00+09:00",
+      },
+    ];
+
+    expect(
+      sortCustomerHandoverColumn(customers, "不通・未対応").map(
+        customer => customer.id
+      )
+    ).toEqual(["final-new", "final-old", "first-call", "unanswered-old"]);
+  });
+
+  it("調整中・仮予約中は登録日の新しい順にする", () => {
+    const customers = [
+      {
+        id: "older",
+        status: "調整中・仮予約中" as const,
+        callCount: 0,
+        createdAt: "2026-09-01T09:00:00+09:00",
+      },
+      {
+        id: "newer",
+        status: "調整中・仮予約中" as const,
+        callCount: 0,
+        createdAt: "2026-09-02T09:00:00+09:00",
+      },
+    ];
+
+    expect(
+      sortCustomerHandoverColumn(customers, "調整中・仮予約中").map(
+        customer => customer.id
+      )
+    ).toEqual(["newer", "older"]);
   });
 });

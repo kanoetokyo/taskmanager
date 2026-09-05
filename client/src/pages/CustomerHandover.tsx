@@ -44,6 +44,7 @@ import {
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
   sortArchivedCustomerHandovers,
+  sortCustomerHandoverColumn,
   type ArchivedHandoverSortOrder,
   type CustomerHandoverStatus,
   type CustomerHandoverStatusFilter,
@@ -172,6 +173,7 @@ interface CustomerRecord {
   callCount: number;
   completedAt: Date | string | null;
   cancelledAt: Date | string | null;
+  createdAt: Date | string | null;
   updatedAt: Date | string | null;
   revision?: number;
 }
@@ -209,6 +211,7 @@ const DESIGN_QA_CUSTOMERS: CustomerRecord[] = [
     callCount: 2,
     completedAt: null,
     cancelledAt: null,
+    createdAt: "2026-07-29T13:40:00+09:00",
     updatedAt: null,
     revision: 1,
   },
@@ -224,6 +227,7 @@ const DESIGN_QA_CUSTOMERS: CustomerRecord[] = [
     callCount: 1,
     completedAt: null,
     cancelledAt: null,
+    createdAt: "2026-07-29T13:40:00+09:00",
     updatedAt: null,
     revision: 1,
   },
@@ -258,6 +262,7 @@ function newCustomerRecord(
     callCount: 0,
     completedAt: null,
     cancelledAt: null,
+    createdAt: new Date(),
     updatedAt: null,
     revision: undefined,
   };
@@ -275,6 +280,7 @@ function toCustomerRecord(c: {
   callCount: number;
   completedAt: Date | string | null;
   cancelledAt: Date | string | null;
+  createdAt: Date | string | null;
   updatedAt: Date | string | null;
   revision: number;
 }): CustomerRecord {
@@ -292,6 +298,7 @@ function toCustomerRecord(c: {
     callCount: c.callCount ?? 0,
     completedAt: c.completedAt ?? null,
     cancelledAt: c.cancelledAt ?? null,
+    createdAt: c.createdAt ?? null,
     updatedAt: c.updatedAt ?? null,
     revision: c.revision,
   };
@@ -1726,20 +1733,12 @@ export default function CustomerHandover() {
                           c.status === "これから" || c.status === "不通・未対応"
                       )
                     : visibleCustomers.filter(c => c.status === col.status);
-                // 「これから」を上部に、「不通・未対応」を下部に表示
+                // 「これから」を上部にし、電話回数の優先順を保ったまま
+                // 同じグループ内では登録日の新しい順に表示する。
                 const sortedCards =
-                  col.status === "不通・未対応"
-                    ? [...colCards].sort((a, b) => {
-                        const aStatusRank = a.status === "これから" ? 0 : 1;
-                        const bStatusRank = b.status === "これから" ? 0 : 1;
-                        if (aStatusRank !== bStatusRank)
-                          return aStatusRank - bStatusRank;
-                        const aCallRank =
-                          a.callCount >= 2 ? 0 : a.callCount === 1 ? 1 : 2;
-                        const bCallRank =
-                          b.callCount >= 2 ? 0 : b.callCount === 1 ? 1 : 2;
-                        return aCallRank - bCallRank;
-                      })
+                  col.status === "不通・未対応" ||
+                  col.status === "調整中・仮予約中"
+                    ? sortCustomerHandoverColumn(colCards, col.status)
                     : colCards;
                 return (
                   <div key={col.status} className="flex flex-col gap-3">

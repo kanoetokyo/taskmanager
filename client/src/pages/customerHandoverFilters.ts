@@ -27,6 +27,12 @@ export interface SortableArchivedCustomerHandover {
   updatedAt: Date | string | null;
 }
 
+export interface SortableKanbanCustomerHandover {
+  status: CustomerHandoverStatus;
+  callCount: number;
+  createdAt: Date | string | null;
+}
+
 export function getSharedCustomerStatusFilter(
   status: CustomerHandoverStatus
 ): CustomerHandoverStatusFilter {
@@ -68,6 +74,36 @@ function toTimestamp(value: Date | string | null): number {
   if (!value) return 0;
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function newestFirst<T extends { createdAt: Date | string | null }>(
+  left: T,
+  right: T
+) {
+  return toTimestamp(right.createdAt) - toTimestamp(left.createdAt);
+}
+
+export function sortCustomerHandoverColumn<
+  T extends SortableKanbanCustomerHandover,
+>(
+  customers: T[],
+  columnStatus: "不通・未対応" | "調整中・仮予約中"
+): T[] {
+  if (columnStatus === "調整中・仮予約中") {
+    return [...customers].sort(newestFirst);
+  }
+
+  return [...customers].sort((left, right) => {
+    const leftIsUpcoming = left.status === "これから";
+    const rightIsUpcoming = right.status === "これから";
+    if (leftIsUpcoming !== rightIsUpcoming) return leftIsUpcoming ? -1 : 1;
+    if (leftIsUpcoming) return newestFirst(left, right);
+
+    const callRank = (callCount: number) =>
+      callCount >= 2 ? 0 : callCount === 1 ? 1 : 2;
+    const difference = callRank(left.callCount) - callRank(right.callCount);
+    return difference || newestFirst(left, right);
+  });
 }
 
 export function sortArchivedCustomerHandovers<
