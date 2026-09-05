@@ -1501,7 +1501,14 @@ export default function CustomerHandover() {
     searchQuery,
     statusFilter
   );
-  const isCancelledSearch = statusFilter === "キャンセル";
+  const isArchivedSearch =
+    statusFilter === "キャンセル" || statusFilter === "完了";
+  const archivedSearchLabel =
+    statusFilter === "完了" ? "完了済み" : "キャンセル済み";
+  const archivedSearchTone =
+    statusFilter === "完了"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : "border-slate-200 bg-slate-100 text-slate-600";
   const totalCount = customers.filter(
     c => c.status !== "完了" && c.status !== "キャンセル"
   ).length;
@@ -1582,36 +1589,36 @@ export default function CustomerHandover() {
             aria-label="ステータスで絞り込み"
           >
             <option value="all">すべてのステータス</option>
-            {CUSTOMER_STATUSES_ALL.filter(status => status !== "完了").map(
-              status => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              )
-            )}
+            {CUSTOMER_STATUSES_ALL.map(status => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
           </select>
           <span className="text-xs text-gray-400 sm:whitespace-nowrap">
             {visibleCustomers.length}件
           </span>
         </div>
 
-        {isCancelledSearch ? (
+        {isArchivedSearch ? (
           <section
-            aria-label="キャンセル済みの顧客"
+            aria-label={`${archivedSearchLabel}の顧客`}
             className="w-full max-w-[30rem]"
           >
-            <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
-              <h2 className="text-sm font-semibold text-slate-700">
-                キャンセル済み
+            <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-2">
+              <h2 className="text-sm font-semibold text-gray-700">
+                {archivedSearchLabel}
               </h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              <span
+                className={`rounded-full border px-2 py-0.5 text-xs font-medium ${archivedSearchTone}`}
+              >
                 {visibleCustomers.length}件
               </span>
             </div>
             <div className="flex flex-col gap-3">
               {visibleCustomers.length === 0 ? (
                 <p className="py-8 text-center text-sm text-gray-400">
-                  該当するキャンセル済みの顧客はいません。
+                  該当する{archivedSearchLabel}の顧客はいません。
                 </p>
               ) : (
                 visibleCustomers.map(c => (

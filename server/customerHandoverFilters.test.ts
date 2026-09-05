@@ -18,13 +18,19 @@ const customers = [
     assignee: "新井なお",
     links: ["https://example.com/tanaka"],
   },
+  {
+    status: "完了" as const,
+    name: "鈴木様",
+    memo: "作業完了",
+    contact: "電話",
+    assignee: "中尾",
+    links: [],
+  },
 ];
 
 describe("filterCustomerHandovers", () => {
   it("通常の一覧からキャンセル済みを除外する", () => {
-    expect(filterCustomerHandovers(customers, "", "all")).toEqual([
-      customers[0],
-    ]);
+    expect(filterCustomerHandovers(customers, "", "all")).toEqual([customers[0]]);
   });
 
   it("キャンセルを選んだ時だけキャンセル済みを検索できる", () => {
@@ -41,5 +47,12 @@ describe("filterCustomerHandovers", () => {
     expect(
       filterCustomerHandovers(customers, "example.com", "キャンセル")
     ).toEqual([customers[1]]);
+  });
+
+  it("完了を選んだ時だけ完了済みを検索できる", () => {
+    expect(filterCustomerHandovers(customers, "鈴木", "完了")).toEqual([
+      customers[2],
+    ]);
+    expect(filterCustomerHandovers(customers, "鈴木", "all")).toEqual([]);
   });
 });

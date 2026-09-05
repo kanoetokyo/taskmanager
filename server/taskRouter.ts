@@ -727,12 +727,7 @@ const customerHandoverRouter = router({
     return db
       .select()
       .from(customerHandovers)
-      .where(
-        and(
-          isNull(customerHandovers.deletedAt),
-          ne(customerHandovers.status, "完了")
-        )
-      );
+      .where(isNull(customerHandovers.deletedAt));
   }),
 
   upsert: appProcedure.input(customerInput).mutation(async ({ ctx, input }) => {
@@ -1205,10 +1200,7 @@ const customerHandoverAttachmentRouter = router({
         eq(customerHandoverAttachments.customerHandoverId, customerHandovers.id)
       )
       .where(
-        and(
-          isNull(customerHandovers.deletedAt),
-          ne(customerHandovers.status, "完了")
-        )
+        isNull(customerHandovers.deletedAt)
       )
       .orderBy(
         sortAsc(customerHandoverAttachments.customerHandoverId),

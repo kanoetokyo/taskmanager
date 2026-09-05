@@ -39,11 +39,12 @@ export function filterCustomerHandovers<T extends FilterableCustomerHandover>(
   statusFilter: CustomerHandoverStatusFilter
 ): T[] {
   return customers.filter(customer => {
-    if (statusFilter === "キャンセル") {
-      return customer.status === "キャンセル" && matchesSearch(customer, query);
+    if (statusFilter === "キャンセル" || statusFilter === "完了") {
+      return customer.status === statusFilter && matchesSearch(customer, query);
     }
 
-    if (customer.status === "キャンセル") return false;
+    if (customer.status === "キャンセル" || customer.status === "完了")
+      return false;
     if (statusFilter !== "all" && customer.status !== statusFilter)
       return false;
     return matchesSearch(customer, query);
