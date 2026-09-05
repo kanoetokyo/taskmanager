@@ -753,6 +753,7 @@ const customerHandoverRouter = router({
             dueDate,
             callCount,
             completedAt: input.status === "完了" ? now : null,
+            cancelledAt: input.status === "キャンセル" ? now : null,
             updatedBy: actor.actorId,
             revision: 1,
           })
@@ -762,7 +763,11 @@ const customerHandoverRouter = router({
           actor,
           "customer_handover",
           input.id,
-          input.status === "完了" ? "complete" : "create",
+          input.status === "完了"
+            ? "complete"
+            : input.status === "キャンセル"
+              ? "cancel"
+              : "create",
           null,
           created
         );
@@ -785,6 +790,8 @@ const customerHandoverRouter = router({
           callCount,
           completedAt:
             input.status === "完了" ? (previous.completedAt ?? now) : null,
+          cancelledAt:
+            input.status === "キャンセル" ? (previous.cancelledAt ?? now) : null,
           updatedBy: actor.actorId,
           revision: previous.revision + 1,
         })
@@ -801,7 +808,11 @@ const customerHandoverRouter = router({
         actor,
         "customer_handover",
         input.id,
-        input.status === "完了" ? "complete" : "update",
+        input.status === "完了"
+          ? "complete"
+          : input.status === "キャンセル"
+            ? "cancel"
+            : "update",
         previous,
         updated
       );
@@ -845,6 +856,10 @@ const customerHandoverRouter = router({
           updates.completedAt = new Date();
         if (updates.status !== undefined && updates.status !== "完了")
           updates.completedAt = null;
+        if (updates.status === "キャンセル" && !previous.cancelledAt)
+          updates.cancelledAt = new Date();
+        if (updates.status !== undefined && updates.status !== "キャンセル")
+          updates.cancelledAt = null;
         updates.updatedBy = actor.actorId;
         updates.revision = previous.revision + 1;
         const [updated] = await tx
@@ -863,7 +878,11 @@ const customerHandoverRouter = router({
           actor,
           "customer_handover",
           input.id,
-          updates.status === "完了" ? "complete" : "update",
+          updates.status === "完了"
+            ? "complete"
+            : updates.status === "キャンセル"
+              ? "cancel"
+              : "update",
           previous,
           updated
         );
@@ -945,6 +964,8 @@ const customerHandoverRouter = router({
             deletedAt: null,
             status,
             completedAt: status === "完了" ? previous.completedAt : null,
+            cancelledAt:
+              status === "キャンセル" ? previous.cancelledAt : null,
             updatedBy: actor.actorId,
             revision: previous.revision + 1,
           })

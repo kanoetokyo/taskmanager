@@ -10,6 +10,7 @@ export const CUSTOMER_HANDOVER_STATUSES = [
 export type CustomerHandoverStatus =
   (typeof CUSTOMER_HANDOVER_STATUSES)[number];
 export type CustomerHandoverStatusFilter = "all" | CustomerHandoverStatus;
+export type ArchivedHandoverSortOrder = "newest" | "oldest";
 
 export interface FilterableCustomerHandover {
   status: CustomerHandoverStatus;
@@ -18,6 +19,12 @@ export interface FilterableCustomerHandover {
   contact: string;
   assignee: string;
   links: string[];
+}
+
+export interface SortableArchivedCustomerHandover {
+  completedAt: Date | string | null;
+  cancelledAt: Date | string | null;
+  updatedAt: Date | string | null;
 }
 
 export function getSharedCustomerStatusFilter(
@@ -54,5 +61,30 @@ export function filterCustomerHandovers<T extends FilterableCustomerHandover>(
     if (statusFilter !== "all" && customer.status !== statusFilter)
       return false;
     return matchesSearch(customer, query);
+  });
+}
+
+function toTimestamp(value: Date | string | null): number {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+export function sortArchivedCustomerHandovers<
+  T extends SortableArchivedCustomerHandover,
+>(
+  customers: T[],
+  status: "キャンセル" | "完了",
+  order: ArchivedHandoverSortOrder
+): T[] {
+  const getArchivedTimestamp = (customer: T) => {
+    const archivedAt =
+      status === "完了" ? customer.completedAt : customer.cancelledAt;
+    return toTimestamp(archivedAt) || toTimestamp(customer.updatedAt);
+  };
+
+  return [...customers].sort((left, right) => {
+    const difference = getArchivedTimestamp(left) - getArchivedTimestamp(right);
+    return order === "newest" ? -difference : difference;
   });
 }

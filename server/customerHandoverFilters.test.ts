@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
+  sortArchivedCustomerHandovers,
 } from "../client/src/pages/customerHandoverFilters";
 
 const customers = [
@@ -63,5 +64,33 @@ describe("filterCustomerHandovers", () => {
     expect(getSharedCustomerStatusFilter("完了")).toBe("完了");
     expect(getSharedCustomerStatusFilter("キャンセル")).toBe("キャンセル");
     expect(getSharedCustomerStatusFilter("保留")).toBe("all");
+  });
+
+  it("完了・キャンセルの日時で新旧順に並び替える", () => {
+    const archivedCustomers = [
+      {
+        id: "older",
+        completedAt: "2026-09-01T09:00:00+09:00",
+        cancelledAt: "2026-09-02T09:00:00+09:00",
+        updatedAt: "2026-09-02T09:00:00+09:00",
+      },
+      {
+        id: "newer",
+        completedAt: "2026-09-03T09:00:00+09:00",
+        cancelledAt: "2026-09-04T09:00:00+09:00",
+        updatedAt: "2026-09-04T09:00:00+09:00",
+      },
+    ];
+
+    expect(
+      sortArchivedCustomerHandovers(archivedCustomers, "完了", "newest").map(
+        customer => customer.id
+      )
+    ).toEqual(["newer", "older"]);
+    expect(
+      sortArchivedCustomerHandovers(archivedCustomers, "キャンセル", "oldest").map(
+        customer => customer.id
+      )
+    ).toEqual(["older", "newer"]);
   });
 });

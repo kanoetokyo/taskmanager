@@ -43,6 +43,8 @@ import {
   CUSTOMER_HANDOVER_STATUSES,
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
+  sortArchivedCustomerHandovers,
+  type ArchivedHandoverSortOrder,
   type CustomerHandoverStatus,
   type CustomerHandoverStatusFilter,
 } from "./customerHandoverFilters";
@@ -168,6 +170,9 @@ interface CustomerRecord {
   links: string[];
   dueDate: number | null;
   callCount: number;
+  completedAt: Date | string | null;
+  cancelledAt: Date | string | null;
+  updatedAt: Date | string | null;
   revision?: number;
 }
 
@@ -202,6 +207,9 @@ const DESIGN_QA_CUSTOMERS: CustomerRecord[] = [
     links: [],
     dueDate: null,
     callCount: 2,
+    completedAt: null,
+    cancelledAt: null,
+    updatedAt: null,
     revision: 1,
   },
   {
@@ -214,6 +222,9 @@ const DESIGN_QA_CUSTOMERS: CustomerRecord[] = [
     links: [],
     dueDate: null,
     callCount: 1,
+    completedAt: null,
+    cancelledAt: null,
+    updatedAt: null,
     revision: 1,
   },
 ];
@@ -245,6 +256,9 @@ function newCustomerRecord(
     links: [],
     dueDate: null,
     callCount: 0,
+    completedAt: null,
+    cancelledAt: null,
+    updatedAt: null,
     revision: undefined,
   };
 }
@@ -259,6 +273,9 @@ function toCustomerRecord(c: {
   links: unknown;
   dueDate: number | null;
   callCount: number;
+  completedAt: Date | string | null;
+  cancelledAt: Date | string | null;
+  updatedAt: Date | string | null;
   revision: number;
 }): CustomerRecord {
   return {
@@ -273,6 +290,9 @@ function toCustomerRecord(c: {
       : [],
     dueDate: c.dueDate ?? null,
     callCount: c.callCount ?? 0,
+    completedAt: c.completedAt ?? null,
+    cancelledAt: c.cancelledAt ?? null,
+    updatedAt: c.updatedAt ?? null,
     revision: c.revision,
   };
 }
@@ -846,6 +866,8 @@ export default function CustomerHandover() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<CustomerHandoverStatusFilter>("all");
+  const [archivedSortOrder, setArchivedSortOrder] =
+    useState<ArchivedHandoverSortOrder>("newest");
   const [uploadingPhotoIds, setUploadingPhotoIds] = useState<Set<string>>(
     new Set()
   );
@@ -1520,6 +1542,15 @@ export default function CustomerHandover() {
     statusFilter === "完了"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : "border-slate-200 bg-slate-100 text-slate-600";
+  const archivedSortLabel =
+    statusFilter === "完了" ? "完了にした日" : "キャンセルにした日";
+  const sortedArchivedCustomers = isArchivedSearch
+    ? sortArchivedCustomerHandovers(
+        visibleCustomers,
+        statusFilter,
+        archivedSortOrder
+      )
+    : visibleCustomers;
   const totalCount = customers.filter(
     c => c.status !== "完了" && c.status !== "キャンセル"
   ).length;
@@ -1626,13 +1657,28 @@ export default function CustomerHandover() {
                 {visibleCustomers.length}件
               </span>
             </div>
+            <div className="mb-3 flex justify-end">
+              <select
+                value={archivedSortOrder}
+                onChange={event =>
+                  setArchivedSortOrder(
+                    event.target.value as ArchivedHandoverSortOrder
+                  )
+                }
+                className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 outline-none transition-colors focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                aria-label="表示順"
+              >
+                <option value="newest">{archivedSortLabel}：新しい順</option>
+                <option value="oldest">{archivedSortLabel}：古い順</option>
+              </select>
+            </div>
             <div className="flex flex-col gap-3">
               {visibleCustomers.length === 0 ? (
                 <p className="py-8 text-center text-sm text-gray-400">
                   該当する{archivedSearchLabel}の顧客はいません。
                 </p>
               ) : (
-                visibleCustomers.map(c => (
+                sortedArchivedCustomers.map(c => (
                   <CustomerCard
                     key={c.id}
                     c={c}

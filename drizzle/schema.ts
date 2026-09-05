@@ -178,6 +178,7 @@ export const customerHandovers = pgTable("customer_handovers", {
   dueDate: bigint("dueDate", { mode: "number" }),
   callCount: integer("callCount").default(0).notNull(),
   completedAt: timestamp("completedAt"),
+  cancelledAt: timestamp("cancelledAt"),
   deletedAt: timestamp("deletedAt"),
   updatedBy: varchar("updatedBy", { length: 64 }).notNull().default(""),
   revision: integer("revision").notNull().default(1),

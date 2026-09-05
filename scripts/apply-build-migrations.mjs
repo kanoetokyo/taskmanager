@@ -3,6 +3,7 @@ import postgres from "postgres";
 
 const BUILD_MIGRATIONS = [
   "drizzle/migrations/0004_customer_handover_attachments.sql",
+  "drizzle/migrations/0005_customer_handover_cancelled_at.sql",
 ];
 
 if (!process.env.VERCEL) {
