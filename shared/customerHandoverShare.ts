@@ -16,10 +16,9 @@ export function buildCustomerHandoverShare(
   return { title, text, url: url.toString() };
 }
 
-export function buildLineShareUrl(url: string, text: string): string {
-  const lineShareUrl = new URL("https://social-plugins.line.me/lineit/share");
-  lineShareUrl.searchParams.set("url", url);
-  lineShareUrl.searchParams.set("text", text);
-
-  return lineShareUrl.toString();
+export function buildCustomerHandoverCopyText(
+  text: string,
+  url: string
+): string {
+  return `${text}\n${url}`;
 }

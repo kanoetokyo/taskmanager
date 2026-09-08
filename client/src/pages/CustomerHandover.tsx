@@ -32,15 +32,15 @@ import {
   ImageIcon,
   LoaderCircle,
   Search,
-  Share2,
+  Copy,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
+  buildCustomerHandoverCopyText,
   buildCustomerHandoverShare,
-  buildLineShareUrl,
 } from "@shared/customerHandoverShare";
 import {
   CUSTOMER_HANDOVER_STATUSES,
@@ -102,6 +102,24 @@ function getTrpcErrorCode(error: unknown): string | undefined {
   if (typeof data !== "object" || data === null) return undefined;
   const code = (data as { code?: unknown }).code;
   return typeof code === "string" ? code : undefined;
+}
+
+async function copyShareText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard copy failed");
 }
 
 // カンバン列定義（3列）
@@ -332,7 +350,7 @@ interface CustomerCardProps {
   onCalledToggle: (id: string, callCount?: number) => void;
   onAddPhotos: (id: string, files: FileList) => void;
   onDeletePhoto: (attachment: CustomerAttachment) => void;
-  onShare: (customer: CustomerRecord, photoCount: number) => void;
+  onCopyForLine: (customer: CustomerRecord, photoCount: number) => void;
 }
 
 function formatAttachmentDate(value: Date | string) {
@@ -347,14 +365,14 @@ function CustomerPhotoSection({
   isUploading,
   onAddPhotos,
   onDeletePhoto,
-  onShare,
+  onCopyForLine,
 }: {
   customer: CustomerRecord;
   attachments: CustomerAttachment[];
   isUploading: boolean;
   onAddPhotos: (id: string, files: FileList) => void;
   onDeletePhoto: (attachment: CustomerAttachment) => void;
-  onShare: (customer: CustomerRecord, photoCount: number) => void;
+  onCopyForLine: (customer: CustomerRecord, photoCount: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState<CustomerAttachment | null>(null);
@@ -431,11 +449,11 @@ function CustomerPhotoSection({
       >
         <button
           type="button"
-          onClick={() => onShare(customer, attachments.length)}
+          onClick={() => onCopyForLine(customer, attachments.length)}
           className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#06C755] bg-white px-3 py-2 text-sm font-semibold text-[#06C755] transition-colors hover:bg-[#06C755]/10 focus:outline-none focus:ring-2 focus:ring-[#06C755]/30"
         >
-          <Share2 className="h-4 w-4" aria-hidden="true" />
-          LINEへ共有
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          LINEへコピー
         </button>
         <button
           type="button"
@@ -490,7 +508,7 @@ const CustomerCard = memo(function CustomerCard({
   onCalledToggle,
   onAddPhotos,
   onDeletePhoto,
-  onShare,
+  onCopyForLine,
 }: CustomerCardProps) {
   const overdue = isOverdue(c);
   const isKorekara = c.status === "これから";
@@ -660,7 +678,7 @@ const CustomerCard = memo(function CustomerCard({
           isUploading={isUploadingPhotos}
           onAddPhotos={onAddPhotos}
           onDeletePhoto={onDeletePhoto}
-          onShare={onShare}
+          onCopyForLine={onCopyForLine}
         />
       </div>
     );
@@ -839,7 +857,7 @@ const CustomerCard = memo(function CustomerCard({
         isUploading={isUploadingPhotos}
         onAddPhotos={onAddPhotos}
         onDeletePhoto={onDeletePhoto}
-        onShare={onShare}
+        onCopyForLine={onCopyForLine}
       />
     </div>
   );
@@ -1409,8 +1427,8 @@ export default function CustomerHandover() {
     [deleteAttachment, refetchAttachments]
   );
 
-  const handleShare = useCallback(
-    (customer: CustomerRecord, photoCount: number) => {
+  const handleCopyForLine = useCallback(
+    async (customer: CustomerRecord, photoCount: number) => {
       const { text, url } = buildCustomerHandoverShare(
         customer.id,
         customer.name,
@@ -1418,14 +1436,12 @@ export default function CustomerHandover() {
         window.location.origin
       );
 
-      const lineShareWindow = window.open(
-        buildLineShareUrl(url, text),
-        "_blank"
-      );
-      if (lineShareWindow) {
-        lineShareWindow.opener = null;
-      } else {
-        toast.error("LINE共有ページを開けませんでした。ポップアップを許可してからお試しください。");
+      try {
+        await copyShareText(buildCustomerHandoverCopyText(text, url));
+        toast.success("LINE送信用の内容をコピーしました。LINEアプリで貼り付けてください。");
+      } catch (error) {
+        console.error("Customer handover copy failed:", error);
+        toast.error("共有内容をコピーできませんでした。もう一度お試しください。");
       }
     },
     []
@@ -1679,7 +1695,7 @@ export default function CustomerHandover() {
                     onCalledToggle={handleCalledToggle}
                     onAddPhotos={handleAddPhotos}
                     onDeletePhoto={handleDeletePhoto}
-                    onShare={handleShare}
+                    onCopyForLine={handleCopyForLine}
                   />
                 ))
               )}
@@ -1773,7 +1789,7 @@ export default function CustomerHandover() {
                           onCalledToggle={handleCalledToggle}
                           onAddPhotos={handleAddPhotos}
                           onDeletePhoto={handleDeletePhoto}
-                          onShare={handleShare}
+                          onCopyForLine={handleCopyForLine}
                         />
                       ))}
                     </div>
