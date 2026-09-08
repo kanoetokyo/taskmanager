@@ -38,7 +38,10 @@ import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { buildCustomerHandoverShare } from "@shared/customerHandoverShare";
+import {
+  buildCustomerHandoverShare,
+  buildLineShareUrl,
+} from "@shared/customerHandoverShare";
 import {
   CUSTOMER_HANDOVER_STATUSES,
   filterCustomerHandovers,
@@ -99,24 +102,6 @@ function getTrpcErrorCode(error: unknown): string | undefined {
   if (typeof data !== "object" || data === null) return undefined;
   const code = (data as { code?: unknown }).code;
   return typeof code === "string" ? code : undefined;
-}
-
-async function copyShareText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("Clipboard copy failed");
 }
 
 // カンバン列定義（3列）
@@ -1425,26 +1410,22 @@ export default function CustomerHandover() {
   );
 
   const handleShare = useCallback(
-    async (customer: CustomerRecord, photoCount: number) => {
-      const { title, text, url } = buildCustomerHandoverShare(
+    (customer: CustomerRecord, photoCount: number) => {
+      const { text, url } = buildCustomerHandoverShare(
         customer.id,
         customer.name,
         photoCount,
         window.location.origin
       );
 
-      try {
-        if (navigator.share) {
-          await navigator.share({ title, text, url });
-          return;
-        }
-        await copyShareText(`${text}\n${url}`);
-        toast.success("案件URLをコピーしました。LINEに貼り付けてください。");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError")
-          return;
-        console.error("Customer share failed:", error);
-        toast.error("共有画面を開けませんでした。もう一度お試しください。");
+      const lineShareWindow = window.open(
+        buildLineShareUrl(url, text),
+        "_blank"
+      );
+      if (lineShareWindow) {
+        lineShareWindow.opener = null;
+      } else {
+        toast.error("LINE共有ページを開けませんでした。ポップアップを許可してからお試しください。");
       }
     },
     []

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCustomerHandoverShare } from "../shared/customerHandoverShare";
+import {
+  buildCustomerHandoverShare,
+  buildLineShareUrl,
+} from "../shared/customerHandoverShare";
 
 describe("customer handover share text", () => {
   it("includes the customer name and URL for cards without photos", () => {
@@ -19,5 +22,21 @@ describe("customer handover share text", () => {
       title: "佐藤様の案件",
       text: "佐藤様の案件（写真3枚）",
     });
+  });
+
+  it("creates an official LINE web share URL with the card link and text", () => {
+    const lineShareUrl = new URL(
+      buildLineShareUrl(
+        "https://example.com/customers?customer=customer-2",
+        "佐藤様の案件（写真3枚）"
+      )
+    );
+
+    expect(lineShareUrl.origin).toBe("https://social-plugins.line.me");
+    expect(lineShareUrl.pathname).toBe("/lineit/share");
+    expect(lineShareUrl.searchParams.get("url")).toBe(
+      "https://example.com/customers?customer=customer-2"
+    );
+    expect(lineShareUrl.searchParams.get("text")).toBe("佐藤様の案件（写真3枚）");
   });
 });
