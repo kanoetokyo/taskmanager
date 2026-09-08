@@ -22,3 +22,13 @@ export function buildCustomerHandoverCopyText(
 ): string {
   return `${text}\n${url}`;
 }
+
+export function isMobileLineShareDevice(
+  userAgent: string,
+  maxTouchPoints: number
+): boolean {
+  return (
+    /Android|iPhone|iPad|iPod/i.test(userAgent) ||
+    (userAgent.includes("Macintosh") && maxTouchPoints > 1)
+  );
+}

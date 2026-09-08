@@ -32,15 +32,22 @@ import {
   ImageIcon,
   LoaderCircle,
   Search,
+  Share2,
   Copy,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
 import { MAX_CUSTOMER_PHOTOS, prepareCustomerPhoto } from "@/lib/customerPhoto";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   buildCustomerHandoverCopyText,
   buildCustomerHandoverShare,
+  isMobileLineShareDevice,
 } from "@shared/customerHandoverShare";
 import {
   CUSTOMER_HANDOVER_STATUSES,
@@ -95,6 +102,7 @@ const CONTACT_OPTIONS = [
 
 const CUSTOMER_STATUSES_ALL = CUSTOMER_HANDOVER_STATUSES;
 type CustomerStatus = CustomerHandoverStatus;
+type CustomerShareContent = ReturnType<typeof buildCustomerHandoverShare>;
 
 function getTrpcErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
@@ -350,7 +358,7 @@ interface CustomerCardProps {
   onCalledToggle: (id: string, callCount?: number) => void;
   onAddPhotos: (id: string, files: FileList) => void;
   onDeletePhoto: (attachment: CustomerAttachment) => void;
-  onCopyForLine: (customer: CustomerRecord, photoCount: number) => void;
+  onShare: (customer: CustomerRecord, photoCount: number) => void;
 }
 
 function formatAttachmentDate(value: Date | string) {
@@ -365,14 +373,14 @@ function CustomerPhotoSection({
   isUploading,
   onAddPhotos,
   onDeletePhoto,
-  onCopyForLine,
+  onShare,
 }: {
   customer: CustomerRecord;
   attachments: CustomerAttachment[];
   isUploading: boolean;
   onAddPhotos: (id: string, files: FileList) => void;
   onDeletePhoto: (attachment: CustomerAttachment) => void;
-  onCopyForLine: (customer: CustomerRecord, photoCount: number) => void;
+  onShare: (customer: CustomerRecord, photoCount: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState<CustomerAttachment | null>(null);
@@ -449,11 +457,11 @@ function CustomerPhotoSection({
       >
         <button
           type="button"
-          onClick={() => onCopyForLine(customer, attachments.length)}
+          onClick={() => onShare(customer, attachments.length)}
           className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#06C755] bg-white px-3 py-2 text-sm font-semibold text-[#06C755] transition-colors hover:bg-[#06C755]/10 focus:outline-none focus:ring-2 focus:ring-[#06C755]/30"
         >
-          <Copy className="h-4 w-4" aria-hidden="true" />
-          LINEへコピー
+          <Share2 className="h-4 w-4" aria-hidden="true" />
+          LINEへ共有
         </button>
         <button
           type="button"
@@ -508,7 +516,7 @@ const CustomerCard = memo(function CustomerCard({
   onCalledToggle,
   onAddPhotos,
   onDeletePhoto,
-  onCopyForLine,
+  onShare,
 }: CustomerCardProps) {
   const overdue = isOverdue(c);
   const isKorekara = c.status === "これから";
@@ -678,7 +686,7 @@ const CustomerCard = memo(function CustomerCard({
           isUploading={isUploadingPhotos}
           onAddPhotos={onAddPhotos}
           onDeletePhoto={onDeletePhoto}
-          onCopyForLine={onCopyForLine}
+          onShare={onShare}
         />
       </div>
     );
@@ -857,7 +865,7 @@ const CustomerCard = memo(function CustomerCard({
         isUploading={isUploadingPhotos}
         onAddPhotos={onAddPhotos}
         onDeletePhoto={onDeletePhoto}
-        onCopyForLine={onCopyForLine}
+        onShare={onShare}
       />
     </div>
   );
@@ -878,6 +886,8 @@ export default function CustomerHandover() {
     useState<CustomerHandoverStatusFilter>("all");
   const [archivedSortOrder, setArchivedSortOrder] =
     useState<ArchivedHandoverSortOrder>("newest");
+  const [shareContent, setShareContent] =
+    useState<CustomerShareContent | null>(null);
   const [uploadingPhotoIds, setUploadingPhotoIds] = useState<Set<string>>(
     new Set()
   );
@@ -1427,25 +1437,57 @@ export default function CustomerHandover() {
     [deleteAttachment, refetchAttachments]
   );
 
-  const handleCopyForLine = useCallback(
+  const handleShare = useCallback(
     async (customer: CustomerRecord, photoCount: number) => {
-      const { text, url } = buildCustomerHandoverShare(
+      const share = buildCustomerHandoverShare(
         customer.id,
         customer.name,
         photoCount,
         window.location.origin
       );
 
-      try {
-        await copyShareText(buildCustomerHandoverCopyText(text, url));
-        toast.success("LINE送信用の内容をコピーしました。LINEアプリで貼り付けてください。");
-      } catch (error) {
-        console.error("Customer handover copy failed:", error);
-        toast.error("共有内容をコピーできませんでした。もう一度お試しください。");
+      if (
+        navigator.share &&
+        isMobileLineShareDevice(navigator.userAgent, navigator.maxTouchPoints)
+      ) {
+        try {
+          await navigator.share(share);
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          console.error("Customer native share failed:", error);
+          toast.error("共有画面を開けませんでした。もう一度お試しください。");
+        }
+        return;
       }
+
+      setShareContent(share);
     },
     []
   );
+
+  const handleCopyShareContent = useCallback(async () => {
+    if (!shareContent) return;
+    try {
+      await copyShareText(
+        buildCustomerHandoverCopyText(shareContent.text, shareContent.url)
+      );
+      toast.success("共有内容をコピーしました。");
+    } catch (error) {
+      console.error("Customer handover copy failed:", error);
+      toast.error("共有内容をコピーできませんでした。もう一度お試しください。");
+    }
+  }, [shareContent]);
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareContent) return;
+    try {
+      await copyShareText(shareContent.url);
+      toast.success("案件リンクをコピーしました。");
+    } catch (error) {
+      console.error("Customer handover link copy failed:", error);
+      toast.error("案件リンクをコピーできませんでした。もう一度お試しください。");
+    }
+  }, [shareContent]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -1695,7 +1737,7 @@ export default function CustomerHandover() {
                     onCalledToggle={handleCalledToggle}
                     onAddPhotos={handleAddPhotos}
                     onDeletePhoto={handleDeletePhoto}
-                    onCopyForLine={handleCopyForLine}
+                    onShare={handleShare}
                   />
                 ))
               )}
@@ -1789,7 +1831,7 @@ export default function CustomerHandover() {
                           onCalledToggle={handleCalledToggle}
                           onAddPhotos={handleAddPhotos}
                           onDeletePhoto={handleDeletePhoto}
-                          onCopyForLine={handleCopyForLine}
+                          onShare={handleShare}
                         />
                       ))}
                     </div>
@@ -1809,6 +1851,67 @@ export default function CustomerHandover() {
           </>
         )}
       </div>
+      <Dialog
+        open={Boolean(shareContent)}
+        onOpenChange={open => !open && setShareContent(null)}
+      >
+        <DialogContent className="max-w-lg border-rose-100 bg-white p-5">
+          <DialogTitle className="pr-8 text-base text-gray-800">
+            LINEへ共有
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            共有内容と案件リンクをコピーできます。
+          </DialogDescription>
+          {shareContent && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500">
+                  送信内容
+                </label>
+                <textarea
+                  readOnly
+                  value={buildCustomerHandoverCopyText(
+                    shareContent.text,
+                    shareContent.url
+                  )}
+                  className="min-h-24 w-full resize-none rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-700 outline-none"
+                  aria-label="LINE送信用の内容"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyShareContent}
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#06C755] bg-white px-3 py-2 text-sm font-semibold text-[#06C755] transition-colors hover:bg-[#06C755]/10 focus:outline-none focus:ring-2 focus:ring-[#06C755]/30"
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                  送信内容をコピー
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500">
+                  案件リンク
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={shareContent.url}
+                    className="min-w-0 flex-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 outline-none"
+                    aria-label="案件リンク"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                    aria-label="案件リンクをコピー"
+                    title="案件リンクをコピー"
+                  >
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

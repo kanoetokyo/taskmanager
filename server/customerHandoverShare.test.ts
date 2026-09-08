@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCustomerHandoverCopyText,
   buildCustomerHandoverShare,
+  isMobileLineShareDevice,
 } from "../shared/customerHandoverShare";
 
 describe("customer handover share text", () => {
@@ -32,6 +33,18 @@ describe("customer handover share text", () => {
       )
     ).toBe(
       "佐藤様の案件（写真3枚）\nhttps://example.com/customers?customer=customer-2"
+    );
+  });
+
+  it("uses the native share action only on mobile devices", () => {
+    expect(isMobileLineShareDevice("Mozilla/5.0 (Linux; Android 15)", 0)).toBe(
+      true
+    );
+    expect(isMobileLineShareDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)", 0)).toBe(
+      true
+    );
+    expect(isMobileLineShareDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 0)).toBe(
+      false
     );
   });
 });
