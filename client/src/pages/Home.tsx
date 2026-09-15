@@ -49,6 +49,8 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { StoreCheckTable } from "@/components/StoreCheckTable";
+import { partitionHomeTasks, checkAllStores } from "@/lib/homeLayout";
 import { isCalendarAutomationEnabled } from "@/lib/calendarAutomation";
 import {
   DndContext,
@@ -406,7 +408,13 @@ export default function Home() {
   const [currentDateKey, setCurrentDateKey] = useState<string>(() => todayKey());
   const [tasks, setTasks] = useState<Task[]>(() => makeInitialTasks());
   const [lastSaved, setLastSaved] = useState<string | null>(null);
-  const [hideDone, setHideDone] = useState<boolean>(false);
+  const [completedView, setCompletedView] = useState(false);
+  const [completedOpen, setCompletedOpen] = useState(false);
+  const [memberFilter, setMemberFilter] = useState("");
+  const [handoverFilter, setHandoverFilter] = useState("");
+  const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>({});
+  const [handoverOpen, setHandoverOpen] = useState<Record<string, boolean>>({});
+  const [taskDetailsOpen, setTaskDetailsOpen] = useState<Record<string, boolean>>({});
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
   const [undoHistory, setUndoHistory] = useState<Task[][]>([]);
   const [completingTasks, setCompletingTasks] = useState<Set<string>>(new Set());
@@ -880,6 +888,8 @@ export default function Home() {
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
+    setCategoryOpen({});
+    setCompletedOpen(false);
   }, [currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Auto-save via useEffect (debounced) ──────────────────────────────────
@@ -1096,6 +1106,7 @@ export default function Home() {
   // ─── Individual Handover Handlers ─────────────────────────────────────────
 
   const addIndividualHandover = () => {
+    setHandoverFilter("");
     const newRecord = newIndividualHandoverRecord();
     setIndividualHandovers(prev => [...prev, newRecord]);
   };
@@ -1131,6 +1142,7 @@ export default function Home() {
   };
 
   const updateIndividualHandover = (id: string, field: keyof IndividualHandoverRecord, value: string) => {
+    setHandoverOpen(prev => ({ ...prev, [id]: true }));
     setIndividualHandovers(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
@@ -1482,6 +1494,9 @@ export default function Home() {
       const wasComplete = completedCategories.has(cat);
       if (allDone && !wasComplete) {
         setCompletedCategories(prev => new Set(prev).add(cat));
+        if (cat !== "各種システムのチェック" || [storeCheck.lineMorning, storeCheck.pos, storeCheck.raccoon].every(checked => STORE_NAMES.every(store => checked.includes(store)))) {
+          setCategoryOpen(prev => ({ ...prev, [cat]: false }));
+        }
         toast.success(`✨ ${cat}—全タスク完了！`, { duration: 2500 });
         setFlashCategories(prev => new Set(prev).add(cat));
         setTimeout(() => {
@@ -1519,12 +1534,325 @@ export default function Home() {
   const { main: prevDateMain } = formatDateLabel(prevDayKey);
   const hasDataLoadError = Boolean(taskStatesError || storeCheckError || individualHandoverError);
 
+
+  const partition = partitionHomeTasks(tasks, isEditMode ? "" : memberFilter);
+  const urgentTasks = partition.pending.filter(task => task.deadline || task.isOverdue);
+  const firstCategory = categories.find(cat => cat !== "大森TODO");
+  const isCategoryOpen = (cat: string) => isEditMode || (categoryOpen[cat] ?? cat === firstCategory);
+  const revealCategory = (cat: string) => {
+    setCompletedView(false);
+    setCategoryOpen(prev => ({ ...prev, [cat]: true }));
+    requestAnimationFrame(() => document.getElementById(`category-${cat}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  };
+
+  const renderTask = (task: Task) => {
+                  const cat = task.category;
+                  const taskNum = activeTasks.findIndex(item => item.id === task.id) + 1;
+                  // 編集モード用: DBのidを取得
+                  const defRow = taskDefinitionData
+                    ?.find(c => c.name === cat)
+                    ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id) ?? null;
+                  const defId = defRow?.id ?? null;
+                  const defShowOnDays = defRow?.showOnDays ?? "";
+                  const isThisEditing = editingTaskId !== null && editingTaskId === defId;
+                  const sortableId = defId ? `def-${defId}` : task.id;
+                  return (
+                  <SortableTaskRow
+                    key={task.id}
+                    sortableId={sortableId}
+                    isEditMode={isEditMode}
+                    className={`relative px-4 py-2 transition-all duration-300 ${
+                      isEditMode
+                        ? "bg-amber-50/30 border-l-2 border-amber-300 pl-8"
+                        : completingTasks.has(task.id)
+                          ? "opacity-0 scale-95 pointer-events-none"
+                          : task.done
+                            ? "opacity-60 bg-gray-50/60"
+                            : task.isOverdue
+                              ? "bg-red-50 border-l-2 border-red-400"
+                              : task.help
+                                ? "bg-red-50"
+                                : task.deadline
+                                  ? "bg-amber-50/50"
+                                  : "hover:bg-gray-50/80"
+                    }`}
+                    style={{ transform: !isEditMode && completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
+                  >
+                    {/* 編集モード時: インライン編集UI */}
+                    {isEditMode && isThisEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingLabel}
+                          onChange={e => setEditingLabel(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault();
+                              saveEditTask();
+                            }
+                            if (e.key === "Escape") setEditingTaskId(null);
+                          }}
+                          rows={2}
+                          className="w-full text-sm leading-relaxed border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-gray-400">デフォルト担当:</span>
+                          <select
+                            value={editingDefaultPlanned}
+                            onChange={e => setEditingDefaultPlanned(e.target.value)}
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none"
+                          >
+                            {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <span className="text-[10px] text-gray-400">期限:</span>
+                          <input
+                            type="text"
+                            value={editingDeadline}
+                            onChange={e => setEditingDeadline(e.target.value)}
+                            placeholder="例: 17:00まで"
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-24 focus:outline-none"
+                          />
+                          <span className="text-[10px] text-gray-400">表示日:</span>
+                          <input
+                            type="text"
+                            value={editingShowOnDays}
+                            onChange={e => setEditingShowOnDays(e.target.value)}
+                            placeholder="例: 15,30（空=常時）"
+                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-28 focus:outline-none"
+                            title="毎月15日・30日のみ表示する場合は 15,30 と入力。空の場合は常時表示。"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={saveEditTask} className="text-xs px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 font-medium">保存</button>
+                          <button onClick={() => setEditingTaskId(null)} className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">キャンセル</button>
+                        </div>
+                      </div>
+                    ) : (
+                    <>
+                    {/* Row 1: checkbox + HELP + icon + label */}
+                    <div className="flex items-center gap-2.5">
+                      {/* Done checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={task.done}
+                        onChange={() => toggleDone(task.id)}
+                        className="w-4 h-4 rounded accent-blue-600 cursor-pointer shrink-0"
+                        title="完了"
+                        aria-label={`${task.label}を完了`}
+                      />
+
+                      {/* Label */}
+                      <span className={`flex-1 text-sm leading-snug min-w-0 whitespace-pre-line ${
+                        task.done
+                          ? "text-gray-400 line-through"
+                          : task.isOverdue
+                            ? "text-red-700 font-semibold"
+                            : task.help
+                              ? "text-red-700 font-medium"
+                              : task.deadline
+                                ? "text-amber-900"
+                                : "text-gray-700"
+                      }`}>
+                        {task.label}
+                        {task.help && !task.done && <span className="ml-2 text-xs font-semibold text-rose-600">HELP</span>}
+                        {task.isOverdue && !task.done && (
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                            ⚠ 期限超過
+                          </span>
+                        )}
+                        {task.deadline && !task.done && !task.isOverdue && (
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                            ⏰ {task.deadline}
+                          </span>
+                        )}                        {task.done && task.completedDateKey && defShowOnDays.trim() !== "" && (() => {
+                          const [, m, d] = task.completedDateKey.split("-");
+                          return (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setCompletedByInput(task.completedBy ?? "");
+                                setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
+                              }}
+                              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
+                              title="完了者を記録（クリックで編集）"
+                            >
+                              ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : " / 完了者を記録"}
+                            </button>
+                          );
+                        })()
+}
+                      </span>
+                      <button type="button" aria-label={`${task.label}の詳細`} aria-expanded={Boolean(taskDetailsOpen[task.id])}
+                        title={`${task.planned || "担当未設定"} · 詳細・備考・HELP`}
+                        onClick={() => setTaskDetailsOpen(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-blue-50 hover:text-blue-600">
+                        <ChevronDown className={`size-4 ${taskDetailsOpen[task.id] ? "rotate-180" : "-rotate-90"}`} />
+                      </button>
+                    </div>
+
+                    <div hidden={!taskDetailsOpen[task.id]} className="mt-2 ml-6 text-xs text-slate-500">
+                      {/* HELP checkbox */}
+                      <label
+                        className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
+                          task.done ? "opacity-30 pointer-events-none" : ""
+                        }`}
+                        title="ヘルプが必要"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={task.help}
+                          onChange={() => toggleHelp(task.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={`inline-flex items-center justify-center w-10 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
+                            task.help
+                              ? "bg-red-500 border-red-500 text-white"
+                              : "bg-white border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-400"
+                          }`}
+                        >
+                          HELP
+                        </span>
+                      </label>
+
+                    {/* Row 2: Planned selector (right-aligned) */}
+                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
+                      <select
+                        value={task.planned}
+                        onChange={e => updateTask(task.id, "planned", e.target.value)}
+                        aria-label={`${task.label}の作業予定者`}
+                        disabled={task.done && task.category !== "大森TODO"}
+                        className={`rounded-lg border text-xs px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
+                          task.done
+                            ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
+                            : task.planned === "当日事務担当"
+                              ? "border-blue-200 bg-blue-50 text-rose-700 font-medium"
+                              : task.planned === "当日現場責任者"
+                                ? "border-amber-200 bg-amber-50 text-amber-700 font-medium"
+                                : "border-gray-200 bg-white text-gray-600"
+                        }`}
+                      >
+                        {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    {/* Row 3: 備考欄（pay-aとomori-dのみ表示） */}
+                    {(task.id === "pay-a" || task.id === "omori-d") && (
+                      <div className="mt-2">
+                        <textarea
+                          value={task.note}
+                          onChange={e => {
+                            updateTask(task.id, "note", e.target.value);
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+                          }}
+                          onFocus={e => {
+                            e.currentTarget.style.height = "auto";
+                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+                          }}
+                          placeholder="備考を入力…"
+                          rows={1}
+                          className="w-full text-xs text-gray-400 bg-transparent border-0 border-b border-dashed border-gray-300 px-0 py-1 focus:outline-none focus:border-gray-400 placeholder-gray-300 resize-none overflow-hidden"
+                          style={{ minHeight: "24px" }}
+                        />
+                      </div>
+                    )}
+                    </div>
+                    {/* 編集モード時: 編集・削除ボタン */}
+                    {isEditMode && !isThisEditing && defId !== null && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "", defShowOnDays)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
+                        >
+                          <FileText className="w-3 h-3" />編集
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(defId, task.label)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />削除
+                        </button>
+                      </div>
+                    )}
+                  </>
+                    )}
+                  </SortableTaskRow>
+                  );
+
+  };
+
+  const renderStores = (lineKey: "lineMorning" | "lineAfternoon") => <StoreCheckTable
+    stores={STORE_NAMES}
+    services={[
+      { key: lineKey, label: "LINE", description: "公式LINEの要対応チェック（前日１８：００以降）", checked: storeCheck[lineKey] },
+      { key: "pos", label: "POS", description: "ポスのチェック", checked: storeCheck.pos },
+      { key: "raccoon", label: "ラクーン", description: "ラクーンのチェック", checked: storeCheck.raccoon },
+    ]}
+    onToggle={(key, store) => toggleStoreCheck(key as "lineMorning" | "lineAfternoon" | "pos" | "raccoon", store)}
+    onCheckAll={key => setStoreCheck(prev => checkAllStores(prev, key as "lineMorning" | "lineAfternoon" | "pos" | "raccoon", STORE_NAMES))}
+  />;
+
+  const renderCategory = (cat: string) => {
+    const allTasks = tasks.filter(task => task.category === cat);
+    const pending = partition.pending.filter(task => task.category === cat);
+    const visible = isEditMode ? allTasks : pending;
+    const done = allTasks.filter(task => task.done).length;
+    const open = isCategoryOpen(cat);
+    const cfg = CAT_CONFIG[cat];
+    const storeRemaining = cat === "各種システムのチェック" ? STORE_NAMES.length * 3 - [storeCheck.lineMorning, storeCheck.pos, storeCheck.raccoon].reduce((total, checked) => total + STORE_NAMES.filter(store => checked.includes(store)).length, 0) : 0;
+    return <section id={`category-${cat}`} key={cat} className="scroll-mt-40 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button type="button" aria-expanded={open} onClick={() => setCategoryOpen(prev => ({ ...prev, [cat]: !open }))}
+        className="flex w-full items-center gap-2 bg-blue-50/40 px-4 py-3 text-left hover:bg-blue-50">
+        <span className="text-blue-500">{cfg?.icon ?? <ClipboardList className="size-4" />}</span>
+        <span className="flex-1 text-sm font-semibold text-blue-950">{cat}</span>
+        <span className="shrink-0 text-xs text-slate-500">{done}/{allTasks.length}完了{storeRemaining > 0 ? ` · 店舗残${storeRemaining}` : ""}</span>
+        <ChevronDown className={`size-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <>
+        {cat === "各種システムのチェック" && <details className="border-b border-slate-100">
+          <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-slate-600">店舗システム確認 <span className="text-amber-700">LINE 12:00まで</span> · 残り{storeRemaining}件</summary>
+          {renderStores("lineMorning")}
+        </details>}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={event => handleDragEnd(event, cat)}>
+          <SortableContext items={visible.map(task => taskDefinitionData?.find(category => category.name === cat)?.tasks.find(def => def.legacyId === task.id || `def-${def.id}` === task.id)).filter(Boolean).map(def => `def-${def!.id}`)} strategy={verticalListSortingStrategy}>
+            <div className="divide-y divide-slate-100">{visible.map(renderTask)}</div>
+          </SortableContext>
+        </DndContext>
+        {!visible.length && <p className="px-4 py-3 text-xs text-slate-500">{memberFilter ? "この担当者の未完了タスクはありません" : "通常タスクはすべて完了しました"}</p>}
+        <div className="flex flex-wrap gap-2 px-4 py-2">
+          {pending.length > 0 && <button type="button" onClick={() => {
+            const ids = new Set(pending.map(task => task.id));
+            setUndoHistory(prev => [...prev.slice(-9), tasks]);
+            pending.forEach(task => { doneFlagsRef.current[task.id] = true; });
+            setTasks(prev => prev.map(task => ids.has(task.id) ? { ...task, done: true, completedDateKey: currentDateKey } : task));
+          }} className="text-xs text-blue-600 hover:underline">このカテゴリーを一括完了{memberFilter ? "（表示中の担当者）" : ""}</button>}
+          {isEditMode && <button type="button" onClick={() => {
+            setAddTaskCategory(cat); setAddTaskLabel(""); setAddTaskDefaultPlanned(cat === "大森TODO" ? "当日現場責任者" : "当日事務担当"); setAddTaskDeadline(""); setShowAddTaskDialog(true);
+          }} className="text-xs text-amber-700">＋ タスクを追加</button>}
+        </div>
+      </>}
+    </section>;
+  };
+
+  const renderCompleted = () => <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <button type="button" aria-expanded={completedView || completedOpen} onClick={() => { if(completedView) setCompletedView(false); setCompletedOpen(!(completedView || completedOpen)); }}
+      className="flex w-full items-center gap-2 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+      <CheckCircle2 className="size-4" />完了済み（{partition.completed.length}件）<ChevronDown className="ml-auto size-4" />
+    </button>
+    {(completedView || completedOpen) && <div className="divide-y divide-slate-100">
+      {partition.completed.length === 0 ? <p className="p-4 text-sm text-slate-400">完了済みのタスクはありません</p> :
+        <DndContext><SortableContext items={[]} strategy={verticalListSortingStrategy}>{partition.completed.map(task => <div key={task.id}><p className="px-4 pt-2 text-[10px] text-slate-400">{task.category}</p>{renderTask(task)}</div>)}</SortableContext></DndContext>}
+    </div>}
+  </section>;
+
   return (
     <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #f0fdf4 0%, #f7fef9 40%, #ecfdf5 100%)" }}>
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-10 overflow-hidden" style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #f0fdf4 100%)", borderBottom: "1px solid #bbf7d0", boxShadow: "0 1px 4px rgba(34,197,94,0.10)" }}>
-        <div className="max-w-4xl mx-auto px-4 pt-3 pb-2">
+        <div className="max-w-screen-2xl mx-auto px-4 pt-3 pb-2">
 
           {/* Row 1: アイコン + タイトル（常に1行で表示） */}
           <div className="flex items-center justify-center gap-2">
@@ -1611,20 +1939,19 @@ export default function Home() {
             )}
           </div>
 
-          {/* Row 3: 進捗バー */}
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-              <div
-                className="h-2 rounded-full transition-all duration-500"
-                style={{ width: `${progressPct}%`, background: progressPct === 100 ? "#16a34a" : "#2563eb" }}
-              />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-emerald-100 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" aria-pressed={!completedView} onClick={() => setCompletedView(false)} className={`rounded-md px-4 py-1.5 text-xs font-semibold ${!completedView ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>未完了優先</button>
+              <button type="button" aria-pressed={completedView} onClick={() => { setCompletedView(true); setCompletedOpen(true); }} className={`rounded-md px-4 py-1.5 text-xs font-semibold ${completedView ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-500"}`}>完了済み</button>
+              <select aria-label="通常タスクの担当者" value={memberFilter} onChange={e => setMemberFilter(e.target.value)} disabled={isEditMode}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600">
+                <option value="">担当者：全員</option>{Array.from(new Set([...PLANNED_MEMBERS, ...tasks.map(task => task.planned)])).filter(Boolean).map(member => <option key={member} value={member}>{member}</option>)}
+              </select>
             </div>
-            <span className="text-xs font-semibold text-rose-600 whitespace-nowrap tabular-nums">
-              {progressPct}%
-            </span>
-            <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums">
-              {doneTasks} / {totalTasks}
-            </span>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>通常タスク</span><div className="h-2 w-28 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} /></div>
+              <span>{doneTasks} / {totalTasks}完了</span><span className="font-semibold text-blue-600">残り{totalTasks - doneTasks}件</span>
+            </div>
           </div>
 
         </div>
@@ -1632,65 +1959,19 @@ export default function Home() {
 
       {/* ── Main ── */}
         <main className="max-w-screen-2xl mx-auto px-4 py-5">
-         <div className="lg:grid lg:grid-cols-3 lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+         <div className="lg:grid lg:grid-cols-[minmax(230px,0.85fr)_minmax(340px,1.35fr)_minmax(330px,1fr)] lg:gap-4 lg:items-start space-y-4 lg:space-y-0">
 
         {/* 左カラム：引き継ぎ・ステータス系 */}
         <div className="space-y-4">
 
-        {/* 前日未完了タスクアラート */}
-        {prevDayUndoneTasks.length > 0 && (
-          <section className="bg-rose-50 border border-rose-200 border-l-4 border-l-rose-400 rounded-xl shadow-sm overflow-hidden">
-            {/* ヘッダー（常に表示） */}
-            <div className="w-full px-4 py-2.5 flex items-center justify-between border-b border-red-100">
-              <button
-                onClick={() => setShowPrevUndone(v => !v)}
-                className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition-opacity"
-              >
-                <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
-                  <AlertCircle className="w-4 h-4" />
-                  前日（{prevDateMain}）の未完了タスク
-                </span>
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => markAllPrevDone()}
-                  className="text-xs px-2.5 py-1 rounded-md bg-red-500 hover:bg-red-600 text-white font-medium transition-colors shadow-sm"
-                >
-                  一括完了
-                </button>
-                <span className="text-xs font-semibold text-rose-500">{prevDayUndoneTasks.length}件未完了</span>
-                <button
-                  onClick={() => setShowPrevUndone(v => !v)}
-                  className="text-rose-400 hover:opacity-70 transition-opacity"
-                >
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showPrevUndone ? "rotate-180" : ""}`} />
-                </button>
-              </div>
-            </div>
-            {/* 展開時のタスク一覧 */}
-            {showPrevUndone && (
-              <div className="divide-y divide-red-100">
-                {prevDayUndoneTasks.map(task => (
-                  <div key={task.id} className="flex items-center gap-2 px-4 py-2">
-                    <span className="text-rose-400 shrink-0">{task.icon}</span>
-                    <span className="flex-1 text-sm text-rose-800 whitespace-pre-line">{task.label}</span>
-                    {task.planned && (
-                      <span className="text-xs text-rose-500 bg-rose-100 px-2 py-0.5 rounded-full shrink-0">{task.planned}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
         {/* 個別引き継ぎパネル */}
-        <section className="bg-white border border-gray-200 border-l-4 border-l-slate-300 rounded-xl shadow-sm overflow-hidden">
+        <section className="bg-white border border-rose-200 rounded-xl shadow-sm overflow-hidden">
           {/* ヘッダー（アコーディオン） */}
           <div
             className="px-4 py-2.5 flex items-center gap-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
             onClick={() => setIndividualHandoverOpen(v => !v)}
           >
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+            <span className="flex items-center gap-1.5 text-base font-bold text-rose-600">
               <Send className="w-4 h-4" />
               個別引き継ぎ
             </span>
@@ -1717,6 +1998,11 @@ export default function Home() {
             </p>
           )}
 
+          <div className="border-t border-rose-100 px-4 py-2">
+            <select aria-label="引き継ぎの宛先" value={handoverFilter} onChange={e => setHandoverFilter(e.target.value)} className="w-full rounded-md border border-rose-100 bg-rose-50/50 px-2 py-1.5 text-xs text-rose-700">
+              <option value="">宛先：全員</option>{Array.from(new Set([...MEMBER_LIST, ...individualHandovers.map(record => record.target)])).filter(Boolean).map(member => <option key={member} value={member}>{member} 宛て</option>)}
+            </select>
+          </div>
           {/* 個別引き継ぎ一覧（アコーディオン本体） */}
           {individualHandoverOpen && (
           <div className="border-t border-gray-100 divide-y divide-gray-100">
@@ -1725,8 +2011,26 @@ export default function Home() {
                 「引き継ぎを追加」ボタンで個別引き継ぎを作成できます
               </div>
             ) : (
-              [...individualHandovers].sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0)).map(record => (
-                <div key={record.id} className={`px-4 py-3 space-y-3 transition-colors ${record.important ? 'bg-red-50 border-l-4 border-l-red-500' : ''}`}>
+              [...individualHandovers].filter(record => !handoverFilter || !record.target || record.target === handoverFilter).sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0)).map(record => (
+                <div key={record.id} className={`px-4 py-3 space-y-3 transition-colors ${record.important ? 'bg-rose-50 border-l-2 border-l-rose-400' : ''}`}>
+                  <div className="flex items-start gap-2.5">
+                  <input type="checkbox" className="mt-1 size-4 shrink-0 cursor-pointer accent-rose-500"
+                    aria-label={`${record.tasks.find(task => !task.done)?.text || "引き継ぎ"}を完了`}
+                    checked={record.tasks.length > 0 && record.tasks.every(task => task.done)}
+                    disabled={!record.tasks.some(task => !task.done)}
+                    onChange={() => {
+                      const nextTask = record.tasks.find(task => !task.done);
+                      if (nextTask) updateIndividualTask(record.id, nextTask.id, "done", true);
+                    }} />
+                  <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={handoverOpen[record.id] ?? !record.author}
+                    onClick={() => setHandoverOpen(prev => ({ ...prev, [record.id]: !(prev[record.id] ?? !record.author) }))}>
+                    <span className="flex items-center gap-2 text-xs text-slate-500">{record.important && <span className="rounded bg-rose-100 px-1.5 py-0.5 font-bold text-rose-600">★ 重要</span>}{record.author || "作成者未選択"} → {record.target || "宛先未選択"}<ChevronDown className="ml-auto size-4" /></span>
+                    <span className="mt-2 block text-sm font-medium leading-relaxed text-slate-700">{record.tasks.find(task => !task.done)?.text || record.tasks[0]?.text || "引き継ぎを入力"}</span>
+                    {record.tasks.some(task => !task.done && task.deadline) && <span className="mt-1 block text-xs text-amber-700">期限：{record.tasks.filter(task => !task.done && task.deadline).map(task => task.deadline!).sort()[0]?.replace("T", " ")}</span>}
+                    <span className="mt-1 block text-xs text-slate-400">残り {record.tasks.filter(task => !task.done).length}件 · 詳細・編集</span>
+                  </button>
+                  </div>
+                  <div hidden={!(handoverOpen[record.id] ?? !record.author)} className="space-y-3">
                   {/* バッジ行：重要・前日引き継ぎ */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* 重要トグルボタン */}
@@ -1743,14 +2047,9 @@ export default function Home() {
                       }`}
                       title="重要フラグをトグル"
                     >
-                      <span className="text-sm">⚠️</span>
+                      <span className="text-sm">★</span>
                       {record.important ? '重要' : '重要にする'}
                     </button>
-                    {record.important && (
-                      <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                        ⚠️ 重要
-                      </span>
-                    )}
                     {record.inherited && (
                       <span className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
                         ↩ 前日から引き継ぎ
@@ -1760,6 +2059,7 @@ export default function Home() {
                   {/* 作成者・対象者行 */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
+                      aria-label="引き継ぎの作成者"
                       value={record.author}
                       onChange={e => updateIndividualHandover(record.id, "author", e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
@@ -1771,6 +2071,7 @@ export default function Home() {
                     </select>
                     <span className="text-xs text-gray-400">→</span>
                     <select
+                      aria-label="引き継ぎの対象者"
                       value={record.target}
                       onChange={e => updateIndividualHandover(record.id, "target", e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-md border focus:outline-none focus:ring-1 focus:ring-purple-400 ${
@@ -1793,6 +2094,9 @@ export default function Home() {
                     {record.tasks.map((task, tIdx) => (
                       <div key={task.id} className="flex items-start gap-2">
                         <button
+                          role="checkbox"
+                          aria-checked={task.done}
+                          aria-label={`${task.text || "引き継ぎ"}を完了`}
                           onClick={() => updateIndividualTask(record.id, task.id, "done", !task.done)}
                           className={`mt-0.5 shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
                             task.done
@@ -1874,39 +2178,12 @@ export default function Home() {
                       <span className="text-base leading-none">+</span> 項目を追加
                     </button>
                   </div>
+                  </div>
                 </div>
               ))
             )}
           </div>
           )}
-        </section>
-        {/* 顧客引き継ぎ専用ページへのリンク */}
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden border-l-4 border-l-rose-300">
-          <div className="px-4 py-3 flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
-              <Users className="w-4 h-4" />
-              顧客引き継ぎ
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              <a
-                href="/show-on-days"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors shadow-sm"
-              >
-                <CalendarDays className="w-3.5 h-3.5" />
-                ルーティン一覧
-              </a>
-              <a
-                href="https://taskmanager-five-plum.vercel.app/customers"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
-              >
-                顧客引き継ぎページへ →
-              </a>
-            </div>
-          </div>
         </section>
         {/* MISOCA / グレーセル / STORESシフト 統合ステータスセクション */}
         {(() => {
@@ -1935,34 +2212,7 @@ export default function Home() {
               {/* セクションヘッダー */}
               <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-1.5">
                 <CalendarCheck className="w-4 h-4 text-slate-400" />
-                <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">進捗ステータス</span>
-              </div>
-
-              {/* MISOCA行 */}
-              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap border-b border-gray-50">
-                <div className="flex items-center gap-1.5 w-28 shrink-0">
-                  <CalendarCheck className="w-4 h-4 text-emerald-500" />
-                  <span className="text-xs font-semibold text-gray-600">MISOCA</span>
-                </div>
-                <input
-                  type="date"
-                  value={misoca.completedUntil}
-                  onChange={e => updateMisoca(e.target.value)}
-                  className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                />
-                {misocaSet && (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    misocaUpToDate ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
-                  }`}>
-                    {misocaUpToDate
-                      ? misocaDaysLeft === 0 ? "本日分まで作成済み" : `あと${misocaDaysLeft}日分作成済み`
-                      : `${Math.abs(misocaDaysLeft)}日前で停止中`
-                    }
-                  </span>
-                )}
-                {misocaSet && (
-                  <button onClick={() => updateMisoca("")} className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto">✕</button>
-                )}
+                <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">更新状況</span>
               </div>
 
               {/* グレーセル行 */}
@@ -2002,665 +2252,42 @@ export default function Home() {
                 )}
               </div>
 
-              {/* STORESシフト行 */}
-              <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 w-28 shrink-0">
-                  <ShoppingBag className="w-4 h-4 text-orange-500" />
-                  <span className="text-xs font-semibold text-gray-600">STORESシフト</span>
-                </div>
-                <input
-                  type="date"
-                  value={storesShift.confirmedUntil}
-                  onChange={e => updateStoresShift(e.target.value)}
-                  className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
-                />
-                <select
-                  value={storesShift.updatedBy}
-                  onChange={e => updateStoresShift(storesShift.confirmedUntil, e.target.value)}
-                  className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-1 focus:ring-orange-400 ${
-                    storesShift.updatedBy ? "border-orange-300 text-orange-800 bg-orange-50" : "border-gray-200 text-gray-400 bg-gray-50"
-                  }`}
-                >
-                  <option value="">更新者を選択</option>
-                  {MEMBER_LIST.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                {storesShiftSet && (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    storesShiftUpToDate ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-600"
-                  }`}>
-                    {storesShiftUpToDate
-                      ? storesShiftDaysLeft === 0 ? "本日分まで確認済み" : `あと${storesShiftDaysLeft}日分確認済み`
-                      : `${Math.abs(storesShiftDaysLeft)}日前で停止中`
-                    }
-                  </span>
-                )}
-                {storesShiftSet && (
-                  <button onClick={() => updateStoresShift("", "")} className="text-xs text-gray-300 hover:text-red-400 transition-colors ml-auto">✕</button>
-                )}
-              </div>
             </section>
           );
         })()}
 
-        <a
-          href="/atinn-handover"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-sky-700"
-        >
-          アットインモード
-        </a>
+        <nav aria-label="関連ページ" className="space-y-2">
+          {[
+            { href: "/atinn-handover", label: "アットインモード", icon: <ClipboardList className="size-4" /> },
+            { href: "/customers", label: "顧客引き継ぎ", icon: <Users className="size-4" /> },
+            { href: "/show-on-days", label: "ルーティン一覧", icon: <CalendarDays className="size-4" /> },
+          ].map(link => <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+            {link.icon}{link.label}<ChevronRight className="ml-auto size-4" />
+          </a>)}
+        </nav>
 
         </div>{/* /左カラム */}
 
-        {/* 中列：タスク一覧（大森TODO以外） */}
-        <div className="space-y-4">
-
-        {(() => {
-          // 全タスクの通し番号マップ（activeTasksの順序に基づく）
-          const taskNumberMap = new Map<string, number>();
-          let globalIdx = 1;
-          for (const t of activeTasks) {
-            taskNumberMap.set(t.id, globalIdx++);
-          }
-          return categories.filter(cat => cat !== "大森TODO").map(cat => {
-          const catTasks  = tasks.filter(t => t.category === cat);
-          const catDone   = catTasks.filter(t => t.done).length;
-          const cfg       = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
-
-          return (
-            <Fragment key={cat}>
-            {false && (
-              <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                {/* 退勤前チェックヘッダー */}
-                <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
-                    <CalendarCheck className="w-4 h-4" />
-                    退勤前チェック
-                  </span>
-                  <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
-                  <span className="ml-auto text-xs text-gray-400">
-                    {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
-                  </span>
-                </div>
-                {/* 公式LINE */}
-                <div className="px-4 py-3 space-y-2 border-b border-gray-50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
-                    <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
-                    {storeCheck.lineAfternoon.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
-                  </div>
-                  {storeCheck.lineAfternoon.length < STORE_NAMES.length ? (
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.lineAfternoon.includes(store);
-                        return (
-                          <button key={store} onClick={() => toggleStoreCheck("lineAfternoon", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"}`}>
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white">一括完了</button>
-                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.lineAfternoon.length}/{STORE_NAMES.length}店舗</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 pl-6">
-                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-                    </div>
-                  )}
-                </div>
-                {/* POS */}
-                <div className="px-4 py-3 space-y-2 border-b border-gray-50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
-                    <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
-                    {storeCheck.pos.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
-                  </div>
-                  {storeCheck.pos.length < STORE_NAMES.length ? (
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.pos.includes(store);
-                        return (
-                          <button key={store} onClick={() => toggleStoreCheck("pos", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"}`}>
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-rose-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white">一括完了</button>
-                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.pos.length}/{STORE_NAMES.length}店舗</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 pl-6">
-                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-                    </div>
-                  )}
-                </div>
-                {/* ラクーン */}
-                <div className="px-4 py-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
-                    <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
-                    {storeCheck.raccoon.length === STORE_NAMES.length && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
-                  </div>
-                  {storeCheck.raccoon.length < STORE_NAMES.length ? (
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.raccoon.includes(store);
-                        return (
-                          <button key={store} onClick={() => toggleStoreCheck("raccoon", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${checked ? "bg-green-500 border-green-500 text-white shadow-sm" : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"}`}>
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [...STORE_NAMES] }))} className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-500 hover:border-indigo-500 hover:text-white">一括完了</button>
-                      <span className="self-center text-xs text-gray-400 ml-1">{storeCheck.raccoon.length}/{STORE_NAMES.length}店舗</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 pl-6">
-                      <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                      <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-                    </div>
-                  )}
-                </div>
-                {/* AI留守電チェック */}
-                <div className="border-t border-gray-100 px-4 py-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-blue-500 shrink-0"><Phone className="w-4 h-4" /></span>
-                    <span className="text-sm text-gray-700 font-medium flex-1">AI留守電対応確認</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleAiVoicemail}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        storeCheck.aiVoicemail
-                          ? "bg-green-500 border-green-500 text-white"
-                          : "bg-white border-gray-300 hover:border-green-400"
-                      }`}
-                    >
-                      {storeCheck.aiVoicemail && <span className="text-xs font-bold leading-none">✓</span>}
-                    </button>
-                    <span className={`text-sm flex-1 ${
-                      storeCheck.aiVoicemail ? "line-through text-gray-400" : "text-gray-600"
-                    }`}>
-                      18時以降にAI留守電に来てるもので、対応した電話は翌日の事務グループに対応済みと引継ぎを残す
-                    </span>
-                    {storeCheck.aiVoicemail && <span className="text-xs text-green-600 font-semibold">✓ 完了</span>}
-                  </div>
-                </div>
-              </section>
-            )}
-            <section
-              key={cat}
-              className={`rounded-xl border overflow-hidden transition-all duration-300 ${
-                flashCategories.has(cat)
-                  ? "bg-green-50 border-green-300"
-                  : "bg-white border-gray-200"
-              }`}
-              style={{ boxShadow: flashCategories.has(cat) ? "0 0 0 2px #86efac" : "0 1px 3px rgba(0,0,0,0.06)" }}
-            >
-
-              {/* Category header */}
-              <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: "1px solid #f3f4f6" }}>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 shrink-0">{cfg.icon}</span>
-                  <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">{cat}</span>
-
-                </div>
-                <div className="flex items-center gap-2">
-                  {catDone < catTasks.length && (
-                    <button
-                      onClick={() => {
-                        setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
-                        // doneFlagsRefも同時に更新
-                        tasks.filter(t => t.category === cat).forEach(t => { doneFlagsRef.current[t.id] = true; });
-                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
-                      }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
-                    >
-                      一括完了
-                    </button>
-                  )}
-                  <span className="text-xs tabular-nums">
-                    {catDone === catTasks.length
-                      ? <span className="text-green-500 font-semibold">✓ 完了</span>
-                      : <span className="text-gray-400">{catDone} / {catTasks.length}</span>
-                    }
-                  </span>
-                </div>
-              </div>
-
-              {/* 各種システムのチェックカテゴリの場合、店舗ボタン形式は退勤前チェックセクションに移動したため非表示 */}
-              {cat === "各種システムのチェック" && (
-                <div className="divide-y divide-gray-50">
-                  {/* 公式LINE */}
-                  {<div className="px-4 py-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
-                      <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
-                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium shrink-0">12:00まで</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.lineMorning.includes(store);
-                        return (
-                          <button
-                            key={store}
-                            onClick={() => toggleStoreCheck("lineMorning", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
-                              checked
-                                ? "bg-green-500 border-green-500 text-white shadow-sm"
-                                : "bg-white border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"
-                            }`}
-                          >
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      {storeCheck.lineMorning.length < STORE_NAMES.length ? (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, lineMorning: [...STORE_NAMES] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-green-50 border-green-300 text-green-700 hover:bg-green-500 hover:border-green-500 hover:text-white"
-                        >
-                          一括完了
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, lineMorning: [] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
-                        >
-                          リセット
-                        </button>
-                      )}
-                      <span className="self-center text-xs text-gray-400 ml-1">
-                        {storeCheck.lineMorning.length === STORE_NAMES.length
-                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
-                          : `${storeCheck.lineMorning.length}/${STORE_NAMES.length}店舗`
-                        }
-                      </span>
-                    </div>
-                  </div>}
-                  {/* POS */}
-                  {<div className="px-4 py-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
-                      <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.pos.includes(store);
-                        return (
-                          <button
-                            key={store}
-                            onClick={() => toggleStoreCheck("pos", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
-                              checked
-                                ? "bg-green-500 border-green-500 text-white shadow-sm"
-                                : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"
-                            }`}
-                          >
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      {storeCheck.pos.length < STORE_NAMES.length ? (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, pos: [...STORE_NAMES] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-blue-50 border-blue-300 text-rose-700 hover:bg-blue-500 hover:border-blue-500 hover:text-white"
-                        >
-                          一括完了
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
-                        >
-                          リセット
-                        </button>
-                      )}
-                      <span className="self-center text-xs text-gray-400 ml-1">
-                        {storeCheck.pos.length === STORE_NAMES.length
-                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
-                          : `${storeCheck.pos.length}/${STORE_NAMES.length}店舗`
-                        }
-                      </span>
-                    </div>
-                  </div>}
-                  {/* ラクーン */}
-                  {<div className="px-4 py-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
-                      <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pl-6">
-                      {STORE_NAMES.map(store => {
-                        const checked = storeCheck.raccoon.includes(store);
-                        return (
-                          <button
-                            key={store}
-                            onClick={() => toggleStoreCheck("raccoon", store)}
-                            className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${
-                              checked
-                                ? "bg-green-500 border-green-500 text-white shadow-sm"
-                                : "bg-white border-gray-200 text-gray-500 hover:border-rose-300 hover:text-rose-700"
-                            }`}
-                          >
-                            {checked ? "✓ " : ""}{store}
-                          </button>
-                        );
-                      })}
-                      {storeCheck.raccoon.length < STORE_NAMES.length ? (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [...STORE_NAMES] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-500 hover:border-indigo-500 hover:text-white"
-                        >
-                          一括完了
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))}
-                          className="text-xs px-2.5 py-1 rounded-full border font-medium transition-all bg-gray-50 border-gray-300 text-gray-500 hover:bg-gray-100"
-                        >
-                          リセット
-                        </button>
-                      )}
-                      <span className="self-center text-xs text-gray-400 ml-1">
-                        {storeCheck.raccoon.length === STORE_NAMES.length
-                          ? <span className="text-green-500 font-semibold">✓ 全店舗完了</span>
-                          : `${storeCheck.raccoon.length}/${STORE_NAMES.length}店舗`
-                        }
-                      </span>
-                    </div>
-                  </div>}
-                </div>
-              )}
-              {/* Task rows */}
-              {(() => {
-                // 編集モード用: このカテゴリのDBタスク定義
-                const catDefTasks = taskDefinitionData?.find(c => c.name === cat)?.tasks ?? [];
-                const sortableIds = catDefTasks.map(t => `def-${t.id}`);
-                return (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(event) => handleDragEnd(event, cat)}
-                >
-                  <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-                    <div className="divide-y divide-gray-50">
-                {hideDone && catTasks.every(t => t.done) && (
-                  <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
-                    <span>✓</span><span>このカテゴリはすべて完了しています</span>
-                  </div>
-                )}
-                {catTasks.filter(task => !(hideDone && task.done)).map(task => {
-                  const taskNum = taskNumberMap.get(task.id);
-                  // 編集モード用: DBのidを取得
-                  const defRow = taskDefinitionData
-                    ?.find(c => c.name === cat)
-                    ?.tasks.find(t => t.legacyId === task.id || `def-${t.id}` === task.id) ?? null;
-                  const defId = defRow?.id ?? null;
-                  const defShowOnDays = defRow?.showOnDays ?? "";
-                  const isThisEditing = editingTaskId !== null && editingTaskId === defId;
-                  const sortableId = defId ? `def-${defId}` : task.id;
-                  return (
-                  <SortableTaskRow
-                    key={task.id}
-                    sortableId={sortableId}
-                    isEditMode={isEditMode}
-                    className={`relative px-4 py-3 transition-all duration-300 ${
-                      isEditMode
-                        ? "bg-amber-50/30 border-l-2 border-amber-300 pl-8"
-                        : completingTasks.has(task.id)
-                          ? "opacity-0 scale-95 pointer-events-none"
-                          : task.done
-                            ? "opacity-60 bg-gray-50/60"
-                            : task.isOverdue
-                              ? "bg-red-50 border-l-2 border-red-400"
-                              : task.help
-                                ? "bg-red-50"
-                                : task.deadline
-                                  ? "bg-amber-50/50"
-                                  : "hover:bg-gray-50/80"
-                    }`}
-                    style={{ transform: !isEditMode && completingTasks.has(task.id) ? "translateX(8px)" : undefined }}
-                  >
-                    {/* 編集モード時: インライン編集UI */}
-                    {isEditMode && isThisEditing ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={editingLabel}
-                          onChange={e => setEditingLabel(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                              e.preventDefault();
-                              saveEditTask();
-                            }
-                            if (e.key === "Escape") setEditingTaskId(null);
-                          }}
-                          rows={2}
-                          className="w-full text-sm leading-relaxed border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-y"
-                          autoFocus
-                        />
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] text-gray-400">デフォルト担当:</span>
-                          <select
-                            value={editingDefaultPlanned}
-                            onChange={e => setEditingDefaultPlanned(e.target.value)}
-                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none"
-                          >
-                            {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                          <span className="text-[10px] text-gray-400">期限:</span>
-                          <input
-                            type="text"
-                            value={editingDeadline}
-                            onChange={e => setEditingDeadline(e.target.value)}
-                            placeholder="例: 17:00まで"
-                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-24 focus:outline-none"
-                          />
-                          <span className="text-[10px] text-gray-400">表示日:</span>
-                          <input
-                            type="text"
-                            value={editingShowOnDays}
-                            onChange={e => setEditingShowOnDays(e.target.value)}
-                            placeholder="例: 15,30（空=常時）"
-                            className="text-xs border border-gray-200 rounded px-1.5 py-0.5 w-28 focus:outline-none"
-                            title="毎月15日・30日のみ表示する場合は 15,30 と入力。空の場合は常時表示。"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={saveEditTask} className="text-xs px-3 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 font-medium">保存</button>
-                          <button onClick={() => setEditingTaskId(null)} className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">キャンセル</button>
-                        </div>
-                      </div>
-                    ) : (
-                    <>
-                    {/* Row 1: checkbox + HELP + icon + label */}
-                    <div className="flex items-center gap-2.5">
-                      {/* Task number */}
-                      {taskNum !== undefined && (
-                        <span className={`shrink-0 text-[11px] tabular-nums ${
-                          task.done ? "text-gray-300" : "text-gray-400"
-                        }`}>
-                          {taskNum}.
-                        </span>
-                      )}
-                      {/* Done checkbox */}
-                      <input
-                        type="checkbox"
-                        checked={task.done}
-                        onChange={() => toggleDone(task.id)}
-                        className="w-4 h-4 rounded accent-blue-600 cursor-pointer shrink-0"
-                        title="完了"
-                      />
-
-                      {/* HELP checkbox */}
-                      <label
-                        className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
-                          task.done ? "opacity-30 pointer-events-none" : ""
-                        }`}
-                        title="ヘルプが必要"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={task.help}
-                          onChange={() => toggleHelp(task.id)}
-                          className="sr-only"
-                        />
-                        <span
-                          className={`inline-flex items-center justify-center w-10 h-5 rounded text-[10px] font-bold tracking-wider border transition-all ${
-                            task.help
-                              ? "bg-red-500 border-red-500 text-white"
-                              : "bg-white border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-400"
-                          }`}
-                        >
-                          HELP
-                        </span>
-                      </label>
-
-                      {/* Icon */}
-                      <span className={`shrink-0 ${ task.done ? "text-gray-300" : getIconColor(task.id)}`}>
-                        {task.icon}
-                      </span>
-
-                      {/* Label */}
-                      <span className={`flex-1 text-sm leading-snug min-w-0 whitespace-pre-line ${
-                        task.done
-                          ? "text-gray-400 line-through"
-                          : task.isOverdue
-                            ? "text-red-700 font-semibold"
-                            : task.help
-                              ? "text-red-700 font-medium"
-                              : task.deadline
-                                ? "text-amber-900"
-                                : "text-gray-700"
-                      }`}>
-                        {task.label}
-                        {task.isOverdue && !task.done && (
-                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                            ⚠ 期限超過
-                          </span>
-                        )}
-                        {task.deadline && !task.done && !task.isOverdue && (
-                          <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
-                            ⏰ {task.deadline}
-                          </span>
-                        )}                        {task.done && task.completedDateKey && defShowOnDays.trim() !== "" && (() => {
-                          const [, m, d] = task.completedDateKey.split("-");
-                          return (
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation();
-                                setCompletedByInput(task.completedBy ?? "");
-                                setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
-                              }}
-                              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
-                              title="完了者を記録（クリックで編集）"
-                            >
-                              ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : " / 完了者を記録"}
-                            </button>
-                          );
-                        })()
-}
-                      </span>
-                    </div>
-
-                    {/* Row 2: Planned selector (right-aligned) */}
-                    <div className="mt-2 flex items-center justify-end gap-1.5">
-                      <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
-                      <select
-                        value={task.planned}
-                        onChange={e => updateTask(task.id, "planned", e.target.value)}
-                        disabled={task.done}
-                        className={`rounded-lg border text-xs px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors ${
-                          task.done
-                            ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
-                            : task.planned === "当日事務担当"
-                              ? "border-blue-200 bg-blue-50 text-rose-700 font-medium"
-                              : task.planned === "当日現場責任者"
-                                ? "border-amber-200 bg-amber-50 text-amber-700 font-medium"
-                                : "border-gray-200 bg-white text-gray-600"
-                        }`}
-                      >
-                        {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </div>
-                    {/* Row 3: 備考欄（pay-aとomori-dのみ表示） */}
-                    {(task.id === "pay-a" || task.id === "omori-d") && (
-                      <div className="mt-2">
-                        <textarea
-                          value={task.note}
-                          onChange={e => {
-                            updateTask(task.id, "note", e.target.value);
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
-                          }}
-                          onFocus={e => {
-                            e.currentTarget.style.height = "auto";
-                            e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
-                          }}
-                          placeholder="備考を入力…"
-                          rows={1}
-                          className="w-full text-xs text-gray-400 bg-transparent border-0 border-b border-dashed border-gray-300 px-0 py-1 focus:outline-none focus:border-gray-400 placeholder-gray-300 resize-none overflow-hidden"
-                          style={{ minHeight: "24px" }}
-                        />
-                      </div>
-                    )}
-                    {/* 編集モード時: 編集・削除ボタン */}
-                    {isEditMode && !isThisEditing && defId !== null && (
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "", defShowOnDays)}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" />編集
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTask(defId, task.label)}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3 h-3" />削除
-                        </button>
-                      </div>
-                    )}
-                  </>
-                    )}
-                  </SortableTaskRow>
-                  );
-                })}
-                {/* 編集モード時: タスク追加ボタン */}
-                {isEditMode && (
-                  <div className="px-4 py-2">
-                    <button
-                      onClick={() => {
-                        setAddTaskCategory(cat);
-                        setAddTaskLabel("");
-                        setAddTaskDefaultPlanned("当日事務担当");
-                        setAddTaskDeadline("");
-                        setShowAddTaskDialog(true);
-                      }}
-                      className="w-full text-xs py-1.5 rounded-lg border border-dashed border-amber-400 text-amber-600 hover:bg-amber-50 font-medium flex items-center justify-center gap-1 transition-colors"
-                    >
-                      <Plus className="w-3 h-3" />タスクを追加
-                    </button>
-                  </div>
-                )}
-              </div>
-                  </SortableContext>
-                </DndContext>
-                );
-              })()}
-            </section>
-            </Fragment>  
-          );
-        });
-        })()}
-
+        {/* 中列：今日のタスク */}
+        <div className="min-w-0 space-y-3">
+          <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-blue-950"><ClipboardList className="size-5 text-blue-500" />今日のタスク</h2>
+              <span className="text-xs text-slate-500">残り {partition.pending.filter(task => task.category !== "大森TODO").length}件</span>
+            </div>
+            {urgentTasks.length > 0 && <details className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <summary className="cursor-pointer font-semibold">期限のある未完了タスク {urgentTasks.length}件</summary>
+              <div className="mt-2 space-y-2">{urgentTasks.map(task => <button key={task.id} type="button"
+                className="block w-full text-left leading-relaxed hover:underline"
+                onClick={() => revealCategory(task.category)}>{task.isOverdue ? "期限超過" : task.deadline} · {task.label}</button>)}</div>
+            </details>}
+          </section>
+          {!completedView || isEditMode ? <>
+            {categories.filter(cat => cat !== "大森TODO").map(renderCategory)}
+            {partition.pending.length === 0 && <p className="rounded-xl bg-white p-4 text-sm text-emerald-700">表示対象の通常タスクはすべて完了しています。</p>}
+          </> : null}
+          {!isEditMode && renderCompleted()}
         </div>{/* /中列 */}
 
         {/* 右列：退勤前チェック・大森TODO */}
@@ -2668,8 +2295,8 @@ export default function Home() {
 
         {/* 退勤前チェックセクション */}
         <section className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-gray-100">
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+          <div className="px-4 py-3 flex flex-wrap items-center gap-2 border-b border-gray-100">
+            <span className="flex items-center gap-1.5 text-base font-bold text-orange-600">
               <CalendarCheck className="w-4 h-4" />
               退勤前チェック
             </span>
@@ -2678,105 +2305,7 @@ export default function Home() {
               {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
             </span>
           </div>
-          {/* 公式LINE */}
-          <div className="px-4 py-3 space-y-2 border-b border-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="text-green-500 shrink-0"><MessageCircle className="w-4 h-4" /></span>
-              <span className="text-sm text-gray-700 font-medium flex-1">公式LINEの要対応チェック（前日１８：００以降）</span>
-            </div>
-            {storeCheck.lineAfternoon.length < STORE_NAMES.length ? (
-              <div className="flex flex-wrap gap-1.5 pl-6">
-                {STORE_NAMES.map(store => {
-                  const checked = storeCheck.lineAfternoon.includes(store);
-                  return (
-                    <button
-                      key={store}
-                      onClick={() => setStoreCheck(prev => ({
-                        ...prev,
-                        line: checked ? prev.lineAfternoon.filter(s => s !== store) : [...prev.lineAfternoon, store]
-                      }))}
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
-                      }`}
-                    >
-                      {checked ? "✓ " : ""}{store}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 pl-6">
-                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                <button onClick={() => setStoreCheck(prev => ({ ...prev, lineAfternoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-              </div>
-            )}
-          </div>
-          {/* ポス */}
-          <div className="px-4 py-3 space-y-2 border-b border-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="text-blue-500 shrink-0"><Tablet className="w-4 h-4" /></span>
-              <span className="text-sm text-gray-700 font-medium flex-1">ポスのチェック</span>
-            </div>
-            {storeCheck.pos.length < STORE_NAMES.length ? (
-              <div className="flex flex-wrap gap-1.5 pl-6">
-                {STORE_NAMES.map(store => {
-                  const checked = storeCheck.pos.includes(store);
-                  return (
-                    <button
-                      key={store}
-                      onClick={() => setStoreCheck(prev => ({
-                        ...prev,
-                        pos: checked ? prev.pos.filter(s => s !== store) : [...prev.pos, store]
-                      }))}
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
-                      }`}
-                    >
-                      {checked ? "✓ " : ""}{store}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 pl-6">
-                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                <button onClick={() => setStoreCheck(prev => ({ ...prev, pos: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-              </div>
-            )}
-          </div>
-          {/* ラクーン */}
-          <div className="px-4 py-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-indigo-500 shrink-0"><Package className="w-4 h-4" /></span>
-              <span className="text-sm text-gray-700 font-medium flex-1">ラクーンのチェック</span>
-            </div>
-            {storeCheck.raccoon.length < STORE_NAMES.length ? (
-              <div className="flex flex-wrap gap-1.5 pl-6">
-                {STORE_NAMES.map(store => {
-                  const checked = storeCheck.raccoon.includes(store);
-                  return (
-                    <button
-                      key={store}
-                      onClick={() => setStoreCheck(prev => ({
-                        ...prev,
-                        raccoon: checked ? prev.raccoon.filter(s => s !== store) : [...prev.raccoon, store]
-                      }))}
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                        checked ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:border-green-300"
-                      }`}
-                    >
-                      {checked ? "✓ " : ""}{store}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 pl-6">
-                <span className="text-green-500 font-semibold text-xs">✨ 全店舗完了！</span>
-                <button onClick={() => setStoreCheck(prev => ({ ...prev, raccoon: [] }))} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">リセット</button>
-              </div>
-            )}
-          </div>
+          {renderStores("lineAfternoon")}
           {/* AI留守電チェック */}
           <div className="border-t border-gray-100 px-4 py-3 space-y-2">
             <div className="flex items-center gap-2">
@@ -2785,6 +2314,9 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <button
+                role="checkbox"
+                aria-checked={storeCheck.aiVoicemail}
+                aria-label="AI留守電対応確認"
                 onClick={toggleAiVoicemail}
                 className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
                   storeCheck.aiVoicemail
@@ -2804,300 +2336,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 大森TODOカテゴリ */}
-        {(() => {
-          const taskNumberMap = new Map<string, number>();
-          let globalIdx = 1;
-          for (const t of activeTasks) { taskNumberMap.set(t.id, globalIdx++); }
-          const cat = "大森TODO";
-          const catTasks = tasks.filter(t => t.category === cat);
-          const catDone = catTasks.filter(t => t.done).length;
-          const cfg = CAT_CONFIG[cat] ?? { border: "border-gray-300", badge: "bg-gray-100 text-gray-600", icon: <ClipboardList className="w-4 h-4" /> };
-          return (
-            <section
-              key={cat}
-              className={`rounded-xl border overflow-hidden transition-all duration-300 ${
-                flashCategories.has(cat) ? "bg-green-50 border-green-300" : "bg-white border-gray-200"
-              }`}
-              style={{ boxShadow: flashCategories.has(cat) ? "0 0 0 2px #86efac" : "0 1px 3px rgba(0,0,0,0.06)" }}
-            >
-              <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: "1px solid #f3f4f6" }}>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 shrink-0">{cfg.icon}</span>
-                  <span className="text-xs font-bold text-gray-500 tracking-widest uppercase">{cat}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {catDone < catTasks.length && (
-                    <button
-                      onClick={() => {
-                        setUndoHistory(prev => [tasks, ...prev.slice(0, 9)]);
-                        // doneFlagsRefも同時に更新
-                        tasks.filter(t => t.category === cat).forEach(t => { doneFlagsRef.current[t.id] = true; });
-                        setTasks(prev => prev.map(t => t.category === cat ? { ...t, done: true } : t));
-                      }}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-rose-600 font-medium transition-colors"
-                    >
-                      一括完了
-                    </button>
-                  )}
-                  <span className="text-xs tabular-nums">
-                    {catDone === catTasks.length
-                      ? <span className="text-green-500 font-semibold">✓ 完了</span>
-                      : <span className="text-gray-400">{catDone} / {catTasks.length}</span>
-                    }
-                  </span>
-                </div>
-              </div>
-              {(() => {
-                const catDefTasks2 = taskDefinitionData?.find(c => c.name === cat)?.tasks ?? [];
-                const sortableIds2 = catDefTasks2.map(t => `def-${t.id}`);
-                return (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(event) => handleDragEnd(event, cat)}
-                >
-                  <SortableContext items={sortableIds2} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-gray-50">
-                {catTasks.map((task) => {
-                  const taskNum = taskNumberMap.get(task.id);
-                  // DBタスク定義IDを取得（legacyIdから逆引き）
-                  const mobileDefRow = (() => {
-                    if (!taskDefinitionData) return null;
-                    for (const c of taskDefinitionData) {
-                      const found = c.tasks.find(d => (d.legacyId ?? `def-${d.id}`) === task.id);
-                      if (found) return found;
-                    }
-                    return null;
-                  })();
-                  const defId = mobileDefRow?.id ?? null;
-                  const defShowOnDays = mobileDefRow?.showOnDays ?? "";
-                  const isThisEditing = editingTaskId !== null && editingTaskId === defId;
-                  const sortableId2 = defId ? `def-${defId}` : task.id;
-                  return (
-                    <SortableTaskRow
-                      key={task.id}
-                      sortableId={sortableId2}
-                      isEditMode={isEditMode}
-                      className={`relative px-4 py-3 transition-all duration-200 ${
-                        task.done ? "opacity-50" : ""
-                      } ${
-                        hideDone && task.done ? "hidden" : ""
-                      } ${
-                        isEditMode ? "bg-amber-50/30 pl-8" : ""
-                      } ${
-                        !isEditMode && !task.done && task.isOverdue ? "bg-red-50 border-l-2 border-red-400" : ""
-                      }`}
-                    >
-                      {isEditMode && isThisEditing ? (
-                        // 編集インラインフォーム
-                        <div className="space-y-2">
-                          <textarea
-                            value={editingLabel}
-                            onChange={e => setEditingLabel(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                                e.preventDefault();
-                                saveEditTask();
-                              }
-                              if (e.key === "Escape") setEditingTaskId(null);
-                            }}
-                            rows={2}
-                            className="w-full text-sm leading-relaxed border border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-y"
-                            autoFocus
-                          />
-                          <div className="flex gap-2">
-                            <div className="flex-1">
-                              <label className="text-[10px] text-gray-400">デフォルト担当</label>
-                              <select
-                                value={editingDefaultPlanned}
-                                onChange={e => setEditingDefaultPlanned(e.target.value)}
-                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
-                              >
-                                {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                              </select>
-                            </div>
-                            <div className="flex-1">
-                              <label className="text-[10px] text-gray-400">期限</label>
-                              <input
-                                type="text"
-                                value={editingDeadline}
-                                onChange={e => setEditingDeadline(e.target.value)}
-                                placeholder="例: 17:00まで"
-                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <label className="text-[10px] text-gray-400">表示日</label>
-                              <input
-                                type="text"
-                                value={editingShowOnDays}
-                                onChange={e => setEditingShowOnDays(e.target.value)}
-                                placeholder="例: 15,30（空=常時）"
-                                className="mt-0.5 w-full text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none"
-                                title="毎月15日・30日のみ表示する場合は 15,30 と入力。空の場合は常時表示。"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={saveEditTask} className="flex-1 text-xs py-1.5 rounded-lg bg-amber-500 text-white font-semibold hover:bg-amber-600">保存</button>
-                            <button onClick={() => setEditingTaskId(null)} className="flex-1 text-xs py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">キャンセル</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2.5">
-                            {taskNum !== undefined && (
-                              <span className="text-[10px] font-bold text-gray-300 tabular-nums w-4 shrink-0 text-right">{taskNum}</span>
-                            )}
-                            <button
-                              onClick={() => toggleDone(task.id)}
-                              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                                completingTasks.has(task.id)
-                                  ? "border-green-400 bg-green-50 animate-pulse"
-                                  : task.done
-                                  ? "border-green-400 bg-green-400"
-                                  : "border-gray-300 hover:border-blue-400"
-                              }`}
-                            >
-                              {(task.done || completingTasks.has(task.id)) && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                              )}
-                            </button>
-                            <label
-                              className={`flex items-center gap-0.5 cursor-pointer shrink-0 select-none ${
-                                task.done ? "opacity-30 pointer-events-none" : ""
-                              }`}
-                              onClick={() => toggleHelp(task.id)}
-                            >
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                                task.help
-                                  ? "bg-amber-400 border-amber-400 text-white"
-                                  : "border-gray-200 text-gray-300 hover:border-amber-300 hover:text-amber-400"
-                              }`}>HELP</span>
-                            </label>
-                            <span className={`shrink-0 ${ getIconColor(task.id) }`}>{task.icon}</span>
-                            <span className={`flex-1 text-sm leading-snug whitespace-pre-line ${
-                              task.done
-                                ? "line-through text-gray-400"
-                                : task.isOverdue
-                                  ? "text-red-700 font-semibold"
-                                  : "text-gray-800"
-                            }`}>
-                              {task.label}
-                              {task.isOverdue && !task.done && (
-                                <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                                  ⚠ 期限超過
-                                </span>
-                              )}
-                              {task.deadline && !task.done && !task.isOverdue && (
-                                <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
-                                  ⏰ {task.deadline}
-                                </span>
-                              )}
-                              {task.done && task.completedDateKey && defShowOnDays.trim() !== "" && (() => {
-                                const [, m, d] = task.completedDateKey.split("-");
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      setCompletedByInput(task.completedBy ?? "");
-                                      setCompletedByDialog({ taskId: task.id, label: task.label, completedDateKey: task.completedDateKey!, currentCompletedBy: task.completedBy });
-                                    }}
-                                    className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-300 hover:bg-green-200 cursor-pointer transition-colors"
-                                    title="完了者を記録（クリックで編集）"
-                                  >
-                                    ✓ {parseInt(m)}月{parseInt(d)}日完了{task.completedBy ? ` / ${task.completedBy}` : " / 完了者を記録"}
-                                  </button>
-                                );
-                              })()}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex items-center justify-end gap-1.5">
-                            <span className="text-[10px] text-gray-400 font-medium">作業予定者:</span>
-                            <select
-                              value={task.planned}
-                              onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, planned: e.target.value } : t))}
-                              className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:border-blue-300"
-                            >
-                              {PLANNED_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                          </div>
-                          {/* 編集モード時: 編集・削除ボタン */}
-                          {isEditMode && defId !== null && (
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                onClick={() => startEditTask(defId, task.label, task.planned, task.deadline || "", defShowOnDays)}
-                                className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-medium flex items-center gap-1"
-                              >
-                                <FileText className="w-3 h-3" />編集
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTask(defId, task.label)}
-                                className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3 h-3" />削除
-                              </button>
-                            </div>
-                          )}
-                      </>
-                      )}
-                    </SortableTaskRow>
-                  );
-                })}
-              </div>
-                  </SortableContext>
-                </DndContext>
-                );
-              })()}
-              {/* 編集モード時: タスク追加ボタン */}
-              {isEditMode && (
-                <div className="px-4 py-2">
-                  <button
-                    onClick={() => {
-                      setAddTaskCategory(cat);
-                      setAddTaskLabel("");
-                      setAddTaskDefaultPlanned("当日現場責任者");
-                      setAddTaskDeadline("");
-                      setShowAddTaskDialog(true);
-                    }}
-                    className="w-full text-xs py-2 rounded-lg border border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 font-medium flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" />タスクを追加
-                  </button>
-                </div>
-              )}
-              {hideDone && catTasks.every(t => t.done) && (
-                <div className="px-4 py-3 text-xs text-green-600 font-medium flex items-center gap-1.5">
-                  <span>✓</span><span>このカテゴリはすべて完了しています</span>
-                </div>
-              )}
-            </section>
-          );
-        })()}
+        {(!completedView || isEditMode) && renderCategory("大森TODO")}
 
         {/* フッター操作パネル */}
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {/* 完了済みを隠すトグル */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <button
-              role="switch"
-              aria-checked={hideDone}
-              onClick={() => setHideDone(v => !v)}
-              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                hideDone ? "bg-blue-600" : "bg-gray-200"
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  hideDone ? "translate-x-5" : "translate-x-0.5"
-                }`}
-              />
-            </button>
-            <span className="text-sm text-gray-600 whitespace-nowrap">完了済みを隠す</span>
-          </label>
-
           {/* タスク編集ボタン */}
           <button
             onClick={() => {
