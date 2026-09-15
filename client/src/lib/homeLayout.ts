@@ -4,7 +4,12 @@ export function partitionHomeTasks<T extends { done: boolean; planned: string }>
   return { pending: visible.filter(task => !task.done), completed: visible.filter(task => task.done) };
 }
 
-/** Preserve other services and any existing store entries when checking a column. */
-export function checkAllStores<T, K extends keyof T>(state: T, key: K, stores: readonly string[]): T {
-  return { ...state, [key]: Array.from(new Set([...(state[key] as string[]), ...stores])) };
+/** Toggle the displayed stores in one column, preserving other columns and unknown stores. */
+export function toggleAllStores<T, K extends keyof T>(state: T, key: K, stores: readonly string[]): T {
+  if (stores.length === 0) return state;
+  const checked = state[key] as string[];
+  const allChecked = stores.every(store => checked.includes(store));
+  return { ...state, [key]: allChecked
+    ? checked.filter(store => !stores.includes(store))
+    : Array.from(new Set([...checked, ...stores])) };
 }

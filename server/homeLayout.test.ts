@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAllStores, partitionHomeTasks } from "../client/src/lib/homeLayout";
+import { toggleAllStores, partitionHomeTasks } from "../client/src/lib/homeLayout";
 
 describe("home task presentation", () => {
   const tasks = [
@@ -27,10 +27,10 @@ describe("store bulk check isolation", () => {
   it("checks only the chosen service, preserving morning and voicemail states", () => {
     const initial = { lineMorning: ["大森南"], lineAfternoon: ["大井町", "旧店舗"], pos: [], raccoon: ["大井町"], aiVoicemail: false };
     const stores = ["大井町", "大森南"];
-    const next = checkAllStores(initial, "lineAfternoon", stores);
+    const next = toggleAllStores(initial, "lineAfternoon", stores);
     expect(next).toEqual({ ...initial, lineAfternoon: ["大井町", "旧店舗", "大森南"] });
     expect(initial.lineAfternoon).toEqual(["大井町", "旧店舗"]);
-    expect(checkAllStores(next, "lineAfternoon", stores)).toEqual(next);
-    expect(checkAllStores(initial, "raccoon", stores)).toEqual({ ...initial, raccoon: stores });
+    expect(toggleAllStores(next, "lineAfternoon", stores)).toEqual({ ...initial, lineAfternoon: ["旧店舗"] });
+    expect(toggleAllStores(initial, "raccoon", stores)).toEqual({ ...initial, raccoon: stores });
   });
 });

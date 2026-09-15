@@ -50,7 +50,8 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { StoreCheckTable } from "@/components/StoreCheckTable";
-import { partitionHomeTasks, checkAllStores } from "@/lib/homeLayout";
+import { emptyStoreChecks, readStoreChecks, storeCheckValues, STORE_CHECK_FIELDS, type StoreCheckState, type StoreCheckListKey } from "@/lib/storeChecks";
+import { partitionHomeTasks, toggleAllStores } from "@/lib/homeLayout";
 import { isCalendarAutomationEnabled } from "@/lib/calendarAutomation";
 import {
   DndContext,
@@ -126,13 +127,7 @@ interface Task extends TaskDef {
 
 const STORE_NAMES = ["大井町", "大森南", "天満", "戸越銀座駅前", "大田中央", "川崎新町", "幸塚越"];
 
-interface StoreCheckState {
-  lineMorning: string[];  // 午前LINEチェック済み店舗名
-  lineAfternoon: string[]; // 午後（退勤前）LINEチェック済み店舗名
-  pos: string[];
-  raccoon: string[];
-  aiVoicemail: boolean;   // AI留守電チェック（退勤前）
-}
+
 
 // ─── Task Definitions ────────────────────────────────────────────────────────
 
@@ -436,7 +431,7 @@ export default function Home() {
   const [grayCell, setGrayCell] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [storesShift, setStoresShift] = useState<{ confirmedUntil: string; updatedBy: string }>({ confirmedUntil: "", updatedBy: "" });
   const [individualHandoverOpen, setIndividualHandoverOpen] = useState<boolean>(true);
-  const [storeCheck, setStoreCheck] = useState<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
+  const [storeCheck, setStoreCheck] = useState<StoreCheckState>(emptyStoreChecks());
   const [individualHandovers, setIndividualHandovers] = useState<IndividualHandoverRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [prevDayTasks, setPrevDayTasks] = useState<Task[]>([]);
@@ -472,7 +467,7 @@ export default function Home() {
   const doneFlagsRef = useRef<Record<string, boolean>>({});
   const taskSnapshotRef = useRef<Record<string, Task>>({});
   const taskDirtyIdsRef = useRef<Set<string>>(new Set());
-  const storeCheckSnapshotRef = useRef<StoreCheckState>({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
+  const storeCheckSnapshotRef = useRef<StoreCheckState>(emptyStoreChecks());
   const storeCheckRevisionsRef = useRef<Record<string, number | undefined>>({});
   const storeCheckDirtyTypesRef = useRef<Set<string>>(new Set());
   const individualSnapshotRef = useRef<Record<string, IndividualHandoverRecord>>({});
@@ -755,15 +750,11 @@ export default function Home() {
   useEffect(() => {
     if (storeCheckData === undefined) return;
     if (storeCheckLoadedRef.current && storeCheckData.length === 0) return;
-    const fromDatabase: StoreCheckState = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
+    const fromDatabase = readStoreChecks(storeCheckData);
     const nextRevisions: Record<string, number | undefined> = {};
     for (const row of storeCheckData) {
       nextRevisions[row.checkType] = row.revision;
-      if (row.checkType === "line_morning" || row.checkType === "line") fromDatabase.lineMorning = row.checkedStores as string[];
-      else if (row.checkType === "line_afternoon") fromDatabase.lineAfternoon = row.checkedStores as string[];
-      else if (row.checkType === "pos") fromDatabase.pos = row.checkedStores as string[];
-      else if (row.checkType === "raccoon") fromDatabase.raccoon = row.checkedStores as string[];
-      else if (row.checkType === "ai_voicemail") fromDatabase.aiVoicemail = (row.checkedStores as string[]).length > 0;
+
     }
 
     if (!storeCheckLoadedRef.current) {
@@ -777,19 +768,13 @@ export default function Home() {
 
     setStoreCheck(current => {
       const merged = { ...current };
-      const mappings: Array<[keyof StoreCheckState, string]> = [
-        ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
-        ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
-      ];
+      const mappings = STORE_CHECK_FIELDS;
       for (const [key, dbKey] of mappings) {
         if (!storeCheckDirtyTypesRef.current.has(dbKey)) merged[key] = fromDatabase[key] as never;
       }
       return merged;
     });
-    const mappings: Array<[keyof StoreCheckState, string]> = [
-      ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
-      ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
-    ];
+    const mappings = STORE_CHECK_FIELDS;
     for (const [key, dbKey] of mappings) {
       if (!storeCheckDirtyTypesRef.current.has(dbKey)) {
         storeCheckSnapshotRef.current = { ...storeCheckSnapshotRef.current, [key]: fromDatabase[key] };
@@ -888,7 +873,7 @@ export default function Home() {
     individualHandoverLoadedRef.current = false;
     taskSnapshotRef.current = {};
     taskDirtyIdsRef.current.clear();
-    storeCheckSnapshotRef.current = { lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false };
+    storeCheckSnapshotRef.current = emptyStoreChecks();
     storeCheckRevisionsRef.current = {};
     storeCheckDirtyTypesRef.current.clear();
     individualSnapshotRef.current = {};
@@ -896,7 +881,7 @@ export default function Home() {
     // 日付変更時はdoneFlagsRefもリセット（新しい日付のチェック状態はDBから取得）
     doneFlagsRef.current = {};
     setTasks(activeTasks.map(t => ({ ...t, planned: t.defaultPlanned ?? "当日事務担当", actual: "", done: false, help: false, note: "" })));
-    setStoreCheck({ lineMorning: [], lineAfternoon: [], pos: [], raccoon: [], aiVoicemail: false });
+    setStoreCheck(emptyStoreChecks());
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
@@ -918,10 +903,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!storeCheckLoadedRef.current) return;
-    const mappings: Array<[keyof StoreCheckState, string]> = [
-      ["lineMorning", "line_morning"], ["lineAfternoon", "line_afternoon"],
-      ["pos", "pos"], ["raccoon", "raccoon"], ["aiVoicemail", "ai_voicemail"],
-    ];
+    const mappings = STORE_CHECK_FIELDS;
     for (const [key, dbKey] of mappings) {
       if (sameStoreCheck(storeCheck, storeCheckSnapshotRef.current, key)) storeCheckDirtyTypesRef.current.delete(dbKey);
       else storeCheckDirtyTypesRef.current.add(dbKey);
@@ -993,13 +975,7 @@ export default function Home() {
       const dirtyTypes = new Set(storeCheckDirtyTypesRef.current);
       if (dirtyTypes.size === 0) return;
       const latestStoreCheck = storeCheckRef.current;
-      const values: Record<string, string[]> = {
-        line_morning: latestStoreCheck.lineMorning,
-        line_afternoon: latestStoreCheck.lineAfternoon,
-        pos: latestStoreCheck.pos,
-        raccoon: latestStoreCheck.raccoon,
-        ai_voicemail: latestStoreCheck.aiVoicemail ? ["done"] : [],
-      };
+      const values = storeCheckValues(latestStoreCheck);
       isSavingStoreCheckRef.current = true;
       try {
         const saved = await bulkUpsertStoreCheck.mutateAsync(Array.from(dirtyTypes).map(checkType => ({
@@ -1010,13 +986,7 @@ export default function Home() {
         })));
         for (const savedState of saved) {
           storeCheckRevisionsRef.current[savedState.checkType] = savedState.revision;
-          const fieldByCheckType: Record<string, keyof StoreCheckState> = {
-            line_morning: "lineMorning",
-            line_afternoon: "lineAfternoon",
-            pos: "pos",
-            raccoon: "raccoon",
-            ai_voicemail: "aiVoicemail",
-          };
+          const fieldByCheckType: Record<string, keyof StoreCheckState> = Object.fromEntries(STORE_CHECK_FIELDS.map(([field, dbKey]) => [dbKey, field]));
           const field = fieldByCheckType[savedState.checkType];
           if (!field) continue;
           const savedValue = savedState.checkType === "ai_voicemail"
@@ -1506,7 +1476,7 @@ export default function Home() {
       const wasComplete = completedCategories.has(cat);
       if (allDone && !wasComplete) {
         setCompletedCategories(prev => new Set(prev).add(cat));
-        if (cat !== "各種システムのチェック" || [storeCheck.lineMorning, storeCheck.pos, storeCheck.raccoon].every(checked => STORE_NAMES.every(store => checked.includes(store)))) {
+        if (cat !== "各種システムのチェック" || [storeCheck.lineMorning, storeCheck.posMorning, storeCheck.raccoonMorning].every(checked => STORE_NAMES.every(store => checked.includes(store)))) {
           setCategoryOpen(prev => ({ ...prev, [cat]: false }));
         }
         toast.success(`✨ ${cat}—全タスク完了！`, { duration: 2500 });
@@ -1805,16 +1775,20 @@ export default function Home() {
 
   };
 
-  const renderStores = (lineKey: "lineMorning" | "lineAfternoon") => <StoreCheckTable
-    stores={STORE_NAMES}
-    services={[
-      { key: lineKey, label: "LINE", description: "公式LINEの要対応チェック（前日１８：００以降）", checked: storeCheck[lineKey] },
-      { key: "pos", label: "POS", description: "ポスのチェック", checked: storeCheck.pos },
-      { key: "raccoon", label: "ラクーン", description: "ラクーンのチェック", checked: storeCheck.raccoon },
-    ]}
-    onToggle={(key, store) => toggleStoreCheck(key as "lineMorning" | "lineAfternoon" | "pos" | "raccoon", store)}
-    onCheckAll={key => setStoreCheck(prev => checkAllStores(prev, key as "lineMorning" | "lineAfternoon" | "pos" | "raccoon", STORE_NAMES))}
-  />;
+  const renderStores = (lineKey: "lineMorning" | "lineAfternoon") => {
+    const posKey = lineKey === "lineMorning" ? "posMorning" : "posAfternoon";
+    const raccoonKey = lineKey === "lineMorning" ? "raccoonMorning" : "raccoonAfternoon";
+    return <StoreCheckTable
+      stores={STORE_NAMES}
+      services={[
+        { key: lineKey, label: "LINE", description: "公式LINEの要対応チェック（前日１８：００以降）", checked: storeCheck[lineKey] },
+        { key: posKey, label: "POS", description: "ポスのチェック", checked: storeCheck[posKey] },
+        { key: raccoonKey, label: "ラクーン", description: "ラクーンのチェック", checked: storeCheck[raccoonKey] },
+      ]}
+      onToggle={(key, store) => toggleStoreCheck(key as StoreCheckListKey, store)}
+      onToggleAll={key => setStoreCheck(prev => toggleAllStores(prev, key as StoreCheckListKey, STORE_NAMES))}
+    />;
+  };
 
   const renderCategory = (cat: string) => {
     const allTasks = tasks.filter(task => task.category === cat);
@@ -1823,7 +1797,7 @@ export default function Home() {
     const done = allTasks.filter(task => task.done).length;
     const open = isCategoryOpen(cat);
     const cfg = CAT_CONFIG[cat];
-    const storeRemaining = cat === "各種システムのチェック" ? STORE_NAMES.length * 3 - [storeCheck.lineMorning, storeCheck.pos, storeCheck.raccoon].reduce((total, checked) => total + STORE_NAMES.filter(store => checked.includes(store)).length, 0) : 0;
+    const storeRemaining = cat === "各種システムのチェック" ? STORE_NAMES.length * 3 - [storeCheck.lineMorning, storeCheck.posMorning, storeCheck.raccoonMorning].reduce((total, checked) => total + STORE_NAMES.filter(store => checked.includes(store)).length, 0) : 0;
     return <section id={`category-${cat}`} key={cat} className="scroll-mt-40 overflow-hidden rounded-xl border border-slate-200 bg-white">
       <button type="button" aria-expanded={open} onClick={() => rememberCategoryOpen(cat, !open)}
         className="flex w-full items-center gap-2 bg-blue-50/40 px-4 py-3 text-left hover:bg-blue-50">
@@ -2324,7 +2298,7 @@ export default function Home() {
             </span>
             <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">17:30まで</span>
             <span className="ml-auto text-xs text-gray-400">
-              {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.pos.length === STORE_NAMES.length, storeCheck.raccoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
+              {[storeCheck.lineAfternoon.length === STORE_NAMES.length, storeCheck.posAfternoon.length === STORE_NAMES.length, storeCheck.raccoonAfternoon.length === STORE_NAMES.length, storeCheck.aiVoicemail].filter(Boolean).length}/4項目完了
             </span>
           </div>
           {renderStores("lineAfternoon")}

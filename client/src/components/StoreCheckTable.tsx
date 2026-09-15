@@ -1,10 +1,10 @@
 type Service = { key: string; label: string; description: string; checked: string[] };
 
-export function StoreCheckTable({ stores, services, onToggle, onCheckAll }: {
+export function StoreCheckTable({ stores, services, onToggle, onToggleAll }: {
   stores: readonly string[];
   services: Service[];
   onToggle: (key: string, store: string) => void;
-  onCheckAll: (key: string) => void;
+  onToggleAll: (key: string) => void;
 }) {
   return <div className="overflow-x-auto">
     <table className="w-full table-fixed text-xs text-slate-700">
@@ -15,10 +15,10 @@ export function StoreCheckTable({ stores, services, onToggle, onCheckAll }: {
             const allDone = stores.every(store => service.checked.includes(store));
             return <th key={service.key} scope="col" className="px-1 py-3 font-medium">
               <span title={service.description}>{service.label}</span>
-              <button type="button" disabled={allDone} onClick={() => onCheckAll(service.key)}
-                aria-label={`${service.label}：すべての店舗にチェックを入れる`}
-                className="mt-1.5 block w-full rounded border border-blue-100 bg-white px-0.5 py-1 text-[10px] text-blue-600 hover:bg-blue-50 disabled:border-transparent disabled:bg-transparent disabled:text-emerald-600">
-                {allDone ? "✓ 全店舗完了" : "全店舗にチェック"}
+              <button type="button" onClick={() => onToggleAll(service.key)}
+                aria-label={`${service.label}：すべての店舗のチェックを${allDone ? "外す" : "入れる"}`}
+                className="mt-1.5 block w-full rounded border border-blue-100 bg-white px-0.5 py-1 text-[10px] text-blue-600 hover:bg-blue-50">
+                {allDone ? "全店舗のチェックを外す" : "全店舗にチェック"}
               </button>
             </th>;
           })}
