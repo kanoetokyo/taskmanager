@@ -402,6 +402,18 @@ function SortableTaskRow({ sortableId, isEditMode, children, className, style }:
     </div>
   );
 }
+const CATEGORY_OPEN_STORAGE_KEY = "task-kakumei:home:category-open:v1";
+
+function readCategoryOpen(): Record<string, boolean> {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(CATEGORY_OPEN_STORAGE_KEY) ?? "{}");
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+    return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === "boolean"));
+  } catch {
+    return {};
+  }
+}
+
 export default function Home() {
   const utils = trpc.useUtils();
 
@@ -412,7 +424,7 @@ export default function Home() {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [memberFilter, setMemberFilter] = useState("");
   const [handoverFilter, setHandoverFilter] = useState("");
-  const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>({});
+  const [categoryOpen, setCategoryOpen] = useState<Record<string, boolean>>(readCategoryOpen);
   const [handoverOpen, setHandoverOpen] = useState<Record<string, boolean>>({});
   const [taskDetailsOpen, setTaskDetailsOpen] = useState<Record<string, boolean>>({});
   const [showPrevUndone, setShowPrevUndone] = useState<boolean>(false);
@@ -888,7 +900,7 @@ export default function Home() {
     setLastSaved(null);
     setUndoHistory([]);
     setCompletedCategories(new Set());
-    setCategoryOpen({});
+    setCategoryOpen(readCategoryOpen());
     setCompletedOpen(false);
   }, [currentDateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1539,9 +1551,19 @@ export default function Home() {
   const urgentTasks = partition.pending.filter(task => task.deadline || task.isOverdue);
   const firstCategory = categories.find(cat => cat !== "大森TODO");
   const isCategoryOpen = (cat: string) => isEditMode || (categoryOpen[cat] ?? cat === firstCategory);
+  const rememberCategoryOpen = (cat: string, open: boolean) => {
+    setCategoryOpen(prev => ({ ...prev, [cat]: open }));
+    // Remember explicit choices on this browser. Automatic completion collapse
+    // does not overwrite them, so the next day's tasks can open as before.
+    try {
+      localStorage.setItem(CATEGORY_OPEN_STORAGE_KEY, JSON.stringify({ ...readCategoryOpen(), [cat]: open }));
+    } catch {
+      // Storage can be unavailable; opening and closing still works this visit.
+    }
+  };
   const revealCategory = (cat: string) => {
     setCompletedView(false);
-    setCategoryOpen(prev => ({ ...prev, [cat]: true }));
+    rememberCategoryOpen(cat, true);
     requestAnimationFrame(() => document.getElementById(`category-${cat}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
   };
 
@@ -1803,7 +1825,7 @@ export default function Home() {
     const cfg = CAT_CONFIG[cat];
     const storeRemaining = cat === "各種システムのチェック" ? STORE_NAMES.length * 3 - [storeCheck.lineMorning, storeCheck.pos, storeCheck.raccoon].reduce((total, checked) => total + STORE_NAMES.filter(store => checked.includes(store)).length, 0) : 0;
     return <section id={`category-${cat}`} key={cat} className="scroll-mt-40 overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <button type="button" aria-expanded={open} onClick={() => setCategoryOpen(prev => ({ ...prev, [cat]: !open }))}
+      <button type="button" aria-expanded={open} onClick={() => rememberCategoryOpen(cat, !open)}
         className="flex w-full items-center gap-2 bg-blue-50/40 px-4 py-3 text-left hover:bg-blue-50">
         <span className="text-blue-500">{cfg?.icon ?? <ClipboardList className="size-4" />}</span>
         <span className="flex-1 text-sm font-semibold text-blue-950">{cat}</span>
