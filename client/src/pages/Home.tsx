@@ -1537,6 +1537,9 @@ export default function Home() {
     requestAnimationFrame(() => document.getElementById(`category-${cat}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
   };
 
+  // Pin the existing AI voicemail definition on Home without changing the shared task order.
+  const isMorningPriority = (task: Task) => task.id === "def-90001" && task.category === "各種システムのチェック";
+
   const renderTask = (task: Task) => {
                   const cat = task.category;
                   const taskNum = activeTasks.findIndex(item => item.id === task.id) + 1;
@@ -1564,6 +1567,8 @@ export default function Home() {
                               ? "bg-red-50 border-l-2 border-red-400"
                               : task.help
                                 ? "bg-red-50"
+                                : isMorningPriority(task)
+                                  ? "bg-amber-50 border-l-2 border-amber-400"
                                 : task.deadline
                                   ? "bg-amber-50/50"
                                   : "hover:bg-gray-50/80"
@@ -1645,6 +1650,7 @@ export default function Home() {
                                 ? "text-amber-900"
                                 : "text-gray-700"
                       }`}>
+                        {isMorningPriority(task) && <span className={`mr-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${task.done ? "bg-gray-100 text-gray-500" : "bg-amber-500 text-white"}`}>朝一</span>}
                         {task.label}
                         {task.help && !task.done && <span className="ml-2 text-xs font-semibold text-rose-600">HELP</span>}
                         {task.isOverdue && !task.done && (
@@ -1794,6 +1800,8 @@ export default function Home() {
     const allTasks = tasks.filter(task => task.category === cat);
     const pending = partition.pending.filter(task => task.category === cat);
     const visible = isEditMode ? allTasks : pending;
+    const priorityTasks = isEditMode ? [] : visible.filter(isMorningPriority);
+    const otherTasks = isEditMode ? visible : visible.filter(task => !isMorningPriority(task));
     const done = allTasks.filter(task => task.done).length;
     const open = isCategoryOpen(cat);
     const cfg = CAT_CONFIG[cat];
@@ -1807,13 +1815,16 @@ export default function Home() {
         <ChevronDown className={`size-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && <>
-        {cat === "各種システムのチェック" && <details className="border-b border-slate-100">
-          <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-slate-600">店舗システム確認 <span className="text-amber-700">LINE 12:00まで</span> · 残り{storeRemaining}件</summary>
-          {renderStores("lineMorning")}
-        </details>}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={event => handleDragEnd(event, cat)}>
           <SortableContext items={visible.map(task => taskDefinitionData?.find(category => category.name === cat)?.tasks.find(def => def.legacyId === task.id || `def-${def.id}` === task.id)).filter(Boolean).map(def => `def-${def!.id}`)} strategy={verticalListSortingStrategy}>
-            <div className="divide-y divide-slate-100">{visible.map(renderTask)}</div>
+            <div className="divide-y divide-slate-100">
+              {priorityTasks.map(renderTask)}
+              {cat === "各種システムのチェック" && <details>
+                <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-slate-600">店舗システム確認 <span className="text-amber-700">LINE 12:00まで</span> · 残り{storeRemaining}件</summary>
+                {renderStores("lineMorning")}
+              </details>}
+              {otherTasks.map(renderTask)}
+            </div>
           </SortableContext>
         </DndContext>
         {!visible.length && <p className="px-4 py-3 text-xs text-slate-500">{memberFilter ? "この担当者の未完了タスクはありません" : "通常タスクはすべて完了しました"}</p>}
