@@ -11,11 +11,14 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { createSerialSaveQueue } from "@/lib/serialSaveQueue";
+import { ATINN_HANDOVER_CATEGORIES } from "@shared/const";
 
 type ImageSlot = "before" | "after";
+type AtinnHandoverCategory = "" | (typeof ATINN_HANDOVER_CATEGORIES)[number];
 
 type AtinnIssue = {
   id: string;
+  category: AtinnHandoverCategory;
   title: string;
   content: string;
   beforeImageUrl: string | null;
@@ -27,8 +30,15 @@ type AtinnIssue = {
 const MAX_SOURCE_IMAGE_SIZE = 20 * 1024 * 1024;
 const MAX_UPLOAD_DATA_URL_LENGTH = 4_150_000;
 
+function toAtinnHandoverCategory(category: string): AtinnHandoverCategory {
+  return ATINN_HANDOVER_CATEGORIES.includes(category as (typeof ATINN_HANDOVER_CATEGORIES)[number])
+    ? category as AtinnHandoverCategory
+    : "";
+}
+
 function toAtinnIssue(issue: {
   id: string;
+  category: string;
   title: string;
   content: string;
   beforeImageUrl: string | null;
@@ -38,6 +48,7 @@ function toAtinnIssue(issue: {
 }): AtinnIssue {
   return {
     id: issue.id,
+    category: toAtinnHandoverCategory(issue.category),
     title: issue.title,
     content: issue.content,
     beforeImageUrl: issue.beforeImageUrl,
@@ -50,6 +61,7 @@ function toAtinnIssue(issue: {
 function newAtinnIssue(sortOrder: number): AtinnIssue {
   return {
     id: crypto.randomUUID(),
+    category: "",
     title: "",
     content: "",
     beforeImageUrl: null,
@@ -268,6 +280,7 @@ export default function AtinnHandover() {
     try {
       const saved = await upsertIssue.mutateAsync({
         id: issue.id,
+        category: issue.category,
         title: issue.title,
         content: issue.content,
         beforeImageUrl: issue.beforeImageUrl,
@@ -417,7 +430,7 @@ export default function AtinnHandover() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-3">
           <div>
             <h1 className="text-base font-bold text-gray-800">よくある指摘事項</h1>
-            <p className="mt-0.5 text-xs text-gray-500">各項目にBefore／After写真を追加して、引き継ぎ時の基準を共有します。</p>
+            <p className="mt-0.5 text-xs text-gray-500">カテゴリごとにBefore／After写真を追加して、引き継ぎ時の基準を共有します。</p>
           </div>
           <button
             type="button"
@@ -459,6 +472,19 @@ export default function AtinnHandover() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
+                <label className="mb-4 flex items-center gap-2 text-xs font-medium text-gray-600">
+                  カテゴリ
+                  <select
+                    value={issue.category}
+                    onChange={event => updateIssue(issue.id, { category: toAtinnHandoverCategory(event.target.value) }, true)}
+                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-700 outline-none focus:border-sky-400"
+                  >
+                    <option value="">カテゴリを選択</option>
+                    {ATINN_HANDOVER_CATEGORIES.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </label>
                 <textarea
                   value={issue.content}
                   onChange={event => updateIssue(issue.id, { content: event.target.value })}

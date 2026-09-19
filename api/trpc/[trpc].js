@@ -8,6 +8,19 @@ var COOKIE_NAME = "app_session_id";
 var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
 var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
+var ATINN_HANDOVER_CATEGORIES = [
+  "\u30A8\u30A2\u30B3\u30F3",
+  "\u30AD\u30C3\u30C1\u30F3",
+  "\u98DF\u5668",
+  "\u5BB6\u96FB",
+  "\u6D74\u5BA4",
+  "\u30C8\u30A4\u30EC",
+  "\u6D17\u9762\u6240",
+  "\u30EA\u30CD\u30F3",
+  "\u5E8A",
+  "\u30AC\u30E9\u30B9\u30B5\u30C3\u30B7",
+  "\u68DA\u3084\u5F15\u304D\u51FA\u3057"
+];
 
 // server/_core/cookies.ts
 function isSecureRequest(req) {
@@ -350,6 +363,7 @@ var customerHandovers = pgTable("customer_handovers", {
 });
 var atinnHandoverIssues = pgTable("atinn_handover_issues", {
   id: varchar("id", { length: 64 }).primaryKey(),
+  category: varchar("category", { length: 64 }).notNull().default(""),
   title: varchar("title", { length: 255 }).notNull().default(""),
   content: varchar("content", { length: 2048 }).notNull().default(""),
   beforeImageUrl: varchar("beforeImageUrl", { length: 2048 }),
@@ -1401,6 +1415,7 @@ var customerHandoverRouter = router({
 });
 var atinnIssueInput = z2.object({
   id: z2.string().min(1).max(64),
+  category: z2.union([z2.literal(""), z2.enum(ATINN_HANDOVER_CATEGORIES)]),
   title: z2.string().max(255),
   content: z2.string().max(2048),
   beforeImageUrl: z2.string().url().max(2048).nullable(),
@@ -1453,6 +1468,7 @@ var atinnHandoverRouter = router({
         if (input.expectedRevision != null) throw conflictError();
         const [created] = await tx.insert(atinnHandoverIssues).values({
           id: input.id,
+          category: input.category,
           title: input.title,
           content: input.content,
           beforeImageUrl: input.beforeImageUrl,
@@ -1468,6 +1484,7 @@ var atinnHandoverRouter = router({
       if (previous.deletedAt) throw notFoundError();
       assertExpectedRevision(previous.revision, input.expectedRevision);
       const [updated] = await tx.update(atinnHandoverIssues).set({
+        category: input.category,
         title: input.title,
         content: input.content,
         beforeImageUrl: input.beforeImageUrl,

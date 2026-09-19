@@ -142,6 +142,7 @@ var customerHandovers = pgTable("customer_handovers", {
 });
 var atinnHandoverIssues = pgTable("atinn_handover_issues", {
   id: varchar("id", { length: 64 }).primaryKey(),
+  category: varchar("category", { length: 64 }).notNull().default(""),
   title: varchar("title", { length: 255 }).notNull().default(""),
   content: varchar("content", { length: 2048 }).notNull().default(""),
   beforeImageUrl: varchar("beforeImageUrl", { length: 2048 }),
