@@ -56,6 +56,7 @@ import {
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
   sortArchivedCustomerHandovers,
+  sortCustomerHandoverAdjustmentColumn,
   sortCustomerHandoverColumn,
   type ArchivedHandoverSortOrder,
   type CustomerHandoverStatus,
@@ -142,41 +143,6 @@ type KanbanColumn = {
   defaultStatus: CustomerStatus;
 };
 
-const ADJUSTMENT_SECTIONS: {
-  status: Extract<
-    CustomerStatus,
-    "仮予約中" | "現地見積もり対応" | "調整中" | "調整中・仮予約中"
-  >;
-  label: string;
-  headerClass: string;
-  badgeClass: string;
-}[] = [
-  {
-    status: "仮予約中",
-    label: "仮予約中",
-    headerClass: "border-sky-200 bg-sky-50",
-    badgeClass: "bg-sky-100 text-sky-700",
-  },
-  {
-    status: "現地見積もり対応",
-    label: "現地見積もり対応",
-    headerClass: "border-teal-200 bg-teal-50",
-    badgeClass: "bg-teal-100 text-teal-700",
-  },
-  {
-    status: "調整中",
-    label: "調整中",
-    headerClass: "border-amber-200 bg-amber-50",
-    badgeClass: "bg-amber-100 text-amber-700",
-  },
-  {
-    status: "調整中・仮予約中",
-    label: "振り分け待ち",
-    headerClass: "border-dashed border-gray-200 bg-gray-50",
-    badgeClass: "bg-gray-100 text-gray-600",
-  },
-];
-
 // カンバン列定義（3列）
 const KANBAN_COLUMNS: KanbanColumn[] = [
   {
@@ -194,7 +160,12 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
     headerClass: "bg-amber-50 border-amber-200",
     badgeClass: "bg-amber-100 text-amber-700",
     addBtnClass: "text-amber-400 hover:text-amber-600 hover:bg-amber-50",
-    statuses: ADJUSTMENT_SECTIONS.map(section => section.status),
+    statuses: [
+      "仮予約中",
+      "現地見積もり対応",
+      "調整中",
+      "調整中・仮予約中",
+    ],
     defaultStatus: "仮予約中",
   },
   {
@@ -1822,7 +1793,9 @@ export default function CustomerHandover() {
                 const sortedCards =
                   col.id === "unreachable"
                     ? sortCustomerHandoverColumn(colCards, "不通・未対応")
-                    : colCards;
+                    : col.id === "adjustment"
+                      ? sortCustomerHandoverAdjustmentColumn(colCards)
+                      : colCards;
                 return (
                   <div key={col.id} className="flex flex-col gap-3">
                     {/* 列ヘッダー */}
@@ -1839,98 +1812,45 @@ export default function CustomerHandover() {
                       </span>
                     </div>
 
-                    {col.id === "adjustment" ? (
-                      <div className="flex flex-col gap-3">
-                        {ADJUSTMENT_SECTIONS.map(section => {
-                          const sectionCards = sortCustomerHandoverColumn(
-                            colCards.filter(c => c.status === section.status),
-                            section.status
-                          );
-                          return (
-                            <section
-                              key={section.status}
-                              aria-label={section.label}
-                              className="flex flex-col gap-2"
-                            >
-                              <div
-                                className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 ${section.headerClass}`}
-                              >
-                                <span className="text-xs font-semibold text-gray-700">
-                                  {section.label}
-                                </span>
-                                <span
-                                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${section.badgeClass}`}
-                                >
-                                  {sectionCards.length}件
-                                </span>
-                              </div>
-                              {sectionCards.length === 0 ? (
-                                <p className="py-2 text-center text-xs text-gray-300">
-                                  案件なし
-                                </p>
-                              ) : (
-                                sectionCards.map(c => (
-                                  <CustomerCard
-                                    key={c.id}
-                                    c={c}
-                                    attachments={attachmentsByCustomer[c.id] ?? []}
-                                    isUploadingPhotos={uploadingPhotoIds.has(c.id)}
-                                    onUpdate={updateCustomer}
-                                    onDelete={handleDelete}
-                                    onLinkChange={handleLinkChange}
-                                    onDueDateChange={handleDueDateChange}
-                                    onCalledToggle={handleCalledToggle}
-                                    onAddPhotos={handleAddPhotos}
-                                    onDeletePhoto={handleDeletePhoto}
-                                    onShare={handleShare}
-                                  />
-                                ))
-                              )}
-                            </section>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-3 min-h-[80px]">
-                        {sortedCards.length === 0 && (
-                          <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
-                            案件なし
-                          </div>
-                        )}
-                        {(col.id === "hold"
-                          ? [...sortedCards].sort((a, b) => {
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              const aOver =
-                                a.dueDate !== null && a.dueDate < today.getTime();
-                              const bOver =
-                                b.dueDate !== null && b.dueDate < today.getTime();
-                              if (aOver !== bOver) return aOver ? -1 : 1;
-                              if (a.dueDate !== null && b.dueDate !== null)
-                                return a.dueDate - b.dueDate;
-                              if (a.dueDate !== null) return -1;
-                              if (b.dueDate !== null) return 1;
-                              return 0;
-                            })
-                          : sortedCards
-                        ).map(c => (
-                          <CustomerCard
-                            key={c.id}
-                            c={c}
-                            attachments={attachmentsByCustomer[c.id] ?? []}
-                            isUploadingPhotos={uploadingPhotoIds.has(c.id)}
-                            onUpdate={updateCustomer}
-                            onDelete={handleDelete}
-                            onLinkChange={handleLinkChange}
-                            onDueDateChange={handleDueDateChange}
-                            onCalledToggle={handleCalledToggle}
-                            onAddPhotos={handleAddPhotos}
-                            onDeletePhoto={handleDeletePhoto}
-                            onShare={handleShare}
-                          />
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex min-h-[80px] flex-col gap-3">
+                      {sortedCards.length === 0 && (
+                        <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
+                          案件なし
+                        </div>
+                      )}
+                      {(col.id === "hold"
+                        ? [...sortedCards].sort((a, b) => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const aOver =
+                              a.dueDate !== null && a.dueDate < today.getTime();
+                            const bOver =
+                              b.dueDate !== null && b.dueDate < today.getTime();
+                            if (aOver !== bOver) return aOver ? -1 : 1;
+                            if (a.dueDate !== null && b.dueDate !== null)
+                              return a.dueDate - b.dueDate;
+                            if (a.dueDate !== null) return -1;
+                            if (b.dueDate !== null) return 1;
+                            return 0;
+                          })
+                        : sortedCards
+                      ).map(c => (
+                        <CustomerCard
+                          key={c.id}
+                          c={c}
+                          attachments={attachmentsByCustomer[c.id] ?? []}
+                          isUploadingPhotos={uploadingPhotoIds.has(c.id)}
+                          onUpdate={updateCustomer}
+                          onDelete={handleDelete}
+                          onLinkChange={handleLinkChange}
+                          onDueDateChange={handleDueDateChange}
+                          onCalledToggle={handleCalledToggle}
+                          onAddPhotos={handleAddPhotos}
+                          onDeletePhoto={handleDeletePhoto}
+                          onShare={handleShare}
+                        />
+                      ))}
+                    </div>
 
                     {/* 列ごとの追加ボタン */}
                     <button

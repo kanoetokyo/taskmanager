@@ -114,6 +114,24 @@ export function sortCustomerHandoverColumn<
   });
 }
 
+export function sortCustomerHandoverAdjustmentColumn<
+  T extends SortableKanbanCustomerHandover,
+>(customers: T[]): T[] {
+  const statusRank: Record<CustomerHandoverAdjustmentStatus, number> = {
+    仮予約中: 0,
+    現地見積もり対応: 1,
+    調整中: 2,
+    "調整中・仮予約中": 3,
+  };
+
+  return [...customers].sort((left, right) => {
+    const rankDifference =
+      statusRank[left.status as CustomerHandoverAdjustmentStatus] -
+      statusRank[right.status as CustomerHandoverAdjustmentStatus];
+    return rankDifference || newestFirst(left, right);
+  });
+}
+
 export function sortArchivedCustomerHandovers<
   T extends SortableArchivedCustomerHandover,
 >(
