@@ -1,6 +1,9 @@
 export const CUSTOMER_HANDOVER_STATUSES = [
   "これから",
   "不通・未対応",
+  "仮予約中",
+  "現地見積もり対応",
+  "調整中",
   "調整中・仮予約中",
   "保留",
   "キャンセル",
@@ -11,6 +14,11 @@ export type CustomerHandoverStatus =
   (typeof CUSTOMER_HANDOVER_STATUSES)[number];
 export type CustomerHandoverStatusFilter = "all" | CustomerHandoverStatus;
 export type ArchivedHandoverSortOrder = "newest" | "oldest";
+export type CustomerHandoverAdjustmentStatus =
+  | "仮予約中"
+  | "現地見積もり対応"
+  | "調整中"
+  | "調整中・仮予約中";
 
 export interface FilterableCustomerHandover {
   status: CustomerHandoverStatus;
@@ -87,9 +95,9 @@ export function sortCustomerHandoverColumn<
   T extends SortableKanbanCustomerHandover,
 >(
   customers: T[],
-  columnStatus: "不通・未対応" | "調整中・仮予約中"
+  columnStatus: "不通・未対応" | CustomerHandoverAdjustmentStatus
 ): T[] {
-  if (columnStatus === "調整中・仮予約中") {
+  if (columnStatus !== "不通・未対応") {
     return [...customers].sort(newestFirst);
   }
 

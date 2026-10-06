@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CUSTOMER_HANDOVER_STATUSES,
   filterCustomerHandovers,
   getSharedCustomerStatusFilter,
   sortArchivedCustomerHandovers,
@@ -34,6 +35,20 @@ const customers = [
 ];
 
 describe("filterCustomerHandovers", () => {
+  it("調整・予約対応の個別ステータスと既存ステータスを選べる", () => {
+    expect(CUSTOMER_HANDOVER_STATUSES).toEqual([
+      "これから",
+      "不通・未対応",
+      "仮予約中",
+      "現地見積もり対応",
+      "調整中",
+      "調整中・仮予約中",
+      "保留",
+      "キャンセル",
+      "完了",
+    ]);
+  });
+
   it("通常の一覧からキャンセル済みを除外する", () => {
     expect(filterCustomerHandovers(customers, "", "all")).toEqual([customers[0]]);
   });
@@ -130,24 +145,29 @@ describe("filterCustomerHandovers", () => {
     ).toEqual(["final-new", "final-old", "first-call", "unanswered-old"]);
   });
 
-  it("調整中・仮予約中は登録日の新しい順にする", () => {
+  it.each([
+    "仮予約中",
+    "現地見積もり対応",
+    "調整中",
+    "調整中・仮予約中",
+  ] as const)("%s は登録日の新しい順にする", status => {
     const customers = [
       {
         id: "older",
-        status: "調整中・仮予約中" as const,
+        status,
         callCount: 0,
         createdAt: "2026-09-01T09:00:00+09:00",
       },
       {
         id: "newer",
-        status: "調整中・仮予約中" as const,
+        status,
         callCount: 0,
         createdAt: "2026-09-02T09:00:00+09:00",
       },
     ];
 
     expect(
-      sortCustomerHandoverColumn(customers, "調整中・仮予約中").map(
+      sortCustomerHandoverColumn(customers, status).map(
         customer => customer.id
       )
     ).toEqual(["newer", "older"]);

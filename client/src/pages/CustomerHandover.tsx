@@ -1,6 +1,8 @@
 /**
  * 顧客引き継ぎ専用ページ（カンバン3列レイアウト）
- * - 「不通・未対応」「調整中・仮予約中」「保留」の3列表示
+ * - 「不通・未対応」「調整・予約対応」「保留」の3列表示
+ * - 中央列は「仮予約中」「現地見積もり対応」「調整中」に分け、
+ *   既存の「調整中・仮予約中」は振り分け待ちとして残す
  * - 保留カードに期限バッジ（日付選択）を表示
  * - 期限超過カードの背景を赤に変更
  * - 日付をまたいで継続表示（getActiveで全件取得）
@@ -130,40 +132,88 @@ async function copyShareText(text: string): Promise<void> {
   if (!copied) throw new Error("Clipboard copy failed");
 }
 
-// カンバン列定義（3列）
-const KANBAN_COLUMNS: {
-  status: CustomerStatus;
+type KanbanColumn = {
+  id: "unreachable" | "adjustment" | "hold";
   label: string;
   headerClass: string;
   badgeClass: string;
   addBtnClass: string;
+  statuses: readonly CustomerStatus[];
+  defaultStatus: CustomerStatus;
+};
+
+const ADJUSTMENT_SECTIONS: {
+  status: Extract<
+    CustomerStatus,
+    "仮予約中" | "現地見積もり対応" | "調整中" | "調整中・仮予約中"
+  >;
+  label: string;
+  headerClass: string;
+  badgeClass: string;
 }[] = [
   {
-    status: "不通・未対応",
+    status: "仮予約中",
+    label: "仮予約中",
+    headerClass: "border-sky-200 bg-sky-50",
+    badgeClass: "bg-sky-100 text-sky-700",
+  },
+  {
+    status: "現地見積もり対応",
+    label: "現地見積もり対応",
+    headerClass: "border-teal-200 bg-teal-50",
+    badgeClass: "bg-teal-100 text-teal-700",
+  },
+  {
+    status: "調整中",
+    label: "調整中",
+    headerClass: "border-amber-200 bg-amber-50",
+    badgeClass: "bg-amber-100 text-amber-700",
+  },
+  {
+    status: "調整中・仮予約中",
+    label: "振り分け待ち",
+    headerClass: "border-dashed border-gray-200 bg-gray-50",
+    badgeClass: "bg-gray-100 text-gray-600",
+  },
+];
+
+// カンバン列定義（3列）
+const KANBAN_COLUMNS: KanbanColumn[] = [
+  {
+    id: "unreachable",
     label: "不通・未対応",
     headerClass: "bg-rose-50 border-rose-200",
     badgeClass: "bg-rose-100 text-rose-600",
     addBtnClass: "text-rose-400 hover:text-rose-600 hover:bg-rose-50",
+    statuses: ["これから", "不通・未対応"],
+    defaultStatus: "これから",
   },
   {
-    status: "調整中・仮予約中",
-    label: "調整中・仮予約中",
+    id: "adjustment",
+    label: "調整・予約対応",
     headerClass: "bg-amber-50 border-amber-200",
     badgeClass: "bg-amber-100 text-amber-700",
     addBtnClass: "text-amber-400 hover:text-amber-600 hover:bg-amber-50",
+    statuses: ADJUSTMENT_SECTIONS.map(section => section.status),
+    defaultStatus: "仮予約中",
   },
   {
-    status: "保留",
+    id: "hold",
     label: "保留",
     headerClass: "bg-stone-50 border-stone-200",
     badgeClass: "bg-stone-100 text-stone-500",
     addBtnClass: "text-stone-400 hover:text-stone-600 hover:bg-stone-50",
+    statuses: ["保留"],
+    defaultStatus: "保留",
   },
 ];
 
 const STATUS_STYLE: Record<CustomerStatus, string> = {
   これから: "bg-sky-50 text-sky-600 border-sky-200",
   "不通・未対応": "bg-rose-50 text-rose-600 border-rose-200",
+  仮予約中: "bg-sky-50 text-sky-700 border-sky-200",
+  現地見積もり対応: "bg-teal-50 text-teal-700 border-teal-200",
+  調整中: "bg-amber-50 text-amber-700 border-amber-200",
   "調整中・仮予約中": "bg-amber-50 text-amber-700 border-amber-200",
   保留: "bg-stone-100 text-stone-500 border-stone-200",
   キャンセル: "bg-slate-100 text-slate-600 border-slate-300",
@@ -1764,23 +1814,17 @@ export default function CustomerHandover() {
               className={`grid grid-cols-1 gap-4 ${IS_MOBILE_DESIGN_QA_PREVIEW ? "" : "md:grid-cols-3"}`}
             >
               {KANBAN_COLUMNS.map(col => {
-                // 「不通・未対応」列は「これから」ステータスも含める
-                const colCards =
-                  col.status === "不通・未対応"
-                    ? visibleCustomers.filter(
-                        c =>
-                          c.status === "これから" || c.status === "不通・未対応"
-                      )
-                    : visibleCustomers.filter(c => c.status === col.status);
+                const colCards = visibleCustomers.filter(c =>
+                  col.statuses.includes(c.status)
+                );
                 // 「これから」を上部にし、電話回数の優先順を保ったまま
                 // 同じグループ内では登録日の新しい順に表示する。
                 const sortedCards =
-                  col.status === "不通・未対応" ||
-                  col.status === "調整中・仮予約中"
-                    ? sortCustomerHandoverColumn(colCards, col.status)
+                  col.id === "unreachable"
+                    ? sortCustomerHandoverColumn(colCards, "不通・未対応")
                     : colCards;
                 return (
-                  <div key={col.status} className="flex flex-col gap-3">
+                  <div key={col.id} className="flex flex-col gap-3">
                     {/* 列ヘッダー */}
                     <div
                       className={`flex items-center justify-between px-3 py-2 rounded-lg border ${col.headerClass}`}
@@ -1795,54 +1839,106 @@ export default function CustomerHandover() {
                       </span>
                     </div>
 
-                    {/* カード一覧 */}
-                    <div className="flex flex-col gap-3 min-h-[80px]">
-                      {sortedCards.length === 0 && (
-                        <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
-                          案件なし
-                        </div>
-                      )}
-                      {(col.status === "保留"
-                        ? [...sortedCards].sort((a, b) => {
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-                            const aOver =
-                              a.dueDate !== null && a.dueDate < today.getTime();
-                            const bOver =
-                              b.dueDate !== null && b.dueDate < today.getTime();
-                            if (aOver !== bOver) return aOver ? -1 : 1;
-                            if (a.dueDate !== null && b.dueDate !== null)
-                              return a.dueDate - b.dueDate;
-                            if (a.dueDate !== null) return -1;
-                            if (b.dueDate !== null) return 1;
-                            return 0;
-                          })
-                        : sortedCards
-                      ).map(c => (
-                        <CustomerCard
-                          key={c.id}
-                          c={c}
-                          attachments={attachmentsByCustomer[c.id] ?? []}
-                          isUploadingPhotos={uploadingPhotoIds.has(c.id)}
-                          onUpdate={updateCustomer}
-                          onDelete={handleDelete}
-                          onLinkChange={handleLinkChange}
-                          onDueDateChange={handleDueDateChange}
-                          onCalledToggle={handleCalledToggle}
-                          onAddPhotos={handleAddPhotos}
-                          onDeletePhoto={handleDeletePhoto}
-                          onShare={handleShare}
-                        />
-                      ))}
-                    </div>
+                    {col.id === "adjustment" ? (
+                      <div className="flex flex-col gap-3">
+                        {ADJUSTMENT_SECTIONS.map(section => {
+                          const sectionCards = sortCustomerHandoverColumn(
+                            colCards.filter(c => c.status === section.status),
+                            section.status
+                          );
+                          return (
+                            <section
+                              key={section.status}
+                              aria-label={section.label}
+                              className="flex flex-col gap-2"
+                            >
+                              <div
+                                className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 ${section.headerClass}`}
+                              >
+                                <span className="text-xs font-semibold text-gray-700">
+                                  {section.label}
+                                </span>
+                                <span
+                                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${section.badgeClass}`}
+                                >
+                                  {sectionCards.length}件
+                                </span>
+                              </div>
+                              {sectionCards.length === 0 ? (
+                                <p className="py-2 text-center text-xs text-gray-300">
+                                  案件なし
+                                </p>
+                              ) : (
+                                sectionCards.map(c => (
+                                  <CustomerCard
+                                    key={c.id}
+                                    c={c}
+                                    attachments={attachmentsByCustomer[c.id] ?? []}
+                                    isUploadingPhotos={uploadingPhotoIds.has(c.id)}
+                                    onUpdate={updateCustomer}
+                                    onDelete={handleDelete}
+                                    onLinkChange={handleLinkChange}
+                                    onDueDateChange={handleDueDateChange}
+                                    onCalledToggle={handleCalledToggle}
+                                    onAddPhotos={handleAddPhotos}
+                                    onDeletePhoto={handleDeletePhoto}
+                                    onShare={handleShare}
+                                  />
+                                ))
+                              )}
+                            </section>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 min-h-[80px]">
+                        {sortedCards.length === 0 && (
+                          <div className="text-center py-6 text-gray-300 text-xs border-2 border-dashed border-gray-100 rounded-xl">
+                            案件なし
+                          </div>
+                        )}
+                        {(col.id === "hold"
+                          ? [...sortedCards].sort((a, b) => {
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const aOver =
+                                a.dueDate !== null && a.dueDate < today.getTime();
+                              const bOver =
+                                b.dueDate !== null && b.dueDate < today.getTime();
+                              if (aOver !== bOver) return aOver ? -1 : 1;
+                              if (a.dueDate !== null && b.dueDate !== null)
+                                return a.dueDate - b.dueDate;
+                              if (a.dueDate !== null) return -1;
+                              if (b.dueDate !== null) return 1;
+                              return 0;
+                            })
+                          : sortedCards
+                        ).map(c => (
+                          <CustomerCard
+                            key={c.id}
+                            c={c}
+                            attachments={attachmentsByCustomer[c.id] ?? []}
+                            isUploadingPhotos={uploadingPhotoIds.has(c.id)}
+                            onUpdate={updateCustomer}
+                            onDelete={handleDelete}
+                            onLinkChange={handleLinkChange}
+                            onDueDateChange={handleDueDateChange}
+                            onCalledToggle={handleCalledToggle}
+                            onAddPhotos={handleAddPhotos}
+                            onDeletePhoto={handleDeletePhoto}
+                            onShare={handleShare}
+                          />
+                        ))}
+                      </div>
+                    )}
 
                     {/* 列ごとの追加ボタン */}
                     <button
-                      onClick={() => handleAddToColumn(col.status)}
+                      onClick={() => handleAddToColumn(col.defaultStatus)}
                       className={`${IS_MOBILE_DESIGN_QA_PREVIEW ? "hidden" : "hidden md:flex"} items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border-2 border-dashed transition-colors ${col.addBtnClass} border-current`}
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      追加
+                      {col.id === "adjustment" ? "仮予約中で追加" : "追加"}
                     </button>
                   </div>
                 );
