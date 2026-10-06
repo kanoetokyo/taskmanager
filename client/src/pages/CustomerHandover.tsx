@@ -1,6 +1,6 @@
 /**
  * 顧客引き継ぎ専用ページ（カンバン3列レイアウト）
- * - 「不通・未対応」「調整・予約対応」「保留」の3列表示
+ * - 「不通・未対応」「調整中・現地見積対応・仮予約中」「保留」の3列表示
  * - 中央列は「仮予約中」「現地見積もり対応」「調整中」に分け、
  *   既存の「調整中・仮予約中」は振り分け待ちとして残す
  * - 保留カードに期限バッジ（日付選択）を表示
@@ -156,7 +156,7 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
   },
   {
     id: "adjustment",
-    label: "調整・予約対応",
+    label: "調整中・現地見積対応・仮予約中",
     headerClass: "bg-amber-50 border-amber-200",
     badgeClass: "bg-amber-100 text-amber-700",
     addBtnClass: "text-amber-400 hover:text-amber-600 hover:bg-amber-50",
